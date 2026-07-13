@@ -111,6 +111,7 @@ Before changing code:
 5. State assumptions when the task is ambiguous.
 6. Keep changes scoped to the active task.
 7. Do not refactor unrelated modules, comments, names, or formatting.
+8. **Research & Internet**: Can use the web/internet to search for more information (Có thể sử dụng lên mạng, internet để kiếm thêm nhiều thông tin).
 
 For review-only requests:
 
