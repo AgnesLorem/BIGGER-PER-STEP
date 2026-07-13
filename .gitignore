@@ -1,0 +1,13 @@
+# Roblox Place Files
+*.rbxl
+*.rbxlx
+
+# Aftman
+.aftman/
+
+# OS/IDE
+.DS_Store
+.vs/
+.idea/
+.vscode/
+Thumbs.db

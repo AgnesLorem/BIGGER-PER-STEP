@@ -1,0 +1,27 @@
+{
+	"name": "Bigger",
+	"tree": {
+		"$className": "DataModel",
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"BiggerServer": {
+				"$path": "src/server"
+			}
+		},
+		"StarterPlayer": {
+			"$className": "StarterPlayer",
+			"StarterPlayerScripts": {
+				"$className": "StarterPlayerScripts",
+				"BiggerClient": {
+					"$path": "src/client"
+				}
+			}
+		},
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"BiggerShared": {
+				"$path": "src/shared"
+			}
+		}
+	}
+}
