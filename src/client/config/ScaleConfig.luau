@@ -1,7 +1,7 @@
 --!strict
 return table.freeze({
-	Formula = "sqrt",
-	CurveParameter = 0.5,
+	Formula = "level",
+	CurveParameter = 0.2,
 	MinVisualScale = 1,
 	MaxVisualScale = 8,
 	TweenTime = 0.25,

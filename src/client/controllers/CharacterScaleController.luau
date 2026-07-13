@@ -35,14 +35,16 @@ local function ApplyScale(Character: Model)
 		return
 	end
 
+	Humanoid.AutomaticScalingEnabled = true
+
 	if ActiveTween then
 		ActiveTween:Cancel()
 	end
 
-	local BodyHeight = Humanoid:FindFirstChild("BodyHeightScale") :: NumberValue?
-	local BodyWidth = Humanoid:FindFirstChild("BodyWidthScale") :: NumberValue?
-	local BodyDepth = Humanoid:FindFirstChild("BodyDepthScale") :: NumberValue?
-	local HeadScale = Humanoid:FindFirstChild("HeadScale") :: NumberValue?
+	local BodyHeight = Humanoid:WaitForChild("BodyHeightScale", 5) :: NumberValue?
+	local BodyWidth = Humanoid:WaitForChild("BodyWidthScale", 5) :: NumberValue?
+	local BodyDepth = Humanoid:WaitForChild("BodyDepthScale", 5) :: NumberValue?
+	local HeadScale = Humanoid:WaitForChild("HeadScale", 5) :: NumberValue?
 	if not BodyHeight or not BodyWidth or not BodyDepth or not HeadScale then
 		return
 	end

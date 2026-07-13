@@ -33,6 +33,10 @@ local Formulas: { [string]: FormulaFunction } = table.freeze({
 	linear = function(Bigger: number, CurveParameter: number): number
 		return Bigger * CurveParameter
 	end,
+	level = function(Bigger: number, CurveParameter: number): number
+		local Level = math.floor(math.max(0, Bigger) / 10) + 1
+		return 1 + (Level - 1) * CurveParameter
+	end,
 })
 
 --// Service \\--
