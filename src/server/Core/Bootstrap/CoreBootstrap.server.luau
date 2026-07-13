@@ -17,6 +17,7 @@ local EventBus = require(script.Parent.Parent.Events.EventBus)
 local SessionService = require(script.Parent.Parent.Services.SessionService)
 local SaveService = require(script.Parent.Parent.Services.SaveService)
 local GrowthService = require(script.Parent.Parent.Services.GrowthService)
+local CharacterScaleService = require(script.Parent.Parent.Services.CharacterScaleService)
 
 local GameBootstrap = require(script.Parent.Parent.Parent.Game.GameBootstrap)
 
@@ -25,6 +26,7 @@ local BootOrder = {
 	{ Name = "SessionService", Service = SessionService },
 	{ Name = "SaveService", Service = SaveService },
 	{ Name = "GrowthService", Service = GrowthService },
+	{ Name = "CharacterScaleService", Service = CharacterScaleService },
 }
 
 --// Helpers \\--

@@ -1,8 +1,8 @@
 --!strict
-return table.freeze({
-	Formula = "level",
-	CurveParameter = 0.2,
-	MinVisualScale = 1,
-	MaxVisualScale = 8,
-	TweenTime = 0.25,
-})
+return require(
+	game:GetService("ReplicatedStorage")
+		:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Config")
+		:WaitForChild("ScaleConfig")
+) :: any
