@@ -46,6 +46,9 @@ function GrowthService:SetBigger(Player: Player, Value: number)
 
 	Player:SetAttribute("Bigger", Value)
 
+	local Level = math.floor((Value / 236) ^ 0.25) + 1
+	Player:SetAttribute("Level", Level)
+
 	local Leaderstats = Player:FindFirstChild("leaderstats")
 	local BiggerStat = Leaderstats and Leaderstats:FindFirstChild("Bigger")
 	if BiggerStat and BiggerStat:IsA("IntValue") then
@@ -53,6 +56,15 @@ function GrowthService:SetBigger(Player: Player, Value: number)
 	end
 
 	EventBus.Publish("BiggerChanged", Player, Value)
+end
+
+function GrowthService:AddBiggerAbsolute(Player: Player, Amount: number)
+	local Session = Sessions.Get(Player)
+	if not Session then
+		return
+	end
+	local NewValue = Session.Bigger + Amount
+	self:SetBigger(Player, NewValue)
 end
 
 function GrowthService:AddBigger(Player: Player, Context: GrowthContext)

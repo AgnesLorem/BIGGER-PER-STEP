@@ -18,6 +18,9 @@ local SessionService = require(script.Parent.Parent.Services.SessionService)
 local SaveService = require(script.Parent.Parent.Services.SaveService)
 local GrowthService = require(script.Parent.Parent.Services.GrowthService)
 local CharacterScaleService = require(script.Parent.Parent.Services.CharacterScaleService)
+local ConfigValidationService = require(script.Parent.Parent.Services.ConfigValidationService)
+local RewardService = require(script.Parent.Parent.Services.RewardService)
+local ReceiptProcessingService = require(script.Parent.Parent.Services.ReceiptProcessingService)
 
 local GameBootstrap = require(script.Parent.Parent.Parent.Game.GameBootstrap)
 
@@ -27,6 +30,9 @@ local BootOrder = {
 	{ Name = "SaveService", Service = SaveService },
 	{ Name = "GrowthService", Service = GrowthService },
 	{ Name = "CharacterScaleService", Service = CharacterScaleService },
+	{ Name = "ConfigValidationService", Service = ConfigValidationService },
+	{ Name = "RewardService", Service = RewardService },
+	{ Name = "ReceiptProcessingService", Service = ReceiptProcessingService },
 }
 
 --// Helpers \\--

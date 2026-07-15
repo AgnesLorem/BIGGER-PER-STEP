@@ -59,7 +59,7 @@ local function ProcessZones()
 
 			local LocalPos = PartCFrame:PointToObjectSpace(RootPart.Position)
 			local Inside = math.abs(LocalPos.X) <= HalfSize.X
-				and math.abs(LocalPos.Y) <= HalfSize.Y
+				and LocalPos.Y >= -HalfSize.Y - 5
 				and math.abs(LocalPos.Z) <= HalfSize.Z
 
 			if Inside then

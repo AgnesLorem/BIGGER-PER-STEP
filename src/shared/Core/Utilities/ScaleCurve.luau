@@ -34,7 +34,7 @@ local Formulas: { [string]: FormulaFunction } = table.freeze({
 		return Bigger * CurveParameter
 	end,
 	level = function(Bigger: number, CurveParameter: number): number
-		local Level = math.floor(math.max(0, Bigger) / 10) + 1
+		local Level = math.floor((math.max(0, Bigger) / 236) ^ 0.25) + 1
 		return 1 + (Level - 1) * CurveParameter
 	end,
 })
