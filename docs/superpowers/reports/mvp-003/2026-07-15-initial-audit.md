@@ -79,7 +79,7 @@ Status, evidence, affected files, fixes, and verification will be recorded durin
 
 ### Idempotent session recovery and WORLD1 return integrity
 
-Task 3 implemented the reviewed recovery coordinator in commit `caf3207` (`fix(mvp-003): add idempotent lobby recovery`). Task 5 independently reran its regression gate without editing source or test code.
+Task 3 implemented the initial recovery coordinator in commit `caf3207` (`fix(mvp-003): add idempotent lobby recovery`). The first Task 5 run verified the core recovery and disappearing-`ReturnSpawn` path. Its audit review then found confirmed High defects in `PortalService`: late service lookup and ownership-query, transition, and world-creation exception or nil-return exits could bypass full recovery and leave the portal debounce or authoritative session state dirty.
 
 The lifecycle trace covered every caller and failure exit matched by:
 
@@ -87,9 +87,11 @@ The lifecycle trace covered every caller and failure exit matched by:
 rg -n "FailEntry|CleanupPlayer|ReturnPlayerToLobby|CreateWorldForPlayer|TryCompleteObjective|Session\.State\s*=|ClearDebounce" src/server/Game src/server/Core/Services/SessionService.luau
 ```
 
-Entry preparation, objective binding, entry teleport, objective presentation, completion transition, destruction presentation, return teleport, stale ownership, and player cleanup all converge on `WorldInstanceService:RecoverPlayer`. Its disconnect, destroy, registry removal, portal-debounce clearing, authoritative session recovery, objective cleanup, and optional native respawn actions are independently protected so an earlier cleanup failure does not prevent the lobby-recovery attempt. `SessionService:RecoverToLobby` is independent of the source state and is the only direct gameplay recovery write to `InLobby`; the other direct state write is the validated transition function.
+Commit `0d9d714` (`fix(mvp-003): close portal recovery exits`) fixed those review findings. `PortalService:Init` now resolves and captures its established `SessionService` and `WorldInstanceService` dependencies before binding entry callbacks; a missing required dependency fails closed without binding a portal callback. `TryEnterPortal` receives those established dependencies and routes ownership-query and reconciliation errors, entering and in-world transition exceptions or rejections, and world-creation exceptions or nil returns through protected `WorldInstanceService:RecoverPlayer` execution.
 
-Task 5 found no new source defect in these paths.
+Across the completed recovery path, entry preparation, objective binding, entry teleport, objective presentation, completion transition, destruction presentation, return teleport, stale ownership, player cleanup, and every reviewed portal exit converge on recovery. `WorldInstanceService:RecoverPlayer` independently protects disconnect, destroy, registry removal, portal-debounce clearing, authoritative session recovery, objective cleanup, and optional native respawn so an earlier cleanup failure does not prevent the lobby-recovery attempt. `SessionService:RecoverToLobby` remains independent of the source state.
+
+The review also found an evidence defect in the original repeated-recovery harness: its second call did not re-dirty state or reassert all postconditions. `0d9d714` updates the harness to restore the unexpected state, `CurrentWorldInstanceId`, and all objective presentation attributes before the second call, then reassert `InLobby`, nil world ownership, and cleared presentation after that call.
 
 ## Medium Findings
 
@@ -163,6 +165,8 @@ git diff --check
 exit 0
 ```
 
+The same scoped gate was rerun on review fix `0d9d714` before the second Studio verification. StyLua exited `0`; Selene reported `0 errors`, `0 warnings`, and `0 parse errors`; Rojo built `bigger-mvp003-task5-update.rbxl`; and `git diff --check` exited `0`.
+
 ## Studio Verification Run 1
 
 Task 5 was executed through Studio MCP in the verified `Bigger Per Step` place in Play Solo with the real connected player `Kaezure02`. It was not a manual test and did not use a fake `Player`.
@@ -173,7 +177,7 @@ The exact local `tests/studio/session_recovery.luau` source was mirrored to temp
 HarnessParity=true;ActualBytes=2807;ExpectedBytes=2807
 ```
 
-Recovery was invoked twice from each unexpected state. Every call returned the authoritative session to `InLobby`, cleared `CurrentWorldInstanceId`, and cleared objective presentation:
+Recovery was invoked twice from each unexpected state. This initial run proved the first dirty-state recovery and a second idempotent call, but the original harness did not re-dirty and reassert every postcondition before the second call. The audit review preserved this limitation and strengthened the harness in `0d9d714` rather than overstating the initial evidence.
 
 ```text
 [Session] Recovered Kaezure02 to lobby state (Test_EnteringWorld)
@@ -216,7 +220,53 @@ ServerScriptService.MVP003Task5Runner: not found
 
 ## Studio Verification Run 2
 
-Pending implementation.
+After `0d9d714`, Task 5 was independently rerun through Studio MCP in the same verified place with the real Play Solo player. The updated temporary harness matched the local file after normalized line-ending comparison:
+
+```text
+HarnessParity=true;ActualBytes=3395;ExpectedBytes=3395
+PortalReviewSource=true;EstablishedDependencies=true
+```
+
+For `EnteringWorld`, `InWorld`, and `Returning`, the harness dirtied the state, world id, and all objective attributes before both the first and repeated recovery calls. Every first and repeated call then reasserted authoritative `InLobby`, nil `CurrentWorldInstanceId`, and cleared objective presentation:
+
+```text
+[Session] Recovered Kaezure02 to lobby state (Test_EnteringWorld)
+[Session] Recovered Kaezure02 to lobby state (Repeat_EnteringWorld)
+[Session] Recovered Kaezure02 to lobby state (Test_InWorld)
+[Session] Recovered Kaezure02 to lobby state (Repeat_InWorld)
+[Session] Recovered Kaezure02 to lobby state (Test_Returning)
+[Session] Recovered Kaezure02 to lobby state (Repeat_Returning)
+[MVP003 Task5 Update] RepeatRedirtyRecovery=PASS
+```
+
+An unmapped temporary runner injected each reviewed portal failure while passing explicit established service dependencies. Every case recovered the real player's authoritative session and cleared objective state:
+
+```text
+[MVP003 Task5 Update] PortalOwnershipQueryException=PASS
+[MVP003 Task5 Update] PortalOwnershipReconcileException=PASS
+[MVP003 Task5 Update] PortalEnteringTransitionException=PASS
+[MVP003 Task5 Update] PortalEnteringTransitionNil=PASS
+[MVP003 Task5 Update] PortalCreationException=PASS
+[MVP003 Task5 Update] PortalCreationNil=PASS
+[MVP003 Task5 Update] PortalInWorldTransitionException=PASS
+[MVP003 Task5 Update] PortalInWorldTransitionNil=PASS
+[MVP003 Task5 Update] EstablishedDependencyPortalRegressions=PASS
+```
+
+The disappearing-`ReturnSpawn` scenario was rerun against the review fix. Objective completion remained exactly once, cleanup and native recovery completed, and restored portal entry succeeded using the established production dependencies:
+
+```text
+[MVP003 Task5 Update] ReturnSpawnExactlyOnceRecoveryReentry=PASS
+[MVP003 Task5 Update] PASS
+```
+
+Play Solo was stopped and both temporary objects were removed:
+
+```text
+TemporaryTestsRemoved=true;TemporaryRunnersRemoved=true
+ServerStorage.MVP003Tests: not found
+ServerScriptService.MVP003Task5Runner: not found
+```
 
 ## Two-Player Verification
 
