@@ -74,13 +74,6 @@ local function PlayPlaceholderEffect(Hitbox: BasePart)
 	end)
 end
 
-local function ClearObjectiveAttributes(Player: Player)
-	Player:SetAttribute("CurrentWorldId", nil)
-	Player:SetAttribute("ObjectiveActive", false)
-	Player:SetAttribute("ObjectiveText", nil)
-	Player:SetAttribute("ObjectiveReward", nil)
-end
-
 --// Service \\--
 
 local DestructionService = {}
@@ -89,7 +82,7 @@ function DestructionService:Init() end
 
 function DestructionService:Start() end
 
-function DestructionService:BindWorld(WorldInstance)
+function DestructionService:BindWorld(WorldInstance, WorldInstanceService)
 	local Hitbox = GetHitbox(WorldInstance.Model)
 	if not Hitbox then
 		Logger.Warn(
@@ -105,13 +98,13 @@ function DestructionService:BindWorld(WorldInstance)
 	table.insert(
 		WorldInstance.Connections,
 		Hitbox.Touched:Connect(function(Hit)
-			self:TryCompleteObjective(WorldInstance, Hitbox, Hit)
+			self:TryCompleteObjective(WorldInstance, Hitbox, Hit, WorldInstanceService)
 		end)
 	)
 	return true
 end
 
-function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart, Hit: BasePart)
+function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart, Hit: BasePart, WorldInstanceService)
 	local Player = GetPlayerFromHit(Hit)
 	if not Player or Player.UserId ~= WorldInstance.OwnerUserId then
 		return
@@ -131,12 +124,33 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 		return
 	end
 
+	local SessionServiceFound, SessionService = pcall(function()
+		return ServiceRegistry.Get("SessionService")
+	end)
+	if not SessionServiceFound or not SessionService then
+		WorldInstanceService:RecoverPlayer(Player, "MissingSessionServiceAtCompletion", false)
+		return
+	end
+
 	WorldInstance.ObjectiveCompleted = true
 	WorldInstance.ObjectiveActive = false
 	Hitbox.CanTouch = false
+	local TransitionCalled, Transitioned = pcall(function()
+		return SessionService:TransitionState(Player, "InWorld", "Returning")
+	end)
+	if not TransitionCalled or not Transitioned then
+		WorldInstanceService:RecoverPlayer(Player, "ObjectiveTransitionFailed", false)
+		return
+	end
 
 	Session.Destruction = Session.Destruction + World1Config.Objective.DestructionReward
-	SyncDestruction(Player, Session.Destruction)
+	local Synced = pcall(function()
+		SyncDestruction(Player, Session.Destruction)
+	end)
+	if not Synced then
+		WorldInstanceService:RecoverPlayer(Player, "DestructionPresentationFailed", false)
+		return
+	end
 
 	local EffectSuccess = pcall(function()
 		PlayPlaceholderEffect(Hitbox)
@@ -150,25 +164,29 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 		)
 	end
 
-	Session.State = "Returning"
+	local Debounced = pcall(function()
+		local PortalService = ServiceRegistry.Get("PortalService")
+		PortalService:HoldDebounce(Player, World1Config.ReturnPortalDebounceSeconds)
+	end)
+	if not Debounced then
+		Logger.Warn("Destruction", "Return portal debounce failed for PlayerUserId=%d", Player.UserId)
+	end
 
-	local WorldInstanceService = ServiceRegistry.Get("WorldInstanceService")
-	local PortalService = ServiceRegistry.Get("PortalService")
-	PortalService:HoldDebounce(Player, World1Config.ReturnPortalDebounceSeconds)
-
-	local ReturnSuccess = WorldInstanceService:ReturnPlayerToLobby(Player)
-	if not ReturnSuccess then
+	local ReturnCalled, ReturnSuccess = pcall(function()
+		return WorldInstanceService:ReturnPlayerToLobby(Player)
+	end)
+	if not ReturnCalled or not ReturnSuccess then
 		Logger.Warn(
 			"Destruction",
 			"Return teleport failed for PlayerUserId=%d WorldInstanceId=%s",
 			Player.UserId,
 			WorldInstance.WorldInstanceId
 		)
+		WorldInstanceService:RecoverPlayer(Player, "ReturnSpawnUnavailableAtCompletion", true)
+		return
 	end
 
-	WorldInstanceService:CleanupPlayer(Player, "ObjectiveCompleted")
-	ClearObjectiveAttributes(Player)
-	Session.State = "InLobby"
+	WorldInstanceService:RecoverPlayer(Player, "ObjectiveCompleted", false)
 end
 
 return DestructionService

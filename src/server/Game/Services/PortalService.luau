@@ -91,27 +91,58 @@ function PortalService:TryEnterPortal(Hit: BasePart)
 	end
 
 	PortalDebounces[Player] = true
-	Session.State = "EnteringWorld"
+	local SessionServiceFound, SessionService = pcall(function()
+		return ServiceRegistry.Get("SessionService")
+	end)
+	if not SessionServiceFound or not SessionService then
+		ClearDebounce(Player)
+		Logger.Warn("Portal", "SessionService missing for PlayerUserId=%d", Player.UserId)
+		return
+	end
 
-	local Success, WorldInstanceService = pcall(function()
+	local WorldServiceFound, WorldInstanceService = pcall(function()
 		return ServiceRegistry.Get("WorldInstanceService")
 	end)
 
-	if not Success or not WorldInstanceService then
-		Session.State = "InLobby"
+	if not WorldServiceFound or not WorldInstanceService then
 		ClearDebounce(Player)
+		SessionService:RecoverToLobby(Player, "MissingWorldInstanceService")
 		Logger.Warn("Portal", "WorldInstanceService missing for PlayerUserId=%d", Player.UserId)
 		return
 	end
 
-	local WorldInstance = WorldInstanceService:CreateWorldForPlayer(Player)
-	if not WorldInstance then
-		Session.State = "InLobby"
+	if WorldInstanceService:GetPlayerWorld(Player) or Session.CurrentWorldInstanceId then
+		local Checked = pcall(function()
+			WorldInstanceService:CreateWorldForPlayer(Player)
+		end)
+		if not Checked then
+			WorldInstanceService:RecoverPlayer(Player, "WorldOwnershipCheckFailed", false)
+		end
 		ClearDebounce(Player)
 		return
 	end
 
-	Session.State = "InWorld"
+	if not SessionService:TransitionState(Player, "InLobby", "EnteringWorld") then
+		ClearDebounce(Player)
+		return
+	end
+
+	local Created, WorldInstance = pcall(function()
+		return WorldInstanceService:CreateWorldForPlayer(Player)
+	end)
+	if not Created then
+		WorldInstanceService:RecoverPlayer(Player, "WorldEntryFailed", false)
+		Logger.Warn("Portal", "World entry failed for PlayerUserId=%d: %s", Player.UserId, tostring(WorldInstance))
+		return
+	end
+	if not WorldInstance then
+		return
+	end
+
+	if not SessionService:TransitionState(Player, "EnteringWorld", "InWorld") then
+		WorldInstanceService:RecoverPlayer(Player, "WorldEntryStateFailed", false)
+		return
+	end
 	ClearDebounce(Player)
 end
 
