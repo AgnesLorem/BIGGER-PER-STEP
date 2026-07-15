@@ -59,16 +59,39 @@ local function HoldDebounce(Player: Player, Duration: number)
 	end)
 end
 
+local function RecoverPlayer(WorldInstanceService: any, Player: Player, Reason: string)
+	local Recovered, RecoveryMessage = pcall(function()
+		WorldInstanceService:RecoverPlayer(Player, Reason, false)
+	end)
+	if not Recovered then
+		Logger.Warn(
+			"Portal",
+			"Recovery failed for PlayerUserId=%d (%s): %s",
+			Player.UserId,
+			Reason,
+			tostring(RecoveryMessage)
+		)
+	end
+end
+
 --// Service \\--
 
 local PortalService = {}
 
 function PortalService:Init()
+	local ServicesFound, SessionService, WorldInstanceService = pcall(function()
+		return ServiceRegistry.Get("SessionService"), ServiceRegistry.Get("WorldInstanceService")
+	end)
+	if not ServicesFound or not SessionService or not WorldInstanceService then
+		Logger.Warn("Portal", "Entry callbacks not bound because required services are unavailable")
+		return
+	end
+
 	for _, Part in GetPortalParts() do
 		table.insert(
 			Connections,
 			Part.Touched:Connect(function(Hit)
-				self:TryEnterPortal(Hit)
+				self:TryEnterPortal(Hit, SessionService, WorldInstanceService)
 			end)
 		)
 	end
@@ -76,7 +99,7 @@ end
 
 function PortalService:Start() end
 
-function PortalService:TryEnterPortal(Hit: BasePart)
+function PortalService:TryEnterPortal(Hit: BasePart, SessionService: any, WorldInstanceService: any)
 	local Player = GetPlayerFromHit(Hit)
 	if not Player or PortalDebounces[Player] then
 		return
@@ -91,39 +114,34 @@ function PortalService:TryEnterPortal(Hit: BasePart)
 	end
 
 	PortalDebounces[Player] = true
-	local SessionServiceFound, SessionService = pcall(function()
-		return ServiceRegistry.Get("SessionService")
+	local OwnershipRead, RegisteredWorld = pcall(function()
+		return WorldInstanceService:GetPlayerWorld(Player)
 	end)
-	if not SessionServiceFound or not SessionService then
-		ClearDebounce(Player)
-		Logger.Warn("Portal", "SessionService missing for PlayerUserId=%d", Player.UserId)
+	if not OwnershipRead then
+		RecoverPlayer(WorldInstanceService, Player, "PortalOwnershipQueryFailed")
 		return
 	end
 
-	local WorldServiceFound, WorldInstanceService = pcall(function()
-		return ServiceRegistry.Get("WorldInstanceService")
-	end)
-
-	if not WorldServiceFound or not WorldInstanceService then
-		ClearDebounce(Player)
-		SessionService:RecoverToLobby(Player, "MissingWorldInstanceService")
-		Logger.Warn("Portal", "WorldInstanceService missing for PlayerUserId=%d", Player.UserId)
-		return
-	end
-
-	if WorldInstanceService:GetPlayerWorld(Player) or Session.CurrentWorldInstanceId then
+	if RegisteredWorld or Session.CurrentWorldInstanceId then
 		local Checked = pcall(function()
 			WorldInstanceService:CreateWorldForPlayer(Player)
 		end)
 		if not Checked then
-			WorldInstanceService:RecoverPlayer(Player, "WorldOwnershipCheckFailed", false)
+			RecoverPlayer(WorldInstanceService, Player, "PortalOwnershipReconciliationFailed")
 		end
 		ClearDebounce(Player)
 		return
 	end
 
-	if not SessionService:TransitionState(Player, "InLobby", "EnteringWorld") then
-		ClearDebounce(Player)
+	local EnteringCalled, EnteringWorld = pcall(function()
+		return SessionService:TransitionState(Player, "InLobby", "EnteringWorld")
+	end)
+	if not EnteringCalled then
+		RecoverPlayer(WorldInstanceService, Player, "PortalEnteringTransitionFailed")
+		return
+	end
+	if not EnteringWorld then
+		RecoverPlayer(WorldInstanceService, Player, "PortalEnteringTransitionRejected")
 		return
 	end
 
@@ -131,16 +149,24 @@ function PortalService:TryEnterPortal(Hit: BasePart)
 		return WorldInstanceService:CreateWorldForPlayer(Player)
 	end)
 	if not Created then
-		WorldInstanceService:RecoverPlayer(Player, "WorldEntryFailed", false)
+		RecoverPlayer(WorldInstanceService, Player, "PortalWorldCreationFailed")
 		Logger.Warn("Portal", "World entry failed for PlayerUserId=%d: %s", Player.UserId, tostring(WorldInstance))
 		return
 	end
 	if not WorldInstance then
+		RecoverPlayer(WorldInstanceService, Player, "PortalWorldCreationReturnedNil")
 		return
 	end
 
-	if not SessionService:TransitionState(Player, "EnteringWorld", "InWorld") then
-		WorldInstanceService:RecoverPlayer(Player, "WorldEntryStateFailed", false)
+	local InWorldCalled, InWorld = pcall(function()
+		return SessionService:TransitionState(Player, "EnteringWorld", "InWorld")
+	end)
+	if not InWorldCalled then
+		RecoverPlayer(WorldInstanceService, Player, "PortalInWorldTransitionFailed")
+		return
+	end
+	if not InWorld then
+		RecoverPlayer(WorldInstanceService, Player, "PortalInWorldTransitionRejected")
 		return
 	end
 	ClearDebounce(Player)

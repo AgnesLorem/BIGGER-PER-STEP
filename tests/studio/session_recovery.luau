@@ -16,7 +16,20 @@ return function(Player: Player, SessionService: any, Sessions: any, DestructionS
 		assert(Player:GetAttribute("ObjectiveActive") == false)
 		assert(Player:GetAttribute("ObjectiveText") == nil)
 		assert(Player:GetAttribute("ObjectiveReward") == nil)
+
+		Session.State = State
+		Session.CurrentWorldInstanceId = "RECOVERY_REPEAT_TEST"
+		Player:SetAttribute("CurrentWorldId", "WORLD1")
+		Player:SetAttribute("ObjectiveActive", true)
+		Player:SetAttribute("ObjectiveText", "repeat")
+		Player:SetAttribute("ObjectiveReward", "repeat")
 		assert(SessionService:RecoverToLobby(Player, `Repeat_{State}`) == true)
+		assert(Session.State == "InLobby")
+		assert(Session.CurrentWorldInstanceId == nil)
+		assert(Player:GetAttribute("CurrentWorldId") == nil)
+		assert(Player:GetAttribute("ObjectiveActive") == false)
+		assert(Player:GetAttribute("ObjectiveText") == nil)
+		assert(Player:GetAttribute("ObjectiveReward") == nil)
 	end
 
 	local Session = Sessions.Get(Player)
