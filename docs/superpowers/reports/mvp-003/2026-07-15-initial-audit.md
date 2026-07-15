@@ -97,7 +97,7 @@ Commands were run before any source or test edit.
 
 - Exit: `1`
 - Result: formatting/line-ending drift in 44 source files; `tests` does not exist yet.
-- Scope impact: 16 reported files are already approved; 28 are outside the approved exact scope and are listed under `Proposed Scope Extension — Pre-Task 1 Preflight Blocker` in `tasks/MVP-003.md`.
+- Scope impact: 16 reported files are already approved; 28 are outside the approved exact scope and are recorded under `Pre-existing Low Debt — Scope Extension Rejected` in `tasks/MVP-003.md`.
 - Action: no formatting was applied.
 
 ```text
@@ -126,7 +126,7 @@ Built project to bigger-mvp003-preflight.rbxl
 - Exit: `0`
 - Output: empty.
 
-Preflight decision: stop before Task 1 because failures include out-of-scope source files. The exact proposed scope extension is recorded in `tasks/MVP-003.md` for Tech Lead approval.
+Tech Lead decision: all 28 out-of-scope findings are pre-existing Low-severity formatting, line-ending, or unrelated lint debt. No scope extension is required for Task 1 through the Critical/High tiers. Full-tree StyLua and Selene remain Final Release Gate requirements; focused checks apply during active implementation. The 28 paths remain out of active scope pending separate Low-tier proposals.
 
 ## Studio Verification Run 1
 
