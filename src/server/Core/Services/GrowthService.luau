@@ -17,6 +17,20 @@ local GrowthTypes = require(
 --// Types \\--
 type GrowthContext = GrowthTypes.GrowthContext
 
+--// Variables \\--
+local MAX_SAFE_INTEGER = 9007199254740991
+
+--// Helpers \\--
+local function NormalizeBigger(Value: number): number?
+	if Value ~= Value or Value <= -math.huge or Value >= math.huge then
+		return nil
+	end
+	if Value < 1 or Value > MAX_SAFE_INTEGER then
+		return nil
+	end
+	return math.floor(Value)
+end
+
 --// Service \\--
 local GrowthService = {}
 
@@ -52,26 +66,28 @@ function GrowthService:UpdateMultiplierAttribute(Player: Player)
 	end
 end
 
-function GrowthService:SetBigger(Player: Player, Value: number)
+function GrowthService:SetBigger(Player: Player, Value: number): boolean
 	local Session = Sessions.Get(Player)
-	if not Session then
-		return
+	local NormalizedValue = NormalizeBigger(Value)
+	if not Session or not NormalizedValue then
+		return false
 	end
 
-	Session.Bigger = Value
+	Session.Bigger = NormalizedValue
 
-	Player:SetAttribute("Bigger", Value)
+	Player:SetAttribute("Bigger", NormalizedValue)
 
-	local Level = math.floor((Value / 236) ^ 0.25) + 1
+	local Level = math.floor((NormalizedValue / 236) ^ 0.25) + 1
 	Player:SetAttribute("Level", Level)
 
 	local Leaderstats = Player:FindFirstChild("leaderstats")
 	local BiggerStat = Leaderstats and Leaderstats:FindFirstChild("Bigger")
 	if BiggerStat and BiggerStat:IsA("IntValue") then
-		BiggerStat.Value = Value
+		BiggerStat.Value = NormalizedValue
 	end
 
-	EventBus.Publish("BiggerChanged", Player, Value)
+	EventBus.Publish("BiggerChanged", Player, NormalizedValue)
+	return true
 end
 
 function GrowthService:AddBiggerAbsolute(Player: Player, Amount: number)
