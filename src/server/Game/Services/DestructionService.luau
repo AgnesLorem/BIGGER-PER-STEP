@@ -9,6 +9,7 @@ local Sessions = require(script.Parent.Parent.Parent.Core.Registry.RuntimeRegist
 local ServiceRegistry = require(script.Parent.Parent.Parent.Core.Registry.ServiceRegistry)
 local Logger = require(script.Parent.Parent.Parent.Core.Utilities.Logger)
 local World1Config = require(script.Parent.Parent.Config.World1Config)
+local StompValidation = require(game:GetService("ReplicatedStorage").BiggerShared.Core.Utilities.StompValidation)
 
 --// Helpers \\--
 
@@ -48,10 +49,21 @@ local function IsValidStomp(Player: Player, Hitbox: BasePart): boolean
 	if not RootPart then
 		return false
 	end
-	if RootPart.Position.Y <= Hitbox.Position.Y + World1Config.Objective.AboveHitboxPadding then
-		return false
-	end
-	return RootPart.AssemblyLinearVelocity.Y <= World1Config.Objective.MinimumDownwardVelocity
+
+	local LocalPosition = Hitbox.CFrame:PointToObjectSpace(RootPart.Position)
+	local HalfSize = Hitbox.Size / 2
+	return StompValidation.IsValid(
+		LocalPosition.X,
+		LocalPosition.Y,
+		LocalPosition.Z,
+		HalfSize.X,
+		HalfSize.Y,
+		HalfSize.Z,
+		World1Config.Objective.HorizontalPadding,
+		World1Config.Objective.MaximumRootHeight,
+		RootPart.AssemblyLinearVelocity.Y,
+		World1Config.Objective.MinimumDownwardVelocity
+	)
 end
 
 local function SyncDestruction(Player: Player, Destruction: number)

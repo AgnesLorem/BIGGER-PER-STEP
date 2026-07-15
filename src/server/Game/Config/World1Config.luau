@@ -22,6 +22,7 @@ return table.freeze({
 		Reward = "+1 Destruction",
 		DestructionReward = 1,
 		MinimumDownwardVelocity = -2,
-		AboveHitboxPadding = 1,
+		HorizontalPadding = 1,
+		MaximumRootHeight = 8,
 	}),
 })
