@@ -1,8 +1,11 @@
 --!strict
---// config \\--
+--// Config \\--
 return table.freeze({
-	TickRate = 0.2, -- Position polling rate
-	MinimumRewardInterval = 0.5, -- Minimum delay between rewards
-	DistanceThreshold = 3, -- Minimum studs moved to qualify
-	BaseGain = 1, -- Base Bigger gain
+	TickRate = 0.2,
+	MinimumRewardInterval = 0.5,
+	DistanceThreshold = 3,
+	MaximumRewardSpeed = 24,
+	DistanceSlack = 1.5,
+	MaximumSampleGap = 1,
+	BaseGain = 1,
 })
