@@ -77,7 +77,19 @@ Status, evidence, affected files, fixes, and verification will be recorded durin
 
 ## High Findings
 
-Status, evidence, affected files, fixes, and verification will be recorded during implementation in strict severity order.
+### Idempotent session recovery and WORLD1 return integrity
+
+Task 3 implemented the reviewed recovery coordinator in commit `caf3207` (`fix(mvp-003): add idempotent lobby recovery`). Task 5 independently reran its regression gate without editing source or test code.
+
+The lifecycle trace covered every caller and failure exit matched by:
+
+```powershell
+rg -n "FailEntry|CleanupPlayer|ReturnPlayerToLobby|CreateWorldForPlayer|TryCompleteObjective|Session\.State\s*=|ClearDebounce" src/server/Game src/server/Core/Services/SessionService.luau
+```
+
+Entry preparation, objective binding, entry teleport, objective presentation, completion transition, destruction presentation, return teleport, stale ownership, and player cleanup all converge on `WorldInstanceService:RecoverPlayer`. Its disconnect, destroy, registry removal, portal-debounce clearing, authoritative session recovery, objective cleanup, and optional native respawn actions are independently protected so an earlier cleanup failure does not prevent the lobby-recovery attempt. `SessionService:RecoverToLobby` is independent of the source state and is the only direct gameplay recovery write to `InLobby`; the other direct state write is the validated transition function.
+
+Task 5 found no new source defect in these paths.
 
 ## Medium Findings
 
@@ -128,9 +140,79 @@ Built project to bigger-mvp003-preflight.rbxl
 
 Tech Lead decision: all 28 out-of-scope findings are pre-existing Low-severity formatting, line-ending, or unrelated lint debt. No scope extension is required for Task 1 through the Critical/High tiers. Full-tree StyLua and Selene remain Final Release Gate requirements; focused checks apply during active implementation. The 28 paths remain out of active scope pending separate Low-tier proposals.
 
+### Task 5 scoped recovery gate
+
+The scoped gate was run before the independent Studio verification:
+
+```text
+stylua --check src/server/Core/Services/SessionService.luau src/server/Game/Services/PortalService.luau src/server/Game/Services/WorldInstanceService.luau src/server/Game/Services/DestructionService.luau tests/studio/session_recovery.luau
+exit 0
+
+selene src/server/Core/Services/SessionService.luau src/server/Game/Services/PortalService.luau src/server/Game/Services/WorldInstanceService.luau src/server/Game/Services/DestructionService.luau
+0 errors
+0 warnings
+0 parse errors
+exit 0
+
+rojo build default.project.json -o "$env:TEMP\bigger-mvp003-task5.rbxl"
+Building project 'Bigger'
+Built project to bigger-mvp003-task5.rbxl
+exit 0
+
+git diff --check
+exit 0
+```
+
 ## Studio Verification Run 1
 
-Pending implementation.
+Task 5 was executed through Studio MCP in the verified `Bigger Per Step` place in Play Solo with the real connected player `Kaezure02`. It was not a manual test and did not use a fake `Player`.
+
+The exact local `tests/studio/session_recovery.luau` source was mirrored to temporary `ServerStorage.MVP003Tests.SessionRecovery`. A normalized local-to-Studio comparison passed before execution:
+
+```text
+HarnessParity=true;ActualBytes=2807;ExpectedBytes=2807
+```
+
+Recovery was invoked twice from each unexpected state. Every call returned the authoritative session to `InLobby`, cleared `CurrentWorldInstanceId`, and cleared objective presentation:
+
+```text
+[Session] Recovered Kaezure02 to lobby state (Test_EnteringWorld)
+[Session] Recovered Kaezure02 to lobby state (Repeat_EnteringWorld)
+[Session] Recovered Kaezure02 to lobby state (Test_InWorld)
+[Session] Recovered Kaezure02 to lobby state (Repeat_InWorld)
+[Session] Recovered Kaezure02 to lobby state (Test_Returning)
+[Session] Recovered Kaezure02 to lobby state (Repeat_Returning)
+[MVP003 Task5] SessionRecoveryHarness=PASS
+```
+
+The actual server runtime then entered WORLD1 with a valid `ReturnSpawn` preflight, removed that marker while the player was inside, invoked objective completion twice, restored the original marker, and attempted portal entry again. No arbitrary `CFrame` fallback was introduced or accepted.
+
+```text
+[MVP003 Task5] ReturnSpawnPreflight=true
+[MVP003 Task5] ReturnSpawnRemoved=true
+[WorldInstance] Missing Big Island.ReturnSpawn PlayerUserId=11188492254 WorldInstanceId=nil
+[Destruction] Return teleport failed for PlayerUserId=11188492254 WorldInstanceId=WORLD1_11188492254_1
+[Session] Recovered Kaezure02 to lobby state (ReturnSpawnUnavailableAtCompletion)
+[MVP003 Task5] DestructionDelta=1
+[MVP003 Task5] SecondContactDelta=0
+[MVP003 Task5] RuntimeRemoved=true
+[MVP003 Task5] SessionRecovered=true
+[MVP003 Task5] ObjectiveCleared=true
+[MVP003 Task5] NativeRespawn=true
+[MVP003 Task5] ReturnSpawnRestored=true
+[MVP003 Task5] PortalDebounceCleared=true
+[MVP003 Task5] PortalReentry=true
+[MVP003 Task5] ScenarioCleanup=true
+[MVP003 Task5] PASS
+```
+
+The runtime model and registry entry were absent after failed return, the player was not left in `Returning` or inside the destroyed world, and the restored portal created a new valid world before final scenario cleanup. After stopping Play Solo, the temporary harness folder and runner were removed and absence was re-inspected:
+
+```text
+TemporaryTestsRemoved=true;TemporaryRunnersRemoved=true
+ServerStorage.MVP003Tests: not found
+ServerScriptService.MVP003Task5Runner: not found
+```
 
 ## Studio Verification Run 2
 
@@ -142,10 +224,10 @@ Pending implementation. Any user-executed run will be labeled manual and will no
 
 ## Remaining Risks
 
-Pending audit execution.
+Task 5 is single-player Play Solo evidence. Two-player ownership, replication, cross-player objective isolation, and private-instance cleanup remain unverified here and stay in the Multiplayer Release Gate. The pre-existing Low formatting, line-ending, and unrelated lint findings also remain deferred under the Tech Lead's scope ruling.
 
 ## Release Decision
 
-`BLOCKED — OUT-OF-SCOPE PREFLIGHT FINDINGS REQUIRE TECH LEAD SCOPE APPROVAL; IMPLEMENTATION NOT STARTED`
+`PENDING - INITIAL AUDIT EXECUTION AND REMAINING RELEASE GATES`
 
-This is a pre-implementation status, not the cycle's final release decision.
+This is an in-progress status, not the cycle's final release decision.
