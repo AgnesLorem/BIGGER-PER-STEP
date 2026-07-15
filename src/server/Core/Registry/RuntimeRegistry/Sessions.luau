@@ -9,6 +9,7 @@ export type Session = {
 	State: string,
 	JoinedAt: number,
 	PurchaseHistory: { [string]: boolean },
+	CurrentWorldInstanceId: string?,
 }
 
 --// Variables \\--

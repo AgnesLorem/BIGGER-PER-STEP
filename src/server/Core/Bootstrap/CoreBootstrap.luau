@@ -1,18 +1,15 @@
 --!strict
 --[[
-	CoreBootstrap.server.luau
-	Server boot entry point.
+	CoreBootstrap.luau
+	Server boot module.
 	Boot -> Register Services -> Init Services -> Start Services -> Accept Players.
 ]]
 
---// Raw Requirings \\--
-local Players = game:GetService("Players")
-
 --// Requirings \\--
+
 local Logger = require(script.Parent.Parent.Utilities.Logger)
 local ServiceRegistry = require(script.Parent.Parent.Registry.ServiceRegistry)
 local Scheduler = require(script.Parent.Parent.Scheduler.Scheduler)
-local EventBus = require(script.Parent.Parent.Events.EventBus)
 
 local SessionService = require(script.Parent.Parent.Services.SessionService)
 local SaveService = require(script.Parent.Parent.Services.SaveService)
@@ -25,6 +22,9 @@ local ReceiptProcessingService = require(script.Parent.Parent.Services.ReceiptPr
 local GameBootstrap = require(script.Parent.Parent.Parent.Game.GameBootstrap)
 
 --// Variables \\--
+
+local Booted = false
+
 local BootOrder = {
 	{ Name = "SessionService", Service = SessionService },
 	{ Name = "SaveService", Service = SaveService },
@@ -36,6 +36,7 @@ local BootOrder = {
 }
 
 --// Helpers \\--
+
 local function RegisterServices()
 	for _, Entry in BootOrder do
 		ServiceRegistry.Register(Entry.Name, Entry.Service)
@@ -76,14 +77,24 @@ local function AcceptPlayers()
 	Logger.Info("Runtime", "Accepting players, server is ready")
 end
 
---// Boot Sequence \\--
-Logger.Info("Runtime", "Server boot started")
+--// Service \\--
 
-RegisterServices()
-InitServices()
-InitGame()
-StartServices()
-StartGame()
-AcceptPlayers()
+local CoreBootstrap = {}
 
-Logger.Info("Runtime", "Server boot complete")
+function CoreBootstrap.Start()
+	if Booted then
+		return
+	end
+	Booted = true
+
+	Logger.Info("Runtime", "Server boot started")
+	RegisterServices()
+	InitServices()
+	InitGame()
+	StartServices()
+	StartGame()
+	AcceptPlayers()
+	Logger.Info("Runtime", "Server boot complete")
+end
+
+return table.freeze(CoreBootstrap)

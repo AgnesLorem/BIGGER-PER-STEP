@@ -29,6 +29,13 @@ local function CreateLeaderstats(Player: Player, Session: Session)
 	Leaderstats.Parent = Player
 end
 
+local function ClearObjectiveAttributes(Player: Player)
+	Player:SetAttribute("CurrentWorldId", nil)
+	Player:SetAttribute("ObjectiveActive", false)
+	Player:SetAttribute("ObjectiveText", nil)
+	Player:SetAttribute("ObjectiveReward", nil)
+end
+
 local function OnPlayerAdded(Player: Player)
 	local Profile = SaveService:LoadProfile(Player)
 	local Session: Session = {
@@ -36,18 +43,20 @@ local function OnPlayerAdded(Player: Player)
 		Bigger = Profile.Bigger,
 		Destruction = Profile.Destruction,
 		Rebirth = Profile.Rebirth,
-		State = "Ready",
+		State = "InLobby",
 		JoinedAt = tick(),
 		PurchaseHistory = Profile.ProcessedPurchaseIds or {},
+		CurrentWorldInstanceId = nil,
 	}
 
 	Sessions.Set(Player, Session)
 	CreateLeaderstats(Player, Session)
 	Player:SetAttribute("Bigger", Session.Bigger)
-	
+	Player:SetAttribute("Destruction", Session.Destruction)
+	ClearObjectiveAttributes(Player)
+
 	local Level = math.floor((Session.Bigger / 236) ^ 0.25) + 1
 	Player:SetAttribute("Level", Level)
-
 	EventBus.Publish("PlayerSessionCreated", Player, Session)
 	Logger.Info("Session", "Session created for %s", Player.Name)
 end

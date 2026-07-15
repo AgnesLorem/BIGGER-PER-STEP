@@ -23,6 +23,8 @@ type FormulaFunction = (Bigger: number, CurveParameter: number) -> number
 
 --// Helpers \\--
 
+local ScaleCurve = {}
+
 local Formulas: { [string]: FormulaFunction } = table.freeze({
 	sqrt = function(Bigger: number, CurveParameter: number): number
 		return 1 + math.max(0, Bigger - 1) ^ CurveParameter
@@ -40,8 +42,6 @@ local Formulas: { [string]: FormulaFunction } = table.freeze({
 })
 
 --// Service \\--
-
-local ScaleCurve = {}
 
 function ScaleCurve.GetVisualScale(Bigger: number, Formula: string?, CurveParameter: number?): number
 	local ResolvedFormula = Formula or DEFAULT_FORMULA
