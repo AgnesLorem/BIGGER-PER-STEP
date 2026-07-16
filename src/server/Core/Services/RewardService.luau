@@ -1,6 +1,7 @@
 --!strict
 -- RewardService.luau
 -- Central entrypoint service for all gameplay rewards.
+-- Uses PurchaseState enum for persistence-first idempotency.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Logger = require(script.Parent.Parent.Utilities.Logger)
@@ -9,8 +10,11 @@ local Sessions = require(script.Parent.Parent.Registry.RuntimeRegistry.Sessions)
 
 local RewardType = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType"))
 local RewardError = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardError"))
+local PurchaseState = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("PurchaseState"))
 local DeveloperProductConfig = require(script.Parent.Parent.Config.DeveloperProductConfig)
 local RewardDispatcher = require(script.Parent.Parent.Utilities.RewardDispatcher)
+
+--// Types \\--
 
 type Reward = RewardDispatcher.Reward
 
@@ -27,6 +31,8 @@ export type GrantResult = {
 	AppliedRewards: {Reward}?,
 	FailedReward: Reward?,
 }
+
+--// Service \\--
 
 local RewardService = {}
 
@@ -59,13 +65,15 @@ function RewardService:Grant(Player: Player, Options: GrantOptions): GrantResult
 		return { Success = false, ErrorCode = RewardError.InvalidPayload }
 	end
 
-	-- Check for duplicate transaction cache
-	if session.PurchaseHistory[transactionId] then
-		-- Giao dịch đã được ghi nhận trong bộ nhớ trước đó (có thể là retry sau khi save thất bại)
-		-- Bỏ qua bước Dispatch (không cấp lại vật phẩm để tránh nhân đôi) và chuyển thẳng sang bước ghi nhận lưu trữ.
-		Logger.Info("Reward", "Transaction %s already dispatched in memory cache for %s. Bypassing dispatch.", transactionId, Player.Name)
+	-- 2. Check PurchaseState in session cache
+	local state = session.PurchaseHistory[transactionId]
+
+	if state == PurchaseState.Dispatched or state == PurchaseState.Completed then
+		-- Already dispatched in memory (retry after save failure) or completed.
+		-- Skip dispatch to prevent duplicate reward application.
+		Logger.Info("Reward", "Transaction %s already dispatched in memory for %s. Skipping dispatch.", transactionId, Player.Name)
 	else
-		-- 2. Dispatch rewards in memory (mutates memory stats)
+		-- 3. Dispatch rewards via two-phase Validate+Apply
 		local dispatchResult = RewardDispatcher.Dispatch(Player, rewards)
 		if not dispatchResult.Success then
 			Logger.Warn("Reward", "Failed to dispatch rewards for %s: %s", Player.Name, tostring(dispatchResult.ErrorCode))
@@ -76,8 +84,8 @@ function RewardService:Grant(Player: Player, Options: GrantOptions): GrantResult
 			}
 		end
 
-		-- 3. Update runtime session cache IMMEDIATELY after dispatching
-		session.PurchaseHistory[transactionId] = true
+		-- Mark as Dispatched (rewards in RAM but not persisted yet)
+		session.PurchaseHistory[transactionId] = PurchaseState.Dispatched
 		Logger.Info("Reward", "Successfully dispatched rewards in memory for %s (Transaction: %s)", Player.Name, transactionId)
 	end
 
@@ -98,13 +106,16 @@ function RewardService:Grant(Player: Player, Options: GrantOptions): GrantResult
 		return { Success = false, ErrorCode = RewardError.PersistenceFailed }
 	end
 
-	-- 5. Write structured audit log
+	-- 5. Mark as Completed (persisted successfully)
+	session.PurchaseHistory[transactionId] = PurchaseState.Completed
+
+	-- 6. Write structured audit log
 	local rewardsStringList = {}
 	for _, reward in ipairs(rewards) do
 		local desc = reward.Type .. " " .. (reward.Amount and ("+" .. tostring(reward.Amount)) or "")
 		table.insert(rewardsStringList, desc)
 	end
-	
+
 	print(string.format(
 		"[Purchase]\nPlayer=%s\nProductSource=%s\nTransactionId=%s\nRewards=%s\nTime=%s",
 		Player.Name,

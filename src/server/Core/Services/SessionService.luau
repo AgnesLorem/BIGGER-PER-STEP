@@ -8,6 +8,13 @@ local Logger = require(script.Parent.Parent.Utilities.Logger)
 local EventBus = require(script.Parent.Parent.Events.EventBus)
 local SaveService = require(script.Parent.SaveService)
 local GrowthService = require(script.Parent.GrowthService)
+local PurchaseState = require(
+	game:GetService("ReplicatedStorage")
+		:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Enums")
+		:WaitForChild("PurchaseState")
+)
 local LevelFormula = require(
 	game:GetService("ReplicatedStorage")
 		:WaitForChild("BiggerShared")
@@ -55,9 +62,17 @@ local function OnPlayerAdded(Player: Player)
 		HasVip = Profile.HasVip or false,
 		State = "InLobby",
 		JoinedAt = tick(),
-		PurchaseHistory = Profile.ProcessedPurchaseIds or {},
+		PurchaseHistory = {},
 		CurrentWorldInstanceId = nil,
 	}
+
+	-- Convert persistent ProcessedPurchaseIds (boolean) to PurchaseState.Completed
+	local processedIds = Profile.ProcessedPurchaseIds
+	if processedIds then
+		for purchaseId in processedIds do
+			Session.PurchaseHistory[purchaseId] = PurchaseState.Completed
+		end
+	end
 
 	Sessions.Set(Player, Session)
 	CreateLeaderstats(Player, Session)

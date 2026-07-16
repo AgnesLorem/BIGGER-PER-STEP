@@ -1,14 +1,19 @@
 --!strict
 -- ReceiptProcessingService.luau
 -- Infrastructure service that handles MarketplaceService.ProcessReceipt on the server.
+-- Uses PurchaseState enum for idempotent receipt processing with persistent profile checks.
 
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logger = require(script.Parent.Parent.Utilities.Logger)
 local ServiceRegistry = require(script.Parent.Parent.Registry.ServiceRegistry)
 local Sessions = require(script.Parent.Parent.Registry.RuntimeRegistry.Sessions)
 local DeveloperProductConfig = require(script.Parent.Parent.Config.DeveloperProductConfig)
+local PurchaseState = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("PurchaseState"))
+
+--// Types \\--
 
 type ReceiptInfo = {
 	PlayerId: number,
@@ -18,6 +23,8 @@ type ReceiptInfo = {
 	CurrencyType: Enum.CurrencyType,
 	CurrencySpent: number,
 }
+
+--// Service \\--
 
 local ReceiptProcessingService = {}
 
@@ -41,13 +48,24 @@ local function ProcessReceipt(receiptInfo: ReceiptInfo): Enum.ProductPurchaseDec
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
-	-- 1. Check runtime cache first to prevent double-spending in retry loops
-	if session.PurchaseHistory[purchaseId] then
-		Logger.Info("Receipt", "Duplicate purchase check: transaction %s already processed in session cache for %s. Granting purchase.", purchaseId, player.Name)
+	-- 1. Check in-memory session cache for completed transactions
+	if session.PurchaseHistory[purchaseId] == PurchaseState.Completed then
+		Logger.Info("Receipt", "Transaction %s already completed in session cache for %s. Granting.", purchaseId, player.Name)
 		return Enum.ProductPurchaseDecision.PurchaseGranted
 	end
 
-	-- 2. Lookup configuration by ProductId
+	-- 2. Check persistent profile data (source of truth)
+	local SaveService = ServiceRegistry.Get("SaveService")
+	if SaveService then
+		local profile = SaveService:LoadProfile(player)
+		if profile and profile.ProcessedPurchaseIds[purchaseId] then
+			session.PurchaseHistory[purchaseId] = PurchaseState.Completed
+			Logger.Info("Receipt", "Transaction %s found in Profile ProcessedPurchaseIds for %s. Syncing cache and granting.", purchaseId, player.Name)
+			return Enum.ProductPurchaseDecision.PurchaseGranted
+		end
+	end
+
+	-- 3. Lookup configuration by ProductId
 	local targetConfig = nil
 	local productKey = nil
 	for key, config in pairs(DeveloperProductConfig) do
@@ -63,7 +81,7 @@ local function ProcessReceipt(receiptInfo: ReceiptInfo): Enum.ProductPurchaseDec
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
-	-- 3. Call RewardService to grant the product rewards
+	-- 4. Call RewardService to grant the product rewards (handles dispatch + persistence)
 	local RewardService = GetRewardService()
 	if not RewardService then
 		Logger.Error("Receipt", "RewardService not found in ServiceRegistry, cannot process transaction %s", purchaseId)

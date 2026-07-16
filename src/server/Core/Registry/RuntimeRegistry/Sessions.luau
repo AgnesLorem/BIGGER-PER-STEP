@@ -8,7 +8,7 @@ export type Session = {
 	Rebirth: number,
 	State: string,
 	JoinedAt: number,
-	PurchaseHistory: { [string]: boolean },
+	PurchaseHistory: { [string]: number },
 	CurrentWorldInstanceId: string?,
 	HasDoubleMultiplier: boolean,
 	HasVip: boolean,
