@@ -36,6 +36,22 @@ local ShopUIConfig: { [string]: ShopItem } = {
 		Icon = "rbxassetid://88201938796604",
 		SortOrder = 3,
 	},
+	DoubleMultiplier = {
+		ProductId = 999991, -- Placeholder ID (user will replace with actual ID)
+		Display = "2X Multiplier",
+		Description = "Double your size gains permanently!",
+		Gradient = {Color3.fromRGB(255, 220, 0), Color3.fromRGB(255, 120, 0)},
+		Icon = "rbxassetid://122745440429816",
+		SortOrder = 4,
+	},
+	Vip = {
+		ProductId = 999992, -- Placeholder ID (user will replace with actual ID)
+		Display = "VIP Pass",
+		Description = "Gain permanent 2X multiplier & a special VIP tag!",
+		Gradient = {Color3.fromRGB(255, 0, 0), Color3.fromRGB(0, 0, 255)}, -- Color handles rainbow gradient
+		Icon = "rbxassetid://122745440429816",
+		SortOrder = 5,
+	},
 }
 
 return table.freeze(ShopUIConfig)

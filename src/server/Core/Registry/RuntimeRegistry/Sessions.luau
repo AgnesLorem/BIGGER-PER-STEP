@@ -10,6 +10,8 @@ export type Session = {
 	JoinedAt: number,
 	PurchaseHistory: { [string]: boolean },
 	CurrentWorldInstanceId: string?,
+	HasDoubleMultiplier: boolean,
+	HasVip: boolean,
 }
 
 --// Variables \\--

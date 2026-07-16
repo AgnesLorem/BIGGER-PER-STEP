@@ -10,6 +10,8 @@ export type Profile = {
 	Destruction: number,
 	Rebirth: number,
 	ProcessedPurchaseIds: { [string]: boolean },
+	HasDoubleMultiplier: boolean,
+	HasVip: boolean,
 }
 
 --// Variables \\--
@@ -34,6 +36,8 @@ function SaveService:LoadProfile(Player: Player): Profile
 			Destruction = 0,
 			Rebirth = 0,
 			ProcessedPurchaseIds = {},
+			HasDoubleMultiplier = false,
+			HasVip = false,
 		}
 		Profiles[Player] = Profile
 	end

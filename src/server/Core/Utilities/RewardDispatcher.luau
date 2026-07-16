@@ -7,6 +7,7 @@ local ServiceRegistry = require(script.Parent.Parent.Registry.ServiceRegistry)
 
 local RewardType = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType"))
 local RewardError = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardError"))
+local Sessions = require(script.Parent.Parent.Registry.RuntimeRegistry.Sessions)
 
 export type Reward = {
 	Type: string,
@@ -49,6 +50,46 @@ local Handlers = table.freeze({
 		return true
 	end,
 	[RewardType.Item] = function(Player: Player, Reward: Reward): boolean
+		return true
+	end,
+	[RewardType.DoubleMultiplier] = function(Player: Player, Reward: Reward): boolean
+		local session = Sessions.Get(Player)
+		if session then
+			session.HasDoubleMultiplier = true
+			local SaveService = ServiceRegistry.Get("SaveService")
+			if SaveService then
+				local profile = SaveService:LoadProfile(Player)
+				if profile then
+					profile.HasDoubleMultiplier = true
+				end
+			end
+			local GrowthService = GetGrowthService()
+			if GrowthService then
+				GrowthService:UpdateMultiplierAttribute(Player)
+			end
+		end
+		return true
+	end,
+	[RewardType.Vip] = function(Player: Player, Reward: Reward): boolean
+		local session = Sessions.Get(Player)
+		if session then
+			session.HasVip = true
+			local SaveService = ServiceRegistry.Get("SaveService")
+			if SaveService then
+				local profile = SaveService:LoadProfile(Player)
+				if profile then
+					profile.HasVip = true
+				end
+			end
+			local GrowthService = GetGrowthService()
+			if GrowthService then
+				GrowthService:UpdateMultiplierAttribute(Player)
+			end
+			local CharacterScaleService = ServiceRegistry.Get("CharacterScaleService")
+			if CharacterScaleService then
+				CharacterScaleService:UpdateVipTag(Player)
+			end
+		end
 		return true
 	end,
 })

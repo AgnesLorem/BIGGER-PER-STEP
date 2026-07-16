@@ -7,6 +7,7 @@ local Sessions = require(script.Parent.Parent.Registry.RuntimeRegistry.Sessions)
 local Logger = require(script.Parent.Parent.Utilities.Logger)
 local EventBus = require(script.Parent.Parent.Events.EventBus)
 local SaveService = require(script.Parent.SaveService)
+local GrowthService = require(script.Parent.GrowthService)
 
 --// Types \\--
 type Session = Sessions.Session
@@ -43,6 +44,8 @@ local function OnPlayerAdded(Player: Player)
 		Bigger = Profile.Bigger,
 		Destruction = Profile.Destruction,
 		Rebirth = Profile.Rebirth,
+		HasDoubleMultiplier = Profile.HasDoubleMultiplier or false,
+		HasVip = Profile.HasVip or false,
 		State = "InLobby",
 		JoinedAt = tick(),
 		PurchaseHistory = Profile.ProcessedPurchaseIds or {},
@@ -54,6 +57,7 @@ local function OnPlayerAdded(Player: Player)
 	Player:SetAttribute("Bigger", Session.Bigger)
 	Player:SetAttribute("Destruction", Session.Destruction)
 	ClearObjectiveAttributes(Player)
+	GrowthService:UpdateMultiplierAttribute(Player)
 
 	local Level = math.floor((Session.Bigger / 236) ^ 0.25) + 1
 	Player:SetAttribute("Level", Level)

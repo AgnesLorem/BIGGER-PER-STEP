@@ -44,10 +44,57 @@ local function OnBiggerChanged(Player: Player, NewValue: number)
 	end
 end
 
+local function CreateVipTag(Player: Player, Character: Model)
+	local Head = Character:WaitForChild("Head", 5) :: BasePart?
+	if not Head then return end
+
+	local existing = Head:FindFirstChild("VipTag")
+	if existing then existing:Destroy() end
+
+	local session = Sessions.Get(Player)
+	if not session or not session.HasVip then return end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "VipTag"
+	billboard.Size = UDim2.new(0, 150, 0, 50)
+	billboard.StudsOffset = Vector3.new(0, 3.5, 0)
+	billboard.AlwaysOnTop = true
+	billboard.LightInfluence = 0
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.Text = "★ VIP ★"
+	label.TextColor3 = Color3.fromRGB(255, 255, 255)
+	label.TextSize = 24
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(0, 0, 0)
+	stroke.Thickness = 2.5
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+	stroke.Parent = label
+
+	local gradient = Instance.new("UIGradient")
+	gradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+		ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 127, 0)),
+		ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 255, 0)),
+		ColorSequenceKeypoint.new(0.6, Color3.fromRGB(0, 255, 0)),
+		ColorSequenceKeypoint.new(0.8, Color3.fromRGB(0, 0, 255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(139, 0, 255)),
+	})
+	gradient.Parent = label
+
+	label.Parent = billboard
+	billboard.Parent = Head
+end
+
 local function OnCharacterAdded(Player: Player, Character: Model)
 	local Session = Sessions.Get(Player)
 	local Bigger = Session and Session.Bigger or 1
 	ApplyScale(Player, Character, Bigger)
+	CreateVipTag(Player, Character)
 end
 
 local function OnPlayerAdded(Player: Player)
@@ -61,6 +108,13 @@ end
 
 --// Service \\--
 local CharacterScaleService = {}
+
+function CharacterScaleService:UpdateVipTag(Player: Player)
+	local Character = Player.Character
+	if Character then
+		CreateVipTag(Player, Character)
+	end
+end
 
 function CharacterScaleService:Init()
 	EventBus.Subscribe("BiggerChanged", OnBiggerChanged)

@@ -34,17 +34,25 @@ end
 local function UpdateHUD()
 	local bigger = LocalPlayer:GetAttribute("Bigger") or 1
 	local level = LocalPlayer:GetAttribute("Level") or 1
+	local multiplier = LocalPlayer:GetAttribute("Multiplier") or 1
 	
-	LevelLabel.Text = "Level " .. tostring(level)
+	LevelLabel.Text = FormatNumber(bigger) .. " BIGGER"
 	
 	local ratio, currentProgress, totalRequired = CalculateLevelProgress(bigger, level)
 	
-	-- Animate progress fill size
-	TweenService:Create(ProgressFill, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Size = UDim2.new(ratio, 0, 1, 0)
-	}):Play()
+	-- Hide progress fill if player has no size points yet (starting state)
+	if bigger <= 1 then
+		ProgressFill.Visible = false
+		ProgressFill.Size = UDim2.new(0, 0, 1, 0)
+	else
+		ProgressFill.Visible = true
+		-- Animate progress fill size inside the BarContainer
+		TweenService:Create(ProgressFill, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = UDim2.new(ratio, 0, 1, 0)
+		}):Play()
+	end
 	
-	ProgressTextLabel.Text = FormatNumber(currentProgress) .. " / " .. FormatNumber(totalRequired)
+	ProgressTextLabel.Text = tostring(multiplier) .. "X Multiplier"
 end
 
 -- Hook up hover scaling animations to a button
@@ -104,7 +112,8 @@ function GuiController.Init()
 	local progressBG = progressBarFrame:WaitForChild("ProgressBG") :: ImageLabel
 	
 	LevelLabel = progressBG:WaitForChild("LevelLabel") :: TextLabel
-	ProgressFill = progressBG:WaitForChild("ProgressFill") :: ImageLabel
+	local barContainer = progressBG:WaitForChild("BarContainer") :: Frame
+	ProgressFill = barContainer:WaitForChild("ProgressFill") :: ImageLabel
 	ProgressTextLabel = progressBG:WaitForChild("ProgressTextLabel") :: TextLabel
 
 	-- Reference Bottom Buttons (Developer Products)
@@ -121,12 +130,30 @@ function GuiController.Init()
 			end
 		end
 	end
+
+	-- Reference RightSidebar (VIP and Double Multiplier)
+	local rightSidebar = ScreenGui:WaitForChild("RightSidebar", 5) :: Frame?
+	if rightSidebar then
+		for _, child in ipairs(rightSidebar:GetChildren()) do
+			if child:IsA("ImageButton") then
+				ApplyHoverAnimation(child)
+				local config = ShopUIConfig[child.Name]
+				if config then
+					child.MouseButton1Click:Connect(function()
+						print("Prompting product purchase for key: " .. child.Name .. " (ProductId: " .. config.ProductId .. ")")
+						MarketplaceService:PromptProductPurchase(LocalPlayer, config.ProductId)
+					end)
+				end
+			end
+		end
+	end
 end
 
 function GuiController.Start()
 	-- Connect attribute changed signals to update HUD
 	LocalPlayer:GetAttributeChangedSignal("Bigger"):Connect(UpdateHUD)
 	LocalPlayer:GetAttributeChangedSignal("Level"):Connect(UpdateHUD)
+	LocalPlayer:GetAttributeChangedSignal("Multiplier"):Connect(UpdateHUD)
 
 	-- Initial HUD update
 	UpdateHUD()

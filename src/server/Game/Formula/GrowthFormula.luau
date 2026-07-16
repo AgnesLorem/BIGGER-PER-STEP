@@ -49,7 +49,7 @@ end
 --// Service \\--
 local GrowthFormula = {}
 
-function GrowthFormula.Calculate(Session: Session, Context: GrowthContext): number
+function GrowthFormula.GetMultiplier(Session: Session): number
 	local Multiplier = 1
 	Multiplier *= GetRebirthMultiplier(Session)
 	Multiplier *= GetEquipmentMultiplier(Session)
@@ -58,6 +58,18 @@ function GrowthFormula.Calculate(Session: Session, Context: GrowthContext): numb
 	Multiplier *= GetEventMultiplier(Session)
 	Multiplier *= GetVipMultiplier(Session)
 
+	if Session.HasDoubleMultiplier then
+		Multiplier *= 2
+	end
+	if Session.HasVip then
+		Multiplier *= 2
+	end
+
+	return Multiplier
+end
+
+function GrowthFormula.Calculate(Session: Session, Context: GrowthContext): number
+	local Multiplier = GrowthFormula.GetMultiplier(Session)
 	local BaseGain = Context.BaseGain
 	local ZoneMultiplier = Context.ZoneMultiplier or 1
 	local FinalGain = BaseGain * ZoneMultiplier * Multiplier

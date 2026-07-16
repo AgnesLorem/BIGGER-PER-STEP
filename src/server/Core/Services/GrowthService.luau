@@ -36,6 +36,22 @@ function GrowthService:GetBigger(Player: Player): number
 	return Session.Bigger
 end
 
+function GrowthService:UpdateMultiplierAttribute(Player: Player)
+	local Session = Sessions.Get(Player)
+	if not Session then
+		return
+	end
+
+	local Success, GrowthFormula = pcall(function()
+		return ServiceRegistry.Get("GrowthFormula")
+	end)
+
+	if Success and GrowthFormula then
+		local Multiplier = GrowthFormula.GetMultiplier(Session)
+		Player:SetAttribute("Multiplier", Multiplier)
+	end
+end
+
 function GrowthService:SetBigger(Player: Player, Value: number)
 	local Session = Sessions.Get(Player)
 	if not Session then

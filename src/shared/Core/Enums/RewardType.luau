@@ -7,4 +7,6 @@ return table.freeze({
 	Aura = "Aura",
 	Boost = "Boost",
 	Item = "Item",
+	DoubleMultiplier = "DoubleMultiplier",
+	Vip = "Vip",
 })
