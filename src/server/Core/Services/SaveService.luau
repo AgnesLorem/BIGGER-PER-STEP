@@ -61,9 +61,7 @@ function SaveService:CommitTransaction(Player: Player, TransactionData: { Purcha
 
 	local saveSuccess = self:SaveProfile(Player)
 	if not saveSuccess then
-		-- Rollback ProcessedPurchaseId in memory profile since save failed
-		Profile.ProcessedPurchaseIds[TransactionData.PurchaseId] = nil
-		Logger.Warn("Save", "Failed to save profile for %s, rolled back transaction %s in memory", Player.Name, TransactionData.PurchaseId)
+		Logger.Warn("Save", "Failed to save profile for %s, keeping speculative write for retry", Player.Name)
 		return false
 	end
 

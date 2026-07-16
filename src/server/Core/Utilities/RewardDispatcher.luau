@@ -110,7 +110,9 @@ local Appliers = table.freeze({
 		end
 		local CharacterScaleService = ServiceRegistry.Get("CharacterScaleService")
 		if CharacterScaleService then
-			CharacterScaleService:UpdateVipTag(Player)
+			task.spawn(function()
+				CharacterScaleService:UpdateVipTag(Player)
+			end)
 		end
 	end,
 })
@@ -136,17 +138,13 @@ function RewardDispatcher.Validate(Player: Player, Rewards: {Reward}): (boolean,
 	return true, nil, nil
 end
 
-function RewardDispatcher.Apply(Player: Player, Rewards: {Reward}): (boolean, string?, Reward?)
+function RewardDispatcher.Apply(Player: Player, Rewards: {Reward})
 	for _, reward in ipairs(Rewards) do
 		local applier = Appliers[reward.Type]
 		if applier then
-			local ok, err = pcall(applier, Player, reward)
-			if not ok then
-				return false, err or "Applier execution failed", reward
-			end
+			applier(Player, reward)
 		end
 	end
-	return true, nil, nil
 end
 
 function RewardDispatcher.Dispatch(Player: Player, Rewards: {Reward}): DispatchResult
@@ -159,14 +157,7 @@ function RewardDispatcher.Dispatch(Player: Player, Rewards: {Reward}): DispatchR
 		}
 	end
 
-	local applyOk, applyErr, failedApplyReward = RewardDispatcher.Apply(Player, Rewards)
-	if not applyOk then
-		return {
-			Success = false,
-			ErrorCode = RewardError.DispatcherFailed,
-			FailedReward = failedApplyReward,
-		}
-	end
+	RewardDispatcher.Apply(Player, Rewards)
 
 	return {
 		Success = true,
