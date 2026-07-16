@@ -48,7 +48,7 @@ local function UpdateHUD()
 
 	LevelLabel.Text = FormatNumber(bigger) .. " BIGGER"
 
-	local ratio, currentProgress, totalRequired = CalculateLevelProgress(bigger, level)
+	local ratio = CalculateLevelProgress(bigger, level)
 
 	-- Hide progress fill if player has no size points yet (starting state)
 	if bigger <= 1 then

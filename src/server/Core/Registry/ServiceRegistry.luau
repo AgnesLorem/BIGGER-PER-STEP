@@ -23,11 +23,7 @@ function ServiceRegistry.Get(Name: string): any
 end
 
 function ServiceRegistry.GetAll(): { [string]: any }
-	local Copy: { [string]: any } = {}
-	for Name, Service in Services do
-		Copy[Name] = Service
-	end
-	return table.freeze(Copy)
+	return table.freeze(table.clone(Services))
 end
 
 return table.freeze(ServiceRegistry)

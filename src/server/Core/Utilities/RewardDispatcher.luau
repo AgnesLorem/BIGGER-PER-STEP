@@ -5,8 +5,15 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServiceRegistry = require(script.Parent.Parent.Registry.ServiceRegistry)
 
-local RewardType = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType"))
-local RewardError = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardError"))
+local RewardType = require(
+	ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType")
+)
+local RewardError = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Enums")
+		:WaitForChild("RewardError")
+)
 local Sessions = require(script.Parent.Parent.Registry.RuntimeRegistry.Sessions)
 
 export type Reward = {
@@ -18,7 +25,7 @@ export type Reward = {
 export type DispatchResult = {
 	Success: boolean,
 	ErrorCode: string?,
-	AppliedRewards: {Reward}?,
+	AppliedRewards: { Reward }?,
 	FailedReward: Reward?,
 }
 
@@ -37,7 +44,7 @@ local Handlers = table.freeze({
 		GrowthService:AddBiggerAbsolute(Player, Reward.Amount or 0)
 		return true
 	end,
-	
+
 	-- Stub handlers for other reward types (for extensibility)
 	[RewardType.Coins] = function(_Player: Player, _Reward: Reward): boolean
 		-- CurrencyService or similar would be called here
@@ -96,9 +103,9 @@ local Handlers = table.freeze({
 
 local RewardDispatcher = {}
 
-function RewardDispatcher.Dispatch(Player: Player, Rewards: {Reward}): DispatchResult
+function RewardDispatcher.Dispatch(Player: Player, Rewards: { Reward }): DispatchResult
 	local appliedRewards = {}
-	
+
 	for _, reward in ipairs(Rewards) do
 		local handler = Handlers[reward.Type]
 		if not handler then
@@ -108,12 +115,12 @@ function RewardDispatcher.Dispatch(Player: Player, Rewards: {Reward}): DispatchR
 				FailedReward = reward,
 			}
 		end
-		
+
 		local success = false
 		local ok = pcall(function()
 			success = handler(Player, reward)
 		end)
-		
+
 		if not ok or not success then
 			return {
 				Success = false,
@@ -121,10 +128,10 @@ function RewardDispatcher.Dispatch(Player: Player, Rewards: {Reward}): DispatchR
 				FailedReward = reward,
 			}
 		end
-		
+
 		table.insert(appliedRewards, reward)
 	end
-	
+
 	return {
 		Success = true,
 		AppliedRewards = appliedRewards,
