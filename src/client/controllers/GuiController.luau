@@ -10,6 +10,7 @@ local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local FormatNumber = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Utilities"):WaitForChild("FormatNumber"))
 local ShopUIConfig = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Config"):WaitForChild("ShopUIConfig"))
+local LevelFormula = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Game"):WaitForChild("Progression"):WaitForChild("LevelFormula"))
 
 local GuiController = {}
 
@@ -20,15 +21,8 @@ local ProgressFill: ImageLabel
 local ProgressTextLabel: TextLabel
 
 --// Helpers \\--
-local function CalculateLevelProgress(bigger: number, level: number): (number, number, number)
-	local startBigger = math.floor(236 * math.pow(level - 1, 4))
-	local targetBigger = math.floor(236 * math.pow(level, 4))
-	
-	local currentProgress = math.max(0, bigger - startBigger)
-	local totalRequired = math.max(1, targetBigger - startBigger)
-	local ratio = math.clamp(currentProgress / totalRequired, 0, 1)
-	
-	return ratio, currentProgress, totalRequired
+local function CalculateLevelProgress(bigger: number, _level: number): (number, number, number)
+	return LevelFormula.GetProgress(bigger)
 end
 
 local function UpdateHUD()
