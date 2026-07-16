@@ -7,7 +7,6 @@ local Logger = require(script.Parent.Parent.Utilities.Logger)
 local ServiceRegistry = require(script.Parent.Parent.Registry.ServiceRegistry)
 local Sessions = require(script.Parent.Parent.Registry.RuntimeRegistry.Sessions)
 
-local RewardType = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType"))
 local RewardError = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardError"))
 local DeveloperProductConfig = require(script.Parent.Parent.Config.DeveloperProductConfig)
 local RewardDispatcher = require(script.Parent.Parent.Utilities.RewardDispatcher)

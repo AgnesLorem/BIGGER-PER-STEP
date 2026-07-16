@@ -39,20 +39,20 @@ local Handlers = table.freeze({
 	end,
 	
 	-- Stub handlers for other reward types (for extensibility)
-	[RewardType.Coins] = function(Player: Player, Reward: Reward): boolean
+	[RewardType.Coins] = function(_Player: Player, _Reward: Reward): boolean
 		-- CurrencyService or similar would be called here
 		return true
 	end,
-	[RewardType.Aura] = function(Player: Player, Reward: Reward): boolean
+	[RewardType.Aura] = function(_Player: Player, _Reward: Reward): boolean
 		return true
 	end,
-	[RewardType.Boost] = function(Player: Player, Reward: Reward): boolean
+	[RewardType.Boost] = function(_Player: Player, _Reward: Reward): boolean
 		return true
 	end,
-	[RewardType.Item] = function(Player: Player, Reward: Reward): boolean
+	[RewardType.Item] = function(_Player: Player, _Reward: Reward): boolean
 		return true
 	end,
-	[RewardType.DoubleMultiplier] = function(Player: Player, Reward: Reward): boolean
+	[RewardType.DoubleMultiplier] = function(Player: Player, _Reward: Reward): boolean
 		local session = Sessions.Get(Player)
 		if session then
 			session.HasDoubleMultiplier = true
@@ -70,7 +70,7 @@ local Handlers = table.freeze({
 		end
 		return true
 	end,
-	[RewardType.Vip] = function(Player: Player, Reward: Reward): boolean
+	[RewardType.Vip] = function(Player: Player, _Reward: Reward): boolean
 		local session = Sessions.Get(Player)
 		if session then
 			session.HasVip = true
@@ -110,7 +110,7 @@ function RewardDispatcher.Dispatch(Player: Player, Rewards: {Reward}): DispatchR
 		end
 		
 		local success = false
-		local ok, err = pcall(function()
+		local ok = pcall(function()
 			success = handler(Player, reward)
 		end)
 		
