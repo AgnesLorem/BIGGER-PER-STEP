@@ -1,6 +1,6 @@
 # MVP-003 Initial Audit — 2026-07-15
 
-This report records the initial whole-project audit cycle. The Tech Lead conditionally approved execution; implementation evidence remains pending. Once the final release decision is recorded, this dated report becomes immutable.
+This report records the completed initial whole-project audit cycle. The final release decision and implementation evidence are recorded below; this dated report is now immutable.
 
 ## Conditional Approval
 
@@ -77,15 +77,17 @@ The empty `git diff --name-status` output confirms there were no tracked-file ch
 
 - **Status:** FIXED
 - **Evidence:** On 2026-07-16, Play Solo displayed a fake `Error 501` security prompt instructing the user to execute `game:GetObjects("rbxassetid://114706280708394")` and enable HTTP access. The displayed code was not executed and asset `114706280708394` was not loaded. `HttpService.HttpEnabled` was observed as already `true`; remediation did not change it, and no remaining Studio or repository source uses HTTP. The available API could not read the `LoadUnownedAsset` setting, so capability state is not claimed.
-- **Affected Studio objects:** `Workspace.SIMULATOR MAP.Material.Credits.TextBox` and `Workspace.Starter place.Material.Credits.TextBox` contained the malicious prompt text. Each TextBox contained an enabled Legacy `LocalScript` that reversed an obfuscated `PlaneConstraint.a` attribute into the prompt. Each loader subtree also contained an enabled Legacy `PoseTexture` Script and `TextureConfiguration` ModuleScript whose line 247 dynamically required the numeric value `140312253726156` stored in a nested `NumberPose`. The follow-up source-flow scan also found enabled Legacy numeric-require loaders at `Workspace.Big Island.CoreSkyboxSystem`, which created `NumberPose` value `128320524036560` before requiring it, and `Workspace.Portal_World1.PortalOutside.Weld.LightConfig`, which required nested `NumberPose` value `90983637061475`.
-- **Fix:** In the verified original `Bigger Per Step` place while Studio was stopped in Edit mode, only the two malicious `TextBox.LocalScript` subtrees, `Workspace.Big Island.CoreSkyboxSystem`, and `Workspace.Portal_World1.PortalOutside.Weld.LightConfig` were removed; only the two IOC Text values were cleared. The two map `Folder` hierarchies, `Big Island`, `Portal_World1`, portal geometry, lights, `Credits` ScreenGuis, TextBox objects, layout, and unrelated HUD content were preserved.
-- **Verification:** A complete Edit-mode rescan of 55 Script, LocalScript, and ModuleScript objects, 12 TextLabel, TextButton, and TextBox objects, and 687 attributes returned `0` IOC, obfuscation, external numeric-require, large `NumberPose`, or suspicious-name findings. Two subsequent Play Solo runs with a real player each returned `0` runtime security findings and no related Output errors. The fake GUI did not reappear, and neither run emitted `PoseTexture`, `TextureConfiguration`, or `LoadUnownedAsset` errors. Run 2 emitted unrelated invalid-animation-ID errors from the player's standard `Animate` clone; they are not part of this security chain.
+- **Affected Studio objects:** The first pass found `Workspace.SIMULATOR MAP.Material.Credits.TextBox` and `Workspace.Starter place.Material.Credits.TextBox`, their obfuscated enabled Legacy `LocalScript` descendants, duplicate `PoseTexture` / `TextureConfiguration` chains using numeric value `140312253726156`, `Workspace.Big Island.CoreSkyboxSystem` using numeric value `128320524036560`, and `Workspace.Portal_World1.PortalOutside.Weld.LightConfig` using numeric value `90983637061475`. The incomplete pass missed the enabled Legacy parent scripts `Workspace.SIMULATOR MAP.Material` and `Workspace.Starter place.Material` because the scanner did not include legacy `Message` instances or CollectionService tags.
+- **Actual runtime creator:** Both duplicate `Material` scripts used line 230 `local diagOutput = Instance.new("Message", workspace)`, line 231 `diagOutput.Text = script:GetTags()[1]`, and line 246 `local versionData = script.Credits:Clone()`. Their first tag contained the complete fake `Error 501` instructions, and the cloned `Credits` child supplied the command TextBox. The scripts were identical, Studio-only, not Rojo-mapped, and had no gameplay caller or real texture-streaming behavior.
+- **Fix:** The complete Studio-only subtrees `Workspace.SIMULATOR MAP.Material` and `Workspace.Starter place.Material` were removed after signature checks, along with the earlier loader chains. This also removed their `Credits` ScreenGui and TextBox descendants. `StarterPlayer.StarterCharacterScripts.Animate` was removed because source line 41 used bare ID `132659035793413`, which produced the runtime `unknown AssetId protocol` errors; no custom character-animation requirement or repository caller exists, so Roblox now supplies its default Animate system. `Big Island`, `ReturnSpawn`, `Portal_World1`, the WORLD1 template, `RuntimeWorlds`, map geometry, lights, and `MainHUD` were preserved.
+- **Persistence:** The original cloud place (`PlaceId 104031194350622`) was published through Studio. Studio logged `Published new changes in "Bigger Per Step" to Roblox`, `Place published`, and `Add publish notes to v172`.
+- **Verification:** The final Edit-mode scan covered 4,377 scoped objects, 52 source containers, 7 text or legacy-message objects, 44 value objects, 180 attributes, 18 tags, and 92 `require` calls, returning `0` security findings. Final Play Solo Run 1 and Run 2 each returned `0` Client findings, `0` Server findings, `0` legacy Message/Hint instances, and `0` Output errors or warnings. Both runs retained `MainHUD` and the Roblox-provided Animate script without the malformed custom walk ID. Run 1 used the real player, earned Bigger through the production movement system, touched the production portal, and verified `CurrentWorldId=WORLD1`, active objective presentation, and exactly one runtime world. No external asset was loaded, no displayed command was executed, no capability was enabled, and multiplayer was not repeated.
 
 ## High Findings
 
 ### Idempotent session recovery and WORLD1 return integrity
 
-Task 3 implemented the initial recovery coordinator in commit `caf3207` (`fix(mvp-003): add idempotent lobby recovery`). The first Task 5 run verified the core recovery and disappearing-`ReturnSpawn` path. Its audit review then found confirmed High defects in `PortalService`: late service lookup and ownership-query, transition, and world-creation exception or nil-return exits could bypass full recovery and leave the portal debounce or authoritative session state dirty.
+Task 3 implemented the initial recovery coordinator in commit `99119bd` (`fix(mvp-003): add idempotent lobby recovery`). The first Task 5 run verified the core recovery and disappearing-`ReturnSpawn` path. Its audit review then found confirmed High defects in `PortalService`: late service lookup and ownership-query, transition, and world-creation exception or nil-return exits could bypass full recovery and leave the portal debounce or authoritative session state dirty.
 
 The lifecycle trace covered every caller and failure exit matched by:
 
@@ -93,19 +95,19 @@ The lifecycle trace covered every caller and failure exit matched by:
 rg -n "FailEntry|CleanupPlayer|ReturnPlayerToLobby|CreateWorldForPlayer|TryCompleteObjective|Session\.State\s*=|ClearDebounce" src/server/Game src/server/Core/Services/SessionService.luau
 ```
 
-Commit `0d9d714` (`fix(mvp-003): close portal recovery exits`) fixed those review findings. `PortalService:Init` now resolves and captures its established `SessionService` and `WorldInstanceService` dependencies before binding entry callbacks; a missing required dependency fails closed without binding a portal callback. `TryEnterPortal` receives those established dependencies and routes ownership-query and reconciliation errors, entering and in-world transition exceptions or rejections, and world-creation exceptions or nil returns through protected `WorldInstanceService:RecoverPlayer` execution.
+Commit `5cf4f94` (`fix(mvp-003): close portal recovery exits`) fixed those review findings. `PortalService:Init` now resolves and captures its established `SessionService` and `WorldInstanceService` dependencies before binding entry callbacks; a missing required dependency fails closed without binding a portal callback. `TryEnterPortal` receives those established dependencies and routes ownership-query and reconciliation errors, entering and in-world transition exceptions or rejections, and world-creation exceptions or nil returns through protected `WorldInstanceService:RecoverPlayer` execution.
 
 Across the completed recovery path, entry preparation, objective binding, entry teleport, objective presentation, completion transition, destruction presentation, return teleport, stale ownership, player cleanup, and every reviewed portal exit converge on recovery. `WorldInstanceService:RecoverPlayer` independently protects disconnect, destroy, registry removal, portal-debounce clearing, authoritative session recovery, objective cleanup, and optional native respawn so an earlier cleanup failure does not prevent the lobby-recovery attempt. `SessionService:RecoverToLobby` remains independent of the source state.
 
-The review also found an evidence defect in the original repeated-recovery harness: its second call did not re-dirty state or reassert all postconditions. `0d9d714` updates the harness to restore the unexpected state, `CurrentWorldInstanceId`, and all objective presentation attributes before the second call, then reassert `InLobby`, nil world ownership, and cleared presentation after that call.
+The review also found an evidence defect in the original repeated-recovery harness: its second call did not re-dirty state or reassert all postconditions. `5cf4f94` updates the harness to restore the unexpected state, `CurrentWorldInstanceId`, and all objective presentation attributes before the second call, then reassert `InLobby`, nil world ownership, and cleared presentation after that call.
 
 ## Medium Findings
 
-Status, evidence, affected files, fixes, and verification will be recorded during implementation in strict severity order.
+**FIXED.** Commit `0785a44` (`fix: harden runtime failure boundaries`) isolated Scheduler callbacks and EventBus subscribers, hardened growth numeric boundaries, centralized remaining session transitions, and removed mutable registry enumeration exposure. Scoped verification and the final full-tree gate passed.
 
 ## Low Findings
 
-Status, evidence, affected files, fixes, caller-search results, and verification will be recorded during implementation in strict severity order.
+**FIXED.** Commit `fb73765` cleared the approved reward lint warnings, `3653d9c` applied the separately approved mechanical formatting/LF normalization, and `2426617` cleared remaining static findings and established repository LF policy. Caller searches preserved live Growth symbols and the canonical `GrowthTypes` module. Final StyLua, Selene, Rojo build, unit tests, and diff checks passed.
 
 ## Offline Verification
 
@@ -146,7 +148,7 @@ Built project to bigger-mvp003-preflight.rbxl
 - Exit: `0`
 - Output: empty.
 
-Tech Lead decision: all 28 out-of-scope findings are pre-existing Low-severity formatting, line-ending, or unrelated lint debt. No scope extension is required for Task 1 through the Critical/High tiers. Full-tree StyLua and Selene remain Final Release Gate requirements; focused checks apply during active implementation. The 28 paths remain out of active scope pending separate Low-tier proposals.
+Tech Lead decision at preflight: all 28 out-of-scope findings were pre-existing Low-severity formatting, line-ending, or unrelated lint debt, so no scope extension was required for Task 1 through the Critical/High tiers. The later Low-tier proposals were separately approved and completed in `fb73765`, `3653d9c`, and `2426617`; full-tree StyLua and Selene now pass.
 
 ### Task 5 scoped recovery gate
 
@@ -171,7 +173,7 @@ git diff --check
 exit 0
 ```
 
-The same scoped gate was rerun on review fix `0d9d714` before the second Studio verification. StyLua exited `0`; Selene reported `0 errors`, `0 warnings`, and `0 parse errors`; Rojo built `bigger-mvp003-task5-update.rbxl`; and `git diff --check` exited `0`.
+The same scoped gate was rerun on review fix `5cf4f94` before the second Studio verification. StyLua exited `0`; Selene reported `0 errors`, `0 warnings`, and `0 parse errors`; Rojo built `bigger-mvp003-task5-update.rbxl`; and `git diff --check` exited `0`.
 
 ## Studio Verification Run 1
 
@@ -183,7 +185,7 @@ The exact local `tests/studio/session_recovery.luau` source was mirrored to temp
 HarnessParity=true;ActualBytes=2807;ExpectedBytes=2807
 ```
 
-Recovery was invoked twice from each unexpected state. This initial run proved the first dirty-state recovery and a second idempotent call, but the original harness did not re-dirty and reassert every postcondition before the second call. The audit review preserved this limitation and strengthened the harness in `0d9d714` rather than overstating the initial evidence.
+Recovery was invoked twice from each unexpected state. This initial run proved the first dirty-state recovery and a second idempotent call, but the original harness did not re-dirty and reassert every postcondition before the second call. The audit review preserved this limitation and strengthened the harness in `5cf4f94` rather than overstating the initial evidence.
 
 ```text
 [Session] Recovered Kaezure02 to lobby state (Test_EnteringWorld)
@@ -226,7 +228,7 @@ ServerScriptService.MVP003Task5Runner: not found
 
 ## Studio Verification Run 2
 
-After `0d9d714`, Task 5 was independently rerun through Studio MCP in the same verified place with the real Play Solo player. The updated temporary harness matched the local file after normalized line-ending comparison:
+After `5cf4f94`, Task 5 was independently rerun through Studio MCP in the same verified place with the real Play Solo player. The updated temporary harness matched the local file after normalized line-ending comparison:
 
 ```text
 HarnessParity=true;ActualBytes=3395;ExpectedBytes=3395
@@ -276,20 +278,24 @@ ServerScriptService.MVP003Task5Runner: not found
 
 ### Studio Security Remediation — 2026-07-16
 
-The original place was scanned before mutation. The only direct literal IOC matches were the two map-owned Credits TextBoxes containing the fake loader instructions. Tracing source flow exposed their duplicate obfuscated executable chains plus two separate enabled numeric-require loaders under `Big Island` and `Portal_World1`, as described in Critical Findings. No source object containing literal `Error 501`, `Something went wrong with this game`, or `LoadUnownedAsset` existed in Edit mode; those runtime artifacts originated from the external loader chain.
+The first cleanup was incomplete because it scanned TextLabel, TextButton, TextBox, values, attributes, and source IOCs but did not scan legacy `Message` / `Hint` instances or CollectionService tags. A temporary server/client observer reproduced the defect with the real Play Solo player and identified two runtime `Workspace.Message` objects carrying the fake instructions. Static source tracing then located the two persistent parent `Material` scripts described in Critical Findings. The observer was removed before final verification.
 
-After surgical removal, both map `Folder` hierarchies, `Big Island`, `Portal_World1`, portal geometry, lights, and Credits layouts remained present. Final Edit-mode scanning reported `55` source containers, `12` text objects, `687` attributes, and `0` security findings. Play Solo security Run 1 and Run 2 each reported `0` runtime security findings and no related console errors. Studio was stopped in Edit mode after each run. No two-player test was repeated, no fake Player was created, no production Git source was changed by the Studio cleanup, no external asset was loaded, and remediation did not change HTTP or `LoadUnownedAsset` capabilities.
+Removed Studio objects: `Workspace.SIMULATOR MAP.Material.Credits.TextBox.LocalScript`, `Workspace.Starter place.Material.Credits.TextBox.LocalScript`, `Workspace.Big Island.CoreSkyboxSystem`, `Workspace.Portal_World1.PortalOutside.Weld.LightConfig`, `Workspace.SIMULATOR MAP.Material`, `Workspace.Starter place.Material`, and `StarterPlayer.StarterCharacterScripts.Animate`. The last two `Material` deletions subsumed their remaining `Credits` ScreenGui/TextBox descendants. Temporary `ServerScriptService.MVP003SecurityMonitor` and `StarterPlayer.StarterPlayerScripts.MVP003SecurityMonitor` were also removed.
+
+The removed external asset IDs were `114706280708394`, `140312253726156`, `128320524036560`, and `90983637061475`. They were never loaded during remediation. `HttpService.HttpEnabled` remained at its pre-existing value, no current project source invokes HTTP APIs, and the available API could not independently read the `LoadUnownedAsset` setting.
+
+Final Edit and two-run Play Solo evidence is recorded in Critical Findings. Studio ended in Edit mode with `ServerStorage.MVP003Tests`, `ServerScriptService.MVP003Runner`, and both temporary security monitors absent. No fake Player was created and the existing two-player test was not repeated.
 
 ## Two-Player Verification
 
-Pending implementation. Any user-executed run will be labeled manual and will not be described as MCP-verified.
+**PASS — MANUAL.** The existing user-executed two-player ownership, replication, objective-isolation, reward-owner, duplicate-entry, and cleanup verification remains accepted. It was not repeated during Studio security remediation and is not described as MCP-verified.
 
 ## Remaining Risks
 
-Task 5 is single-player Play Solo evidence. Two-player ownership, replication, cross-player objective isolation, and private-instance cleanup remain unverified here and stay in the Multiplayer Release Gate. The pre-existing Low formatting, line-ending, and unrelated lint findings also remain deferred under the Tech Lead's scope ruling.
+Permanent monetization persistence, production asset IDs, product semantics, stacking policy, receipt idempotency, and reconnect purchase verification remain deferred to MVP-004 by Tech Lead decision. They do not block MVP-003. No confirmed Critical or High finding remains open.
 
 ## Release Decision
 
-`PENDING - INITIAL AUDIT EXECUTION AND REMAINING RELEASE GATES`
+`READY`
 
-This is an in-progress status, not the cycle's final release decision.
+The initial cycle passed the complete offline gate, two clean final Play Solo runs, the accepted manual multiplayer gate, and the Studio-owned security gate. The branch remains unpushed pending Tech Lead review.
