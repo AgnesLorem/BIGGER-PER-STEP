@@ -81,6 +81,15 @@ To build a consistent mental model before performing any task, AI agents must re
   ```
 - **Rationale**: Any unmatched trailing bits at the end of the bit string will leak as literal `"0"` characters in the output script, causing syntax errors.
 
+### 3. Reward Apply Contract
+- **Rule**: All reward appliers (in `RewardDispatcher`) **MUST NEVER** throw errors.
+- **Constraint**: Appliers are strictly limited to direct, deterministic in-memory mutations (e.g., `session.Bigger = value`, `session.HasVip = true`). 
+- **Restrictions**:
+  - Do **NOT** perform network calls, UI/VFX calls, remote event fires, HTTP requests, or yield operations.
+  - Do **NOT** directly trigger synchronous side-effect functions (e.g., `EventBus.Publish`, `CharacterScaleService:UpdateVipTag`).
+  - **All** side-effects must run safely outside the transaction or be wrapped in `task.spawn` or `task.defer`.
+- **Rationale**: Prevents partial RAM mutation bugs if a middle reward in a bundle crashes, minimizing runtime failure surface.
+
 ---
 
 ## 💡 Lessons Learned (Roblox & Gameplay Invariants)
