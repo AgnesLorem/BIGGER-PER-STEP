@@ -73,7 +73,13 @@ The empty `git diff --name-status` output confirms there were no tracked-file ch
 
 ## Critical Findings
 
-Status, evidence, affected files, fixes, and verification will be recorded during implementation in strict severity order.
+### Fake Error 501 Studio-owned loader injection
+
+- **Status:** FIXED
+- **Evidence:** On 2026-07-16, Play Solo displayed a fake `Error 501` security prompt instructing the user to execute `game:GetObjects("rbxassetid://114706280708394")` and enable HTTP access. The displayed code was not executed and asset `114706280708394` was not loaded. `HttpService.HttpEnabled` was observed as already `true`; remediation did not change it, and no remaining Studio or repository source uses HTTP. The available API could not read the `LoadUnownedAsset` setting, so capability state is not claimed.
+- **Affected Studio objects:** `Workspace.SIMULATOR MAP.Material.Credits.TextBox` and `Workspace.Starter place.Material.Credits.TextBox` contained the malicious prompt text. Each TextBox contained an enabled Legacy `LocalScript` that reversed an obfuscated `PlaneConstraint.a` attribute into the prompt. Each loader subtree also contained an enabled Legacy `PoseTexture` Script and `TextureConfiguration` ModuleScript whose line 247 dynamically required the numeric value `140312253726156` stored in a nested `NumberPose`. The follow-up source-flow scan also found enabled Legacy numeric-require loaders at `Workspace.Big Island.CoreSkyboxSystem`, which created `NumberPose` value `128320524036560` before requiring it, and `Workspace.Portal_World1.PortalOutside.Weld.LightConfig`, which required nested `NumberPose` value `90983637061475`.
+- **Fix:** In the verified original `Bigger Per Step` place while Studio was stopped in Edit mode, only the two malicious `TextBox.LocalScript` subtrees, `Workspace.Big Island.CoreSkyboxSystem`, and `Workspace.Portal_World1.PortalOutside.Weld.LightConfig` were removed; only the two IOC Text values were cleared. The two map `Folder` hierarchies, `Big Island`, `Portal_World1`, portal geometry, lights, `Credits` ScreenGuis, TextBox objects, layout, and unrelated HUD content were preserved.
+- **Verification:** A complete Edit-mode rescan of 55 Script, LocalScript, and ModuleScript objects, 12 TextLabel, TextButton, and TextBox objects, and 687 attributes returned `0` IOC, obfuscation, external numeric-require, large `NumberPose`, or suspicious-name findings. Two subsequent Play Solo runs with a real player each returned `0` runtime security findings and no related Output errors. The fake GUI did not reappear, and neither run emitted `PoseTexture`, `TextureConfiguration`, or `LoadUnownedAsset` errors. Run 2 emitted unrelated invalid-animation-ID errors from the player's standard `Animate` clone; they are not part of this security chain.
 
 ## High Findings
 
@@ -267,6 +273,12 @@ TemporaryTestsRemoved=true;TemporaryRunnersRemoved=true
 ServerStorage.MVP003Tests: not found
 ServerScriptService.MVP003Task5Runner: not found
 ```
+
+### Studio Security Remediation — 2026-07-16
+
+The original place was scanned before mutation. The only direct literal IOC matches were the two map-owned Credits TextBoxes containing the fake loader instructions. Tracing source flow exposed their duplicate obfuscated executable chains plus two separate enabled numeric-require loaders under `Big Island` and `Portal_World1`, as described in Critical Findings. No source object containing literal `Error 501`, `Something went wrong with this game`, or `LoadUnownedAsset` existed in Edit mode; those runtime artifacts originated from the external loader chain.
+
+After surgical removal, both map `Folder` hierarchies, `Big Island`, `Portal_World1`, portal geometry, lights, and Credits layouts remained present. Final Edit-mode scanning reported `55` source containers, `12` text objects, `687` attributes, and `0` security findings. Play Solo security Run 1 and Run 2 each reported `0` runtime security findings and no related console errors. Studio was stopped in Edit mode after each run. No two-player test was repeated, no fake Player was created, no production Git source was changed by the Studio cleanup, no external asset was loaded, and remediation did not change HTTP or `LoadUnownedAsset` capabilities.
 
 ## Two-Player Verification
 
