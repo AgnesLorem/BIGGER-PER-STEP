@@ -8,6 +8,13 @@ local Logger = require(script.Parent.Parent.Utilities.Logger)
 local EventBus = require(script.Parent.Parent.Events.EventBus)
 local SaveService = require(script.Parent.SaveService)
 local GrowthService = require(script.Parent.GrowthService)
+local LevelFormula = require(
+	game:GetService("ReplicatedStorage")
+		:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("LevelFormula")
+)
 
 --// Types \\--
 type Session = Sessions.Session
@@ -59,7 +66,7 @@ local function OnPlayerAdded(Player: Player)
 	ClearObjectiveAttributes(Player)
 	GrowthService:UpdateMultiplierAttribute(Player)
 
-	local Level = math.floor((Session.Bigger / 236) ^ 0.25) + 1
+	local Level = LevelFormula.GetLevel(Session.Bigger)
 	Player:SetAttribute("Level", Level)
 	EventBus.Publish("PlayerSessionCreated", Player, Session)
 	Logger.Info("Session", "Session created for %s", Player.Name)
