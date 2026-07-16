@@ -44,8 +44,9 @@ function SaveService:LoadProfile(Player: Player): Profile
 	return Profile
 end
 
-function SaveService:SaveProfile(Player: Player)
+function SaveService:SaveProfile(Player: Player): boolean
 	Logger.Info("Save", "SaveProfile called for %s (stub)", Player.Name)
+	return true -- Returns true for success, false for failure
 end
 
 function SaveService:CommitTransaction(Player: Player, TransactionData: { PurchaseId: string, Rewards: { [any]: any } }): boolean
@@ -58,7 +59,14 @@ function SaveService:CommitTransaction(Player: Player, TransactionData: { Purcha
 	Profile.ProcessedPurchaseIds[TransactionData.PurchaseId] = true
 	Logger.Info("Save", "Persistently committed transaction %s for %s", TransactionData.PurchaseId, Player.Name)
 
-	self:SaveProfile(Player)
+	local saveSuccess = self:SaveProfile(Player)
+	if not saveSuccess then
+		-- Rollback ProcessedPurchaseId in memory profile since save failed
+		Profile.ProcessedPurchaseIds[TransactionData.PurchaseId] = nil
+		Logger.Warn("Save", "Failed to save profile for %s, rolled back transaction %s in memory", Player.Name, TransactionData.PurchaseId)
+		return false
+	end
+
 	return true
 end
 

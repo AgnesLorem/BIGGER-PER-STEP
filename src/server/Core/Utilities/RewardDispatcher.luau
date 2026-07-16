@@ -136,13 +136,17 @@ function RewardDispatcher.Validate(Player: Player, Rewards: {Reward}): (boolean,
 	return true, nil, nil
 end
 
-function RewardDispatcher.Apply(Player: Player, Rewards: {Reward})
+function RewardDispatcher.Apply(Player: Player, Rewards: {Reward}): (boolean, string?, Reward?)
 	for _, reward in ipairs(Rewards) do
 		local applier = Appliers[reward.Type]
 		if applier then
-			pcall(applier, Player, reward)
+			local ok, err = pcall(applier, Player, reward)
+			if not ok then
+				return false, err or "Applier execution failed", reward
+			end
 		end
 	end
+	return true, nil, nil
 end
 
 function RewardDispatcher.Dispatch(Player: Player, Rewards: {Reward}): DispatchResult
@@ -155,7 +159,14 @@ function RewardDispatcher.Dispatch(Player: Player, Rewards: {Reward}): DispatchR
 		}
 	end
 
-	RewardDispatcher.Apply(Player, Rewards)
+	local applyOk, applyErr, failedApplyReward = RewardDispatcher.Apply(Player, Rewards)
+	if not applyOk then
+		return {
+			Success = false,
+			ErrorCode = RewardError.DispatcherFailed,
+			FailedReward = failedApplyReward,
+		}
+	end
 
 	return {
 		Success = true,
