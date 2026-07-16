@@ -41,7 +41,7 @@ function EventBus.Publish(EventName: string, ...: any)
 		return
 	end
 	for _, Entry in List do
-		Entry.Callback(...)
+		task.spawn(Entry.Callback, ...)
 	end
 end
 
