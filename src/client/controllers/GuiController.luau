@@ -303,6 +303,10 @@ function GuiController.Init()
 			ApplyHoverAnimation(child)
 			local config = ShopUIConfig[child.Name]
 			if config then
+				local textLabel = child:FindFirstChildOfClass("TextLabel")
+				if textLabel then
+					textLabel.Text = config.Display
+				end
 				child.MouseButton1Click:Connect(function()
 					print(
 						"Prompting product purchase for key: "
@@ -325,6 +329,10 @@ function GuiController.Init()
 				ApplyHoverAnimation(child)
 				local config = ShopUIConfig[child.Name]
 				if config then
+					local textLabel = child:FindFirstChildOfClass("TextLabel")
+					if textLabel then
+						textLabel.Text = config.Display
+					end
 					child.MouseButton1Click:Connect(function()
 						print(
 							"Prompting product purchase for key: "

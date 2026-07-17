@@ -48,7 +48,14 @@ local ShopUIConfig: { [string]: ShopItem } = {
 		ProductId = 999992, -- Placeholder ID (user will replace with actual ID)
 		Display = "VIP Pass",
 		Description = "Gain permanent 2X multiplier & a special VIP tag!",
-		Gradient = { Color3.fromRGB(255, 0, 0), Color3.fromRGB(0, 0, 255) }, -- Color handles rainbow gradient
+		Gradient = {
+			Color3.fromRGB(255, 50, 50),
+			Color3.fromRGB(255, 150, 50),
+			Color3.fromRGB(255, 255, 50),
+			Color3.fromRGB(50, 255, 50),
+			Color3.fromRGB(50, 150, 255),
+			Color3.fromRGB(150, 50, 255),
+		},
 		Icon = "rbxassetid://122745440429816",
 		SortOrder = 5,
 	},

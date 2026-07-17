@@ -1,1 +1,597 @@
-{"LeftSidebar.Titles.UICorner":{"Properties":{"CornerRadius":[0,8]},"ClassName":"UICorner"},"BottomHUD.ProgressBarFrame.ProgressBG":{"Properties":{"AnchorPoint":[0.5,0.5],"Size":[1,-8,1,-8],"Position":[0.5,0,0.5,0]},"ClassName":"ImageLabel"},"RightSidebar.Vip.UICorner":{"Properties":{"CornerRadius":[0,8]},"ClassName":"UICorner"},"BottomHUD.ButtonsContainer.Bigger150K.UICorner":{"Properties":{"CornerRadius":[0,8]},"ClassName":"UICorner"},"LeftSidebar.AURA":{"Properties":{"AnchorPoint":[0,0],"Size":[0,0,0,0],"Position":[0,0,0,0]},"ClassName":"ImageButton"},"BottomHUD.ButtonsContainer.Bigger10M.UIAspectRatioConstraint":{"Properties":{"AspectRatio":2.5},"ClassName":"UIAspectRatioConstraint"},"SafeAreaRoot.OverlayHUD":{"Properties":{"Position":[0,0,0,0],"BackgroundTransparency":1,"Size":[1,0,1,0]},"ClassName":"Frame"},"LeftSidebar.Gifts.UIAspectRatioConstraint":{"Properties":{"AspectRatio":1},"ClassName":"UIAspectRatioConstraint"},"LeftSidebar.Gifts.UIScale":{"Properties":{"Scale":1},"ClassName":"UIScale"},"BottomHUD.ProgressBarFrame.ProgressBG.BarContainer":{"Properties":{"AnchorPoint":[0.5,0.5],"Size":[1,-8,1,-8],"Position":[0.5,0,0.5,0]},"ClassName":"Frame"},"RightSidebar.Vip":{"Properties":{"AnchorPoint":[0,0],"Size":[1,0,0.44999998807907107,0],"Position":[0,0,0,0]},"ClassName":"ImageButton"},"BottomHUD.ButtonsContainer.Bigger10M.TextLabel.UITextSizeConstraint":{"Properties":{"MaxTextSize":32,"MinTextSize":12},"ClassName":"UITextSizeConstraint"},"BottomHUD.ButtonsContainer.Bigger150K":{"Properties":{"AnchorPoint":[0,0],"Size":[0.30000001192092898,0,0.8999999761581421,0],"Position":[0,0,0,0]},"ClassName":"ImageButton"},"RightSidebar.DoubleMultiplier.TextLabel.UITextSizeConstraint":{"Properties":{"MaxTextSize":32,"MinTextSize":12},"ClassName":"UITextSizeConstraint"},"LeftSidebar.Rebirth":{"Properties":{"AnchorPoint":[0,0],"Size":[0,0,0,0],"Position":[0,0,0,0]},"ClassName":"ImageButton"},"BottomHUD.ButtonsContainer.Bigger150K.UIAspectRatioConstraint":{"Properties":{"AspectRatio":2.5},"ClassName":"UIAspectRatioConstraint"},"RightSidebar.Vip.RobuxBadge":{"Properties":{"AnchorPoint":[0,0],"Size":[0.30000001192092898,0,0.3499999940395355,0],"Position":[-0.05000000074505806,0,-0.15000000596046449,0]},"ClassName":"Frame"},"LeftSidebar.Settings.UICorner":{"Properties":{"CornerRadius":[0,8]},"ClassName":"UICorner"},"LeftSidebar.Gifts":{"Properties":{"AnchorPoint":[0,0],"Size":[0,0,0,0],"Position":[0,0,0,0]},"ClassName":"ImageButton"},"BottomHUD.ProgressBarFrame":{"Properties":{"AnchorPoint":[0,0],"Size":[1,0,0.30000001192092898,0],"Position":[0,0,0,0]},"ClassName":"Frame"},"LeftSidebar.Settings.UIScale":{"Properties":{"Scale":1},"ClassName":"UIScale"},"RightSidebar.DoubleMultiplier.UICorner":{"Properties":{"CornerRadius":[0,8]},"ClassName":"UICorner"},"LeftSidebar.Store":{"Properties":{"AnchorPoint":[0,0],"Size":[0,0,0,0],"Position":[0,0,0,0]},"ClassName":"ImageButton"},"RightSidebar":{"Properties":{"AnchorPoint":[1,0.5],"ZIndex":10,"Size":[0.18000000715255738,0,0.2199999988079071,0],"Position":[0.9800000190734863,0,0.5,0]},"ClassName":"Frame"},"LeftSidebar.Store.UICorner":{"Properties":{"CornerRadius":[0,8]},"ClassName":"UICorner"},"BottomHUD":{"Properties":{"AnchorPoint":[0.5,1],"ZIndex":10,"Size":[0.5,0,0.2199999988079071,0],"Position":[0.5,0,1,-10]},"ClassName":"Frame"},"LeftSidebar.Titles":{"Properties":{"AnchorPoint":[0,0],"Size":[0,0,0,0],"Position":[0,0,0,0]},"ClassName":"ImageButton"},"BottomHUD.ButtonsContainer.Bigger150K.UIScale":{"Properties":{"Scale":1},"ClassName":"UIScale"},"LeftSidebar.AURA.UICorner":{"Properties":{"CornerRadius":[0,8]},"ClassName":"UICorner"},"LeftSidebar":{"Properties":{"AnchorPoint":[0,0.5],"ZIndex":10,"Size":[0.11999999731779099,0,0.3499999940395355,0],"Position":[0.019999999552965165,0,0.5,0]},"ClassName":"Frame"},"LeftSidebar.Rebirth.UICorner":{"Properties":{"CornerRadius":[0,8]},"ClassName":"UICorner"},"LeftSidebar.Store.UIScale":{"Properties":{"Scale":1},"ClassName":"UIScale"},"BottomHUD.ProgressBarFrame.ProgressBG.ProgressTextLabel":{"Properties":{"AnchorPoint":[1,0.5],"Size":[0.44999998807907107,0,0.800000011920929,0],"TextScaled":true,"Position":[0.9800000190734863,0,0.5,0]},"ClassName":"TextLabel"},"BottomHUD.ProgressBarFrame.ProgressBG.UICorner":{"Properties":{"CornerRadius":[0,6]},"ClassName":"UICorner"},"RightSidebar.Vip.UIScale":{"Properties":{"Scale":1},"ClassName":"UIScale"},"RightSidebar.DoubleMultiplier.RobuxBadge":{"Properties":{"AnchorPoint":[0,0],"Size":[0.30000001192092898,0,0.3499999940395355,0],"Position":[-0.05000000074505806,0,-0.15000000596046449,0]},"ClassName":"Frame"},"RightSidebar.Vip.TextLabel.UITextSizeConstraint":{"Properties":{"MaxTextSize":32,"MinTextSize":12},"ClassName":"UITextSizeConstraint"},"BottomHUD.ButtonsContainer":{"Properties":{"AnchorPoint":[0,0],"Size":[1,0,0.3499999940395355,0],"Position":[0,0,0.6499999761581421,0]},"ClassName":"Frame"},"BottomHUD.ButtonsContainer.UIListLayout":{"Properties":{"VerticalAlignment":"Enum.VerticalAlignment.Center","FillDirection":"Enum.FillDirection.Horizontal","HorizontalAlignment":"Enum.HorizontalAlignment.Center","Padding":[0.019999999552965165,0],"SortOrder":"Enum.SortOrder.LayoutOrder"},"ClassName":"UIListLayout"},"RightSidebar.Vip.UIAspectRatioConstraint":{"Properties":{"AspectRatio":2.5},"ClassName":"UIAspectRatioConstraint"},"LeftSidebar.Settings":{"Properties":{"AnchorPoint":[0,0],"Size":[0,0,0,0],"Position":[0,0,0,0]},"ClassName":"ImageButton"},"BottomHUD.ProgressBarFrame.ProgressBG.LevelLabel.UITextSizeConstraint":{"Properties":{"MaxTextSize":32,"MinTextSize":12},"ClassName":"UITextSizeConstraint"},"SafeAreaRoot.PersistentHUD":{"Properties":{"Position":[0,0,0,0],"BackgroundTransparency":1,"Size":[1,0,1,0]},"ClassName":"Frame"},"SafeAreaRoot":{"Properties":{"Position":[0,0,0,0],"BackgroundTransparency":1,"Size":[1,0,1,0]},"ClassName":"Frame"},"LeftSidebar.UIPadding":{"Properties":{"PaddingBottom":[0,0],"PaddingTop":[0,0],"PaddingLeft":[0,0],"PaddingRight":[0,0]},"ClassName":"UIPadding"},"LeftSidebar.Store.UIAspectRatioConstraint":{"Properties":{"AspectRatio":1},"ClassName":"UIAspectRatioConstraint"},"BottomHUD.ButtonsContainer.Bigger1M.UIScale":{"Properties":{"Scale":1},"ClassName":"UIScale"},"RightSidebar.UIListLayout":{"Properties":{"VerticalAlignment":"Enum.VerticalAlignment.Center","FillDirection":"Enum.FillDirection.Vertical","HorizontalAlignment":"Enum.HorizontalAlignment.Right","Padding":[0.07999999821186066,0],"SortOrder":"Enum.SortOrder.LayoutOrder"},"ClassName":"UIListLayout"},"LeftSidebar.AURA.UIScale":{"Properties":{"Scale":1},"ClassName":"UIScale"},"BottomHUD.ProgressBarFrame.ProgressBG.LevelLabel":{"Properties":{"AnchorPoint":[0,0.5],"Size":[0.44999998807907107,0,0.800000011920929,0],"TextScaled":true,"Position":[0.019999999552965165,0,0.5,0]},"ClassName":"TextLabel"},"LeftSidebar.Titles.UIAspectRatioConstraint":{"Properties":{"AspectRatio":1},"ClassName":"UIAspectRatioConstraint"},"RightSidebar.DoubleMultiplier.UIAspectRatioConstraint":{"Properties":{"AspectRatio":2.5},"ClassName":"UIAspectRatioConstraint"},"BottomHUD.ButtonsContainer.Bigger1M.TextLabel":{"Properties":{"AnchorPoint":[0,0],"Size":[1,0,1,0],"TextScaled":true,"Position":[0,0,0,0]},"ClassName":"TextLabel"},"RightSidebar.DoubleMultiplier.RobuxIcon":{"Properties":{"AnchorPoint":[0,0],"Size":[0,60,0,78],"Position":[0,-7,0,-39]},"ClassName":"ImageLabel"},"RightSidebar.DoubleMultiplier.RobuxBadge.Icon":{"Properties":{"AnchorPoint":[0,0],"Size":[0,20,0,20],"Position":[0,0,0.5,-10]},"ClassName":"ImageLabel"},"RightSidebar.DoubleMultiplier.TextLabel":{"Properties":{"AnchorPoint":[0,0],"Size":[1,-50,1,0],"TextScaled":true,"Position":[0,25,0,0]},"ClassName":"TextLabel"},"LeftSidebar.Settings.UIAspectRatioConstraint":{"Properties":{"AspectRatio":1},"ClassName":"UIAspectRatioConstraint"},"BottomHUD.ButtonsContainer.Bigger10M.UICorner":{"Properties":{"CornerRadius":[0,8]},"ClassName":"UICorner"},"BottomHUD.ProgressBarFrame.ProgressBG.BarContainer.ProgressFill.UICorner":{"Properties":{"CornerRadius":[0,6]},"ClassName":"UICorner"},"BottomHUD.ButtonsContainer.UIPadding":{"Properties":{"PaddingBottom":[0,0],"PaddingTop":[0,0],"PaddingLeft":[0,0],"PaddingRight":[0,0]},"ClassName":"UIPadding"},"BottomHUD.ButtonsContainer.Bigger10M":{"Properties":{"AnchorPoint":[0,0],"Size":[0.30000001192092898,0,0.8999999761581421,0],"Position":[0,0,0,0]},"ClassName":"ImageButton"},"RightSidebar.Vip.RobuxBadge.Icon":{"Properties":{"AnchorPoint":[0,0],"Size":[0,20,0,20],"Position":[0,0,0.5,-10]},"ClassName":"ImageLabel"},"RightSidebar.DoubleMultiplier":{"Properties":{"AnchorPoint":[0,0],"Size":[1,0,0.44999998807907107,0],"Position":[0,0,-0.06119392439723015,0]},"ClassName":"ImageButton"},"LeftSidebar.Titles.UIScale":{"Properties":{"Scale":1},"ClassName":"UIScale"},"BottomHUD.ButtonsContainer.Bigger10M.TextLabel":{"Properties":{"AnchorPoint":[0,0],"Size":[1,0,1,0],"TextScaled":true,"Position":[0,0,0,0]},"ClassName":"TextLabel"},"BottomHUD.ProgressBarFrame.ProgressBG.BarContainer.ProgressFill":{"Properties":{"AnchorPoint":[0,0.5],"Size":[0,0,1,0],"Position":[0,0,0.5,0]},"ClassName":"ImageLabel"},"BottomHUD.ButtonsContainer.Bigger1M.TextLabel.UITextSizeConstraint":{"Properties":{"MaxTextSize":32,"MinTextSize":12},"ClassName":"UITextSizeConstraint"},"BottomHUD.ProgressBarFrame.ProgressBG.ProgressTextLabel.UITextSizeConstraint":{"Properties":{"MaxTextSize":32,"MinTextSize":12},"ClassName":"UITextSizeConstraint"},"RightSidebar.Vip.TextLabel":{"Properties":{"AnchorPoint":[0,0],"Size":[1,-50,1,0],"TextScaled":true,"Position":[0,25,0,0]},"ClassName":"TextLabel"},"BottomHUD.ButtonsContainer.Bigger1M.UIAspectRatioConstraint":{"Properties":{"AspectRatio":2.5},"ClassName":"UIAspectRatioConstraint"},"BottomHUD.ButtonsContainer.Bigger150K.TextLabel":{"Properties":{"AnchorPoint":[0,0],"Size":[1,0,1,0],"TextScaled":true,"Position":[0,0,0,0]},"ClassName":"TextLabel"},"BottomHUD.ButtonsContainer.Bigger150K.TextLabel.UITextSizeConstraint":{"Properties":{"MaxTextSize":32,"MinTextSize":12},"ClassName":"UITextSizeConstraint"},"BottomHUD.ButtonsContainer.Bigger1M.UICorner":{"Properties":{"CornerRadius":[0,8]},"ClassName":"UICorner"},"LeftSidebar.AURA.UIAspectRatioConstraint":{"Properties":{"AspectRatio":1},"ClassName":"UIAspectRatioConstraint"},"BottomHUD.ButtonsContainer.Bigger1M":{"Properties":{"AnchorPoint":[0,0],"Size":[0.30000001192092898,0,0.8999999761581421,0],"Position":[0,0,0,0]},"ClassName":"ImageButton"},"LeftSidebar.Rebirth.UIAspectRatioConstraint":{"Properties":{"AspectRatio":1},"ClassName":"UIAspectRatioConstraint"},"LeftSidebar.UIGridLayout":{"Properties":{"CellSize":[0.46000000834465029,0,0.30000001192092898,0],"CellPadding":[0.07999999821186066,0,0.05000000074505806,0]},"ClassName":"UIGridLayout"},"LeftSidebar.Rebirth.UIScale":{"Properties":{"Scale":1},"ClassName":"UIScale"},"RightSidebar.UIPadding":{"Properties":{"PaddingBottom":[0,0],"PaddingTop":[0,0],"PaddingLeft":[0,0],"PaddingRight":[0,0]},"ClassName":"UIPadding"},"RightSidebar.DoubleMultiplier.UIScale":{"Properties":{"Scale":1},"ClassName":"UIScale"},"LeftSidebar.Gifts.UICorner":{"Properties":{"CornerRadius":[0,8]},"ClassName":"UICorner"},"BottomHUD.ButtonsContainer.Bigger10M.UIScale":{"Properties":{"Scale":1},"ClassName":"UIScale"}}
+{
+	"LeftSidebar.Titles.UICorner": {
+		"Properties": {
+			"CornerRadius": [0, 8]
+		},
+		"ClassName": "UICorner"
+	},
+	"BottomHUD.ProgressBarFrame.ProgressBG": {
+		"Properties": {
+			"AnchorPoint": [0.5, 0.5],
+			"Size": [1, -8, 1, -8],
+			"Position": [0.5, 0, 0.5, 0]
+		},
+		"ClassName": "ImageLabel"
+	},
+	"RightSidebar.Vip.UICorner": {
+		"Properties": {
+			"CornerRadius": [0, 8]
+		},
+		"ClassName": "UICorner"
+	},
+	"BottomHUD.ButtonsContainer.Bigger150K.UICorner": {
+		"Properties": {
+			"CornerRadius": [0, 8]
+		},
+		"ClassName": "UICorner"
+	},
+	"LeftSidebar.AURA": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0, 0, 0, 0],
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "ImageButton"
+	},
+	"BottomHUD.ButtonsContainer.Bigger10M.UIAspectRatioConstraint": {
+		"Properties": {
+			"AspectRatio": 2.5
+		},
+		"ClassName": "UIAspectRatioConstraint"
+	},
+	"SafeAreaRoot.OverlayHUD": {
+		"Properties": {
+			"Position": [0, 0, 0, 0],
+			"BackgroundTransparency": 1,
+			"Size": [1, 0, 1, 0]
+		},
+		"ClassName": "Frame"
+	},
+	"LeftSidebar.Gifts.UIAspectRatioConstraint": {
+		"Properties": {
+			"AspectRatio": 1
+		},
+		"ClassName": "UIAspectRatioConstraint"
+	},
+	"LeftSidebar.Gifts.UIScale": {
+		"Properties": {
+			"Scale": 1
+		},
+		"ClassName": "UIScale"
+	},
+	"BottomHUD.ProgressBarFrame.ProgressBG.BarContainer": {
+		"Properties": {
+			"AnchorPoint": [0.5, 0.5],
+			"Size": [1, -8, 1, -8],
+			"Position": [0.5, 0, 0.5, 0]
+		},
+		"ClassName": "Frame"
+	},
+	"RightSidebar.Vip": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [1, 0, 0.44999998807907107, 0],
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "ImageButton"
+	},
+	"BottomHUD.ButtonsContainer.Bigger10M.TextLabel.UITextSizeConstraint": {
+		"Properties": {
+			"MaxTextSize": 32,
+			"MinTextSize": 12
+		},
+		"ClassName": "UITextSizeConstraint"
+	},
+	"BottomHUD.ButtonsContainer.Bigger150K": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0.30000001192092898, 0, 0.8999999761581421, 0],
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "ImageButton"
+	},
+	"RightSidebar.DoubleMultiplier.TextLabel.UITextSizeConstraint": {
+		"Properties": {
+			"MaxTextSize": 32,
+			"MinTextSize": 12
+		},
+		"ClassName": "UITextSizeConstraint"
+	},
+	"LeftSidebar.Rebirth": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0, 0, 0, 0],
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "ImageButton"
+	},
+	"BottomHUD.ButtonsContainer.Bigger150K.UIAspectRatioConstraint": {
+		"Properties": {
+			"AspectRatio": 2.5
+		},
+		"ClassName": "UIAspectRatioConstraint"
+	},
+	"RightSidebar.Vip.RobuxBadge": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0.30000001192092898, 0, 0.3499999940395355, 0],
+			"Position": [-0.05000000074505806, 0, -0.15000000596046449, 0]
+		},
+		"ClassName": "Frame"
+	},
+	"LeftSidebar.Settings.UICorner": {
+		"Properties": {
+			"CornerRadius": [0, 8]
+		},
+		"ClassName": "UICorner"
+	},
+	"LeftSidebar.Gifts": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0, 0, 0, 0],
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "ImageButton"
+	},
+	"BottomHUD.ProgressBarFrame": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [1, 0, 0.30000001192092898, 0],
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "Frame"
+	},
+	"LeftSidebar.Settings.UIScale": {
+		"Properties": {
+			"Scale": 1
+		},
+		"ClassName": "UIScale"
+	},
+	"RightSidebar.DoubleMultiplier.UICorner": {
+		"Properties": {
+			"CornerRadius": [0, 8]
+		},
+		"ClassName": "UICorner"
+	},
+	"LeftSidebar.Store": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0, 0, 0, 0],
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "ImageButton"
+	},
+	"RightSidebar": {
+		"Properties": {
+			"AnchorPoint": [1, 0.5],
+			"ZIndex": 10,
+			"Size": [0.18000000715255738, 0, 0.2199999988079071, 0],
+			"Position": [0.9800000190734863, 0, 0.5, 0]
+		},
+		"ClassName": "Frame"
+	},
+	"LeftSidebar.Store.UICorner": {
+		"Properties": {
+			"CornerRadius": [0, 8]
+		},
+		"ClassName": "UICorner"
+	},
+	"BottomHUD": {
+		"Properties": {
+			"AnchorPoint": [0.5, 1],
+			"ZIndex": 10,
+			"Size": [0.5, 0, 0.2199999988079071, 0],
+			"Position": [0.5, 0, 1, -10]
+		},
+		"ClassName": "Frame"
+	},
+	"LeftSidebar.Titles": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0, 0, 0, 0],
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "ImageButton"
+	},
+	"BottomHUD.ButtonsContainer.Bigger150K.UIScale": {
+		"Properties": {
+			"Scale": 1
+		},
+		"ClassName": "UIScale"
+	},
+	"LeftSidebar.AURA.UICorner": {
+		"Properties": {
+			"CornerRadius": [0, 8]
+		},
+		"ClassName": "UICorner"
+	},
+	"LeftSidebar": {
+		"Properties": {
+			"AnchorPoint": [0, 0.5],
+			"ZIndex": 10,
+			"Size": [0.11999999731779099, 0, 0.3499999940395355, 0],
+			"Position": [0.019999999552965165, 0, 0.5, 0]
+		},
+		"ClassName": "Frame"
+	},
+	"LeftSidebar.Rebirth.UICorner": {
+		"Properties": {
+			"CornerRadius": [0, 8]
+		},
+		"ClassName": "UICorner"
+	},
+	"LeftSidebar.Store.UIScale": {
+		"Properties": {
+			"Scale": 1
+		},
+		"ClassName": "UIScale"
+	},
+	"BottomHUD.ProgressBarFrame.ProgressBG.ProgressTextLabel": {
+		"Properties": {
+			"AnchorPoint": [1, 0.5],
+			"Size": [0.44999998807907107, 0, 0.800000011920929, 0],
+			"TextScaled": true,
+			"Position": [0.9800000190734863, 0, 0.5, 0]
+		},
+		"ClassName": "TextLabel"
+	},
+	"BottomHUD.ProgressBarFrame.ProgressBG.UICorner": {
+		"Properties": {
+			"CornerRadius": [0, 6]
+		},
+		"ClassName": "UICorner"
+	},
+	"RightSidebar.Vip.UIScale": {
+		"Properties": {
+			"Scale": 1
+		},
+		"ClassName": "UIScale"
+	},
+	"RightSidebar.DoubleMultiplier.RobuxBadge": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0.30000001192092898, 0, 0.3499999940395355, 0],
+			"Position": [-0.05000000074505806, 0, -0.15000000596046449, 0]
+		},
+		"ClassName": "Frame"
+	},
+	"RightSidebar.Vip.TextLabel.UITextSizeConstraint": {
+		"Properties": {
+			"MaxTextSize": 32,
+			"MinTextSize": 12
+		},
+		"ClassName": "UITextSizeConstraint"
+	},
+	"BottomHUD.ButtonsContainer": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [1, 0, 0.3499999940395355, 0],
+			"Position": [0, 0, 0.6499999761581421, 0]
+		},
+		"ClassName": "Frame"
+	},
+	"BottomHUD.ButtonsContainer.UIListLayout": {
+		"Properties": {
+			"VerticalAlignment": "Enum.VerticalAlignment.Center",
+			"FillDirection": "Enum.FillDirection.Horizontal",
+			"HorizontalAlignment": "Enum.HorizontalAlignment.Center",
+			"Padding": [0.019999999552965165, 0],
+			"SortOrder": "Enum.SortOrder.LayoutOrder"
+		},
+		"ClassName": "UIListLayout"
+	},
+	"RightSidebar.Vip.UIAspectRatioConstraint": {
+		"Properties": {
+			"AspectRatio": 2.5
+		},
+		"ClassName": "UIAspectRatioConstraint"
+	},
+	"LeftSidebar.Settings": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0, 0, 0, 0],
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "ImageButton"
+	},
+	"BottomHUD.ProgressBarFrame.ProgressBG.LevelLabel.UITextSizeConstraint": {
+		"Properties": {
+			"MaxTextSize": 32,
+			"MinTextSize": 12
+		},
+		"ClassName": "UITextSizeConstraint"
+	},
+	"SafeAreaRoot.PersistentHUD": {
+		"Properties": {
+			"Position": [0, 0, 0, 0],
+			"BackgroundTransparency": 1,
+			"Size": [1, 0, 1, 0]
+		},
+		"ClassName": "Frame"
+	},
+	"SafeAreaRoot": {
+		"Properties": {
+			"Position": [0, 0, 0, 0],
+			"BackgroundTransparency": 1,
+			"Size": [1, 0, 1, 0]
+		},
+		"ClassName": "Frame"
+	},
+	"LeftSidebar.UIPadding": {
+		"Properties": {
+			"PaddingBottom": [0, 0],
+			"PaddingTop": [0, 0],
+			"PaddingLeft": [0, 0],
+			"PaddingRight": [0, 0]
+		},
+		"ClassName": "UIPadding"
+	},
+	"LeftSidebar.Store.UIAspectRatioConstraint": {
+		"Properties": {
+			"AspectRatio": 1
+		},
+		"ClassName": "UIAspectRatioConstraint"
+	},
+	"BottomHUD.ButtonsContainer.Bigger1M.UIScale": {
+		"Properties": {
+			"Scale": 1
+		},
+		"ClassName": "UIScale"
+	},
+	"RightSidebar.UIListLayout": {
+		"Properties": {
+			"VerticalAlignment": "Enum.VerticalAlignment.Center",
+			"FillDirection": "Enum.FillDirection.Vertical",
+			"HorizontalAlignment": "Enum.HorizontalAlignment.Right",
+			"Padding": [0.07999999821186066, 0],
+			"SortOrder": "Enum.SortOrder.LayoutOrder"
+		},
+		"ClassName": "UIListLayout"
+	},
+	"LeftSidebar.AURA.UIScale": {
+		"Properties": {
+			"Scale": 1
+		},
+		"ClassName": "UIScale"
+	},
+	"BottomHUD.ProgressBarFrame.ProgressBG.LevelLabel": {
+		"Properties": {
+			"AnchorPoint": [0, 0.5],
+			"Size": [0.44999998807907107, 0, 0.800000011920929, 0],
+			"TextScaled": true,
+			"Position": [0.019999999552965165, 0, 0.5, 0]
+		},
+		"ClassName": "TextLabel"
+	},
+	"LeftSidebar.Titles.UIAspectRatioConstraint": {
+		"Properties": {
+			"AspectRatio": 1
+		},
+		"ClassName": "UIAspectRatioConstraint"
+	},
+	"RightSidebar.DoubleMultiplier.UIAspectRatioConstraint": {
+		"Properties": {
+			"AspectRatio": 2.5
+		},
+		"ClassName": "UIAspectRatioConstraint"
+	},
+	"BottomHUD.ButtonsContainer.Bigger1M.TextLabel": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [1, 0, 1, 0],
+			"TextScaled": true,
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "TextLabel"
+	},
+	"RightSidebar.DoubleMultiplier.RobuxIcon": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0, 60, 0, 78],
+			"Position": [0, -7, 0, -39]
+		},
+		"ClassName": "ImageLabel"
+	},
+	"RightSidebar.DoubleMultiplier.RobuxBadge.Icon": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0, 20, 0, 20],
+			"Position": [0, 0, 0.5, -10]
+		},
+		"ClassName": "ImageLabel"
+	},
+	"RightSidebar.DoubleMultiplier.TextLabel": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [1, -50, 1, 0],
+			"TextScaled": true,
+			"Position": [0, 25, 0, 0]
+		},
+		"ClassName": "TextLabel"
+	},
+	"LeftSidebar.Settings.UIAspectRatioConstraint": {
+		"Properties": {
+			"AspectRatio": 1
+		},
+		"ClassName": "UIAspectRatioConstraint"
+	},
+	"BottomHUD.ButtonsContainer.Bigger10M.UICorner": {
+		"Properties": {
+			"CornerRadius": [0, 8]
+		},
+		"ClassName": "UICorner"
+	},
+	"BottomHUD.ProgressBarFrame.ProgressBG.BarContainer.ProgressFill.UICorner": {
+		"Properties": {
+			"CornerRadius": [0, 6]
+		},
+		"ClassName": "UICorner"
+	},
+	"BottomHUD.ButtonsContainer.UIPadding": {
+		"Properties": {
+			"PaddingBottom": [0, 0],
+			"PaddingTop": [0, 0],
+			"PaddingLeft": [0, 0],
+			"PaddingRight": [0, 0]
+		},
+		"ClassName": "UIPadding"
+	},
+	"BottomHUD.ButtonsContainer.Bigger10M": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0.30000001192092898, 0, 0.8999999761581421, 0],
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "ImageButton"
+	},
+	"RightSidebar.Vip.RobuxBadge.Icon": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0, 20, 0, 20],
+			"Position": [0, 0, 0.5, -10]
+		},
+		"ClassName": "ImageLabel"
+	},
+	"RightSidebar.DoubleMultiplier": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [1, 0, 0.44999998807907107, 0],
+			"Position": [0, 0, -0.06119392439723015, 0]
+		},
+		"ClassName": "ImageButton"
+	},
+	"LeftSidebar.Titles.UIScale": {
+		"Properties": {
+			"Scale": 1
+		},
+		"ClassName": "UIScale"
+	},
+	"BottomHUD.ButtonsContainer.Bigger10M.TextLabel": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [1, 0, 1, 0],
+			"TextScaled": true,
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "TextLabel"
+	},
+	"BottomHUD.ProgressBarFrame.ProgressBG.BarContainer.ProgressFill": {
+		"Properties": {
+			"AnchorPoint": [0, 0.5],
+			"Size": [0, 0, 1, 0],
+			"Position": [0, 0, 0.5, 0]
+		},
+		"ClassName": "ImageLabel"
+	},
+	"BottomHUD.ButtonsContainer.Bigger1M.TextLabel.UITextSizeConstraint": {
+		"Properties": {
+			"MaxTextSize": 32,
+			"MinTextSize": 12
+		},
+		"ClassName": "UITextSizeConstraint"
+	},
+	"BottomHUD.ProgressBarFrame.ProgressBG.ProgressTextLabel.UITextSizeConstraint": {
+		"Properties": {
+			"MaxTextSize": 32,
+			"MinTextSize": 12
+		},
+		"ClassName": "UITextSizeConstraint"
+	},
+	"RightSidebar.Vip.TextLabel": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [1, -50, 1, 0],
+			"TextScaled": true,
+			"Position": [0, 25, 0, 0]
+		},
+		"ClassName": "TextLabel"
+	},
+	"BottomHUD.ButtonsContainer.Bigger1M.UIAspectRatioConstraint": {
+		"Properties": {
+			"AspectRatio": 2.5
+		},
+		"ClassName": "UIAspectRatioConstraint"
+	},
+	"BottomHUD.ButtonsContainer.Bigger150K.TextLabel": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [1, 0, 1, 0],
+			"TextScaled": true,
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "TextLabel"
+	},
+	"BottomHUD.ButtonsContainer.Bigger150K.TextLabel.UITextSizeConstraint": {
+		"Properties": {
+			"MaxTextSize": 32,
+			"MinTextSize": 12
+		},
+		"ClassName": "UITextSizeConstraint"
+	},
+	"BottomHUD.ButtonsContainer.Bigger1M.UICorner": {
+		"Properties": {
+			"CornerRadius": [0, 8]
+		},
+		"ClassName": "UICorner"
+	},
+	"LeftSidebar.AURA.UIAspectRatioConstraint": {
+		"Properties": {
+			"AspectRatio": 1
+		},
+		"ClassName": "UIAspectRatioConstraint"
+	},
+	"BottomHUD.ButtonsContainer.Bigger1M": {
+		"Properties": {
+			"AnchorPoint": [0, 0],
+			"Size": [0.30000001192092898, 0, 0.8999999761581421, 0],
+			"Position": [0, 0, 0, 0]
+		},
+		"ClassName": "ImageButton"
+	},
+	"LeftSidebar.Rebirth.UIAspectRatioConstraint": {
+		"Properties": {
+			"AspectRatio": 1
+		},
+		"ClassName": "UIAspectRatioConstraint"
+	},
+	"LeftSidebar.UIGridLayout": {
+		"Properties": {
+			"CellSize": [0.46000000834465029, 0, 0.30000001192092898, 0],
+			"CellPadding": [0.07999999821186066, 0, 0.05000000074505806, 0]
+		},
+		"ClassName": "UIGridLayout"
+	},
+	"LeftSidebar.Rebirth.UIScale": {
+		"Properties": {
+			"Scale": 1
+		},
+		"ClassName": "UIScale"
+	},
+	"RightSidebar.UIPadding": {
+		"Properties": {
+			"PaddingBottom": [0, 0],
+			"PaddingTop": [0, 0],
+			"PaddingLeft": [0, 0],
+			"PaddingRight": [0, 0]
+		},
+		"ClassName": "UIPadding"
+	},
+	"RightSidebar.DoubleMultiplier.UIScale": {
+		"Properties": {
+			"Scale": 1
+		},
+		"ClassName": "UIScale"
+	},
+	"LeftSidebar.Gifts.UICorner": {
+		"Properties": {
+			"CornerRadius": [0, 8]
+		},
+		"ClassName": "UICorner"
+	},
+	"BottomHUD.ButtonsContainer.Bigger10M.UIScale": {
+		"Properties": {
+			"Scale": 1
+		},
+		"ClassName": "UIScale"
+	}
+}
