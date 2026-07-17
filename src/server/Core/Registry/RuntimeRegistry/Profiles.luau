@@ -19,7 +19,7 @@ export type Entry = {
 	Phase: "Loading" | "Active" | "Releasing" | "Released",
 	OwnerToken: string,
 	LeaseExpiresAt: number?,
-	EntitlementProbe: () -> number,
+	EntitlementProbe: (any) -> number,
 	WriteQueue: { Request },
 	Worker: thread?,
 	PendingPurchaseIds: { [string]: boolean },
@@ -105,7 +105,7 @@ local function StartWorker(Entry: Entry)
 	coroutine.resume(Worker)
 end
 
-function Profiles.Create(UserId: number, OwnerToken: string, EntitlementProbe: () -> number): Entry
+function Profiles.Create(UserId: number, OwnerToken: string, EntitlementProbe: (any) -> number): Entry
 	if Entries[UserId] ~= nil then
 		error(string.format("Profiles: UserId %d already has a runtime entry", UserId), 2)
 	end

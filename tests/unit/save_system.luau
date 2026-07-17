@@ -513,6 +513,7 @@ assert(type(LifecycleSaveService.ReleaseProfile) == "function")
 
 local LoadedProfile = LifecycleSaveService:LoadProfile(Lifecycle.Player)
 assert(Lifecycle.Store.UpdateCalls == 1)
+assert(LoadedProfile.Bigger == 1)
 assert(LoadedProfile.LeaseOwner == "job-test")
 assert(LoadedProfile.LeaseExpiresAt == 1180)
 local LifecycleEntry = Profiles.Get(2001)
@@ -829,5 +830,71 @@ end
 local AfterFrozenMutations = persistentSnapshot(FrozenSession)
 assert(deepEqual(BeforeFrozenMutations, AfterFrozenMutations))
 Sessions.Remove(FrozenPlayer)
+
+local function offlineProfile(LastActiveTimestamp, LastLogoutTimestamp, Bigger)
+	local Profile = PlayerProfileSchema.Defaults()
+	Profile.Bigger = Bigger or 1
+	Profile.LastActiveTimestamp = LastActiveTimestamp
+	Profile.LastLogoutTimestamp = LastLogoutTimestamp
+	return Profile
+end
+
+local OneMinuteProfile, OneMinuteReward = PlayerProfileSchema.Acquire(offlineProfile(940, 0), 1000, "offline", 1180, 1)
+assert(OneMinuteReward == 30)
+assert(OneMinuteProfile.Bigger == 31)
+
+local DoubleProfile, DoubleReward = PlayerProfileSchema.Acquire(offlineProfile(940, 0), 1000, "offline", 1180, 2)
+assert(DoubleReward == 60)
+assert(DoubleProfile.Bigger == 61)
+
+local QuadProfile, QuadReward = PlayerProfileSchema.Acquire(offlineProfile(940, 0), 1000, "offline", 1180, 4)
+assert(QuadReward == 120)
+assert(QuadProfile.Bigger == 121)
+
+local FractionalProfile, FractionalReward =
+	PlayerProfileSchema.Acquire(offlineProfile(881, 0), 1000, "offline", 1180, 1)
+assert(FractionalReward == 59)
+assert(FractionalProfile.Bigger == 60)
+
+local FutureProfile, FutureReward = PlayerProfileSchema.Acquire(offlineProfile(1200, 0), 1000, "offline", 1180, 1)
+assert(FutureReward == 0)
+assert(FutureProfile.Bigger == 1)
+
+local CappedProfile, CappedReward = PlayerProfileSchema.Acquire(offlineProfile(1, 0), 100000, "offline", 100180, 1)
+assert(CappedReward == 14400)
+assert(CappedProfile.Bigger == 14401)
+local CappedQuadProfile, CappedQuadReward =
+	PlayerProfileSchema.Acquire(offlineProfile(1, 0), 100000, "offline", 100180, 4)
+assert(CappedQuadReward == 57600)
+assert(CappedQuadProfile.Bigger == 57601)
+
+local SavedTimestampProfile = PlayerProfileSchema.Save(OneMinuteProfile, 1100, "offline", 1280)
+assert(SavedTimestampProfile.LastActiveTimestamp == 1100)
+assert(SavedTimestampProfile.LastSaveTimestamp == 1100)
+assert(SavedTimestampProfile.LastLogoutTimestamp == 0)
+local ReleasedTimestampProfile = PlayerProfileSchema.Release(SavedTimestampProfile, 1200, "offline")
+assert(ReleasedTimestampProfile.LastActiveTimestamp == 1200)
+assert(ReleasedTimestampProfile.LastLogoutTimestamp == 1200)
+assert(ReleasedTimestampProfile.LastSaveTimestamp == 1200)
+local ReconnectedProfile, ReconnectedReward =
+	PlayerProfileSchema.Acquire(ReleasedTimestampProfile, 1200, "offline-next", 1380, 1)
+assert(ReconnectedReward == 0)
+assert(ReconnectedProfile.Bigger == ReleasedTimestampProfile.Bigger)
+
+local OverflowProfile = offlineProfile(940, 0, PlayerProfileSchema.MaximumSafeInteger)
+expectError(function()
+	PlayerProfileSchema.Acquire(OverflowProfile, 1000, "offline", 1180, 1)
+end)
+
+local EntitledStoredProfile = offlineProfile(400, 0)
+EntitledStoredProfile.HasDoubleMultiplier = true
+EntitledStoredProfile.HasVip = true
+local EntitledSaveService, Entitled = loadSaveService(EntitledStoredProfile)
+EntitledSaveService:Init()
+local EntitledLoaded = EntitledSaveService:LoadProfile(Entitled.Player)
+assert(EntitledLoaded.Bigger == 1201)
+local EntitledEntry = Profiles.Get(2001)
+assert(EntitledEntry ~= nil)
+Profiles.Remove(2001, EntitledEntry)
 
 print("save_system: PASS")

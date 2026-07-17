@@ -180,20 +180,22 @@ function SaveService:LoadProfile(Player: Player): Profile
 		error("SaveService: service is not initialized", 2)
 	end
 
-	local RuntimeProfile = Profiles.Create(Player.UserId, OwnerToken, function()
-		return 1
+	local RuntimeProfile = Profiles.Create(Player.UserId, OwnerToken, function(Profile: Profile)
+		local Multiplier = if Profile.HasDoubleMultiplier then 2 else 1
+		return if Profile.HasVip then Multiplier * 2 else Multiplier
 	end)
 	local Request = Profiles.Enqueue(RuntimeProfile, "Load", function()
 		local Now = os.time()
 		local LeaseExpiresAt = Now + SaveConfig.LeaseDurationSeconds
 		local Loaded = Retry(function()
 			return ProfileStore:UpdateAsync(SaveConfig.ProfileKey(Player.UserId), function(Stored: any)
+				local Normalized = PlayerProfileSchema.Normalize(Stored)
 				local Acquired = PlayerProfileSchema.Acquire(
 					Stored,
 					Now,
 					RuntimeProfile.OwnerToken,
 					LeaseExpiresAt,
-					RuntimeProfile.EntitlementProbe()
+					RuntimeProfile.EntitlementProbe(Normalized)
 				)
 				return Acquired
 			end)
