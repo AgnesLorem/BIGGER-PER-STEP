@@ -8,9 +8,15 @@ local Logger = require(script.Parent.Parent.Utilities.Logger)
 local ServiceRegistry = require(script.Parent.Parent.Registry.ServiceRegistry)
 local Sessions = require(script.Parent.Parent.Registry.RuntimeRegistry.Sessions)
 
-local RewardType = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType"))
-local RewardError = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardError"))
-local PurchaseState = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("PurchaseState"))
+local RewardType = require(
+	ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType")
+)
+local RewardError = require(
+	ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardError")
+)
+local PurchaseState = require(
+	ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("PurchaseState")
+)
 local DeveloperProductConfig = require(script.Parent.Parent.Config.DeveloperProductConfig)
 local RewardDispatcher = require(script.Parent.Parent.Utilities.RewardDispatcher)
 
@@ -19,7 +25,7 @@ local RewardDispatcher = require(script.Parent.Parent.Utilities.RewardDispatcher
 type Reward = RewardDispatcher.Reward
 
 export type GrantOptions = {
-	Rewards: {Reward},
+	Rewards: { Reward },
 	Source: string,
 	TransactionId: string,
 	AnalyticsKey: string,
@@ -28,7 +34,7 @@ export type GrantOptions = {
 export type GrantResult = {
 	Success: boolean,
 	ErrorCode: string?,
-	AppliedRewards: {Reward}?,
+	AppliedRewards: { Reward }?,
 	FailedReward: Reward?,
 }
 
@@ -39,7 +45,7 @@ local RewardService = {}
 function RewardService:Init() end
 function RewardService:Start() end
 
-function RewardService:Preview(ProductKey: string): {Reward}?
+function RewardService:Preview(ProductKey: string): { Reward }?
 	local config = DeveloperProductConfig[ProductKey]
 	return config and config.Rewards
 end
@@ -76,7 +82,12 @@ function RewardService:Grant(Player: Player, Options: GrantOptions): GrantResult
 		-- 3. Dispatch rewards via two-phase Validate+Apply
 		local dispatchResult = RewardDispatcher.Dispatch(Player, rewards)
 		if not dispatchResult.Success then
-			Logger.Warn("Reward", "Failed to dispatch rewards for %s: %s", Player.Name, tostring(dispatchResult.ErrorCode))
+			Logger.Warn(
+				"Reward",
+				"Failed to dispatch rewards for %s: %s",
+				Player.Name,
+				tostring(dispatchResult.ErrorCode)
+			)
 			return {
 				Success = false,
 				ErrorCode = dispatchResult.ErrorCode,
@@ -116,14 +127,16 @@ function RewardService:Grant(Player: Player, Options: GrantOptions): GrantResult
 		table.insert(rewardsStringList, desc)
 	end
 
-	print(string.format(
-		"[Purchase]\nPlayer=%s\nProductSource=%s\nTransactionId=%s\nRewards=%s\nTime=%s",
-		Player.Name,
-		Options.Source,
-		transactionId,
-		table.concat(rewardsStringList, ", "),
-		DateTime.now():FormatUniversalTime("YYYY-MM-DD HH:mm:ss", "en-us")
-	))
+	print(
+		string.format(
+			"[Purchase]\nPlayer=%s\nProductSource=%s\nTransactionId=%s\nRewards=%s\nTime=%s",
+			Player.Name,
+			Options.Source,
+			transactionId,
+			table.concat(rewardsStringList, ", "),
+			DateTime.now():FormatUniversalTime("YYYY-MM-DD HH:mm:ss", "en-us")
+		)
+	)
 
 	return {
 		Success = true,

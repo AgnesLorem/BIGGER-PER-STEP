@@ -8,9 +8,24 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
-local FormatNumber = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Utilities"):WaitForChild("FormatNumber"))
-local ShopUIConfig = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Config"):WaitForChild("ShopUIConfig"))
-local LevelFormula = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Game"):WaitForChild("Progression"):WaitForChild("LevelFormula"))
+local FormatNumber = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Utilities")
+		:WaitForChild("FormatNumber")
+)
+local ShopUIConfig = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Config")
+		:WaitForChild("ShopUIConfig")
+)
+local LevelFormula = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("LevelFormula")
+)
 
 local GuiController = {}
 
@@ -29,11 +44,11 @@ local function UpdateHUD()
 	local bigger = LocalPlayer:GetAttribute("Bigger") or 1
 	local level = LocalPlayer:GetAttribute("Level") or 1
 	local multiplier = LocalPlayer:GetAttribute("Multiplier") or 1
-	
+
 	LevelLabel.Text = FormatNumber(bigger) .. " BIGGER"
-	
-	local ratio, currentProgress, totalRequired = CalculateLevelProgress(bigger, level)
-	
+
+	local ratio = CalculateLevelProgress(bigger, level)
+
 	-- Hide progress fill if player has no size points yet (starting state)
 	if bigger <= 1 then
 		ProgressFill.Visible = false
@@ -42,10 +57,10 @@ local function UpdateHUD()
 		ProgressFill.Visible = true
 		-- Animate progress fill size inside the BarContainer
 		TweenService:Create(ProgressFill, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Size = UDim2.new(ratio, 0, 1, 0)
+			Size = UDim2.new(ratio, 0, 1, 0),
 		}):Play()
 	end
-	
+
 	ProgressTextLabel.Text = tostring(multiplier) .. "X Multiplier"
 end
 
@@ -59,25 +74,25 @@ local function ApplyHoverAnimation(button: ImageButton)
 
 	button.MouseEnter:Connect(function()
 		TweenService:Create(uiScale, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Scale = 1.1
+			Scale = 1.1,
 		}):Play()
 	end)
 
 	button.MouseLeave:Connect(function()
 		TweenService:Create(uiScale, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Scale = 1.0
+			Scale = 1.0,
 		}):Play()
 	end)
 
 	button.MouseButton1Down:Connect(function()
 		TweenService:Create(uiScale, TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Scale = 0.95
+			Scale = 0.95,
 		}):Play()
 	end)
 
 	button.MouseButton1Up:Connect(function()
 		TweenService:Create(uiScale, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Scale = 1.1
+			Scale = 1.1,
 		}):Play()
 	end)
 end
@@ -104,7 +119,7 @@ function GuiController.Init()
 	-- Reference Progress Bar components
 	local progressBarFrame = bottomHUD:WaitForChild("ProgressBarFrame") :: Frame
 	local progressBG = progressBarFrame:WaitForChild("ProgressBG") :: ImageLabel
-	
+
 	LevelLabel = progressBG:WaitForChild("LevelLabel") :: TextLabel
 	local barContainer = progressBG:WaitForChild("BarContainer") :: Frame
 	ProgressFill = barContainer:WaitForChild("ProgressFill") :: ImageLabel
@@ -118,7 +133,13 @@ function GuiController.Init()
 			local config = ShopUIConfig[child.Name]
 			if config then
 				child.MouseButton1Click:Connect(function()
-					print("Prompting product purchase for key: " .. child.Name .. " (ProductId: " .. config.ProductId .. ")")
+					print(
+						"Prompting product purchase for key: "
+							.. child.Name
+							.. " (ProductId: "
+							.. config.ProductId
+							.. ")"
+					)
 					MarketplaceService:PromptProductPurchase(LocalPlayer, config.ProductId)
 				end)
 			end
@@ -134,7 +155,13 @@ function GuiController.Init()
 				local config = ShopUIConfig[child.Name]
 				if config then
 					child.MouseButton1Click:Connect(function()
-						print("Prompting product purchase for key: " .. child.Name .. " (ProductId: " .. config.ProductId .. ")")
+						print(
+							"Prompting product purchase for key: "
+								.. child.Name
+								.. " (ProductId: "
+								.. config.ProductId
+								.. ")"
+						)
 						MarketplaceService:PromptProductPurchase(LocalPlayer, config.ProductId)
 					end)
 				end

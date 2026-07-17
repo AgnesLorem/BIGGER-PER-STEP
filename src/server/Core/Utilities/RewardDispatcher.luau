@@ -6,8 +6,15 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServiceRegistry = require(script.Parent.Parent.Registry.ServiceRegistry)
 
-local RewardType = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType"))
-local RewardError = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardError"))
+local RewardType = require(
+	ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType")
+)
+local RewardError = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Enums")
+		:WaitForChild("RewardError")
+)
 local Sessions = require(script.Parent.Parent.Registry.RuntimeRegistry.Sessions)
 
 --// Types \\--
@@ -21,7 +28,7 @@ export type Reward = {
 export type DispatchResult = {
 	Success: boolean,
 	ErrorCode: string?,
-	AppliedRewards: {Reward}?,
+	AppliedRewards: { Reward }?,
 	FailedReward: Reward?,
 }
 

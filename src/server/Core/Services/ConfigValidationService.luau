@@ -5,11 +5,22 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Logger = require(script.Parent.Parent.Utilities.Logger)
 
-local ShopUIConfig = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Config"):WaitForChild("ShopUIConfig"))
+local ShopUIConfig = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Config")
+		:WaitForChild("ShopUIConfig")
+)
 local DeveloperProductConfig = require(script.Parent.Parent.Config.DeveloperProductConfig)
-local RewardType = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType"))
-local BalanceConfig = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Game"):WaitForChild("Progression"):WaitForChild("BalanceConfig"))
-local LevelFormula = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Game"):WaitForChild("Progression"):WaitForChild("LevelFormula"))
+local RewardType = require(
+	ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType")
+)
+local BalanceConfig = require(
+	ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Game"):WaitForChild("Progression"):WaitForChild("BalanceConfig")
+)
+local LevelFormula = require(
+	ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Game"):WaitForChild("Progression"):WaitForChild("LevelFormula")
+)
 
 local ConfigValidationService = {}
 
@@ -32,11 +43,24 @@ function ConfigValidationService:Init()
 
 		local productId = uiConfig.ProductId
 		if not productId or typeof(productId) ~= "number" or productId <= 0 then
-			error("ConfigValidation: Invalid ProductId for key " .. productKey .. " in ShopUIConfig: " .. tostring(productId))
+			error(
+				"ConfigValidation: Invalid ProductId for key "
+					.. productKey
+					.. " in ShopUIConfig: "
+					.. tostring(productId)
+			)
 		end
 
 		if shopProductIds[productId] then
-			error("ConfigValidation: Duplicate ProductId in ShopUIConfig: " .. productId .. " (keys: " .. shopProductIds[productId] .. ", " .. productKey .. ")")
+			error(
+				"ConfigValidation: Duplicate ProductId in ShopUIConfig: "
+					.. productId
+					.. " (keys: "
+					.. shopProductIds[productId]
+					.. ", "
+					.. productKey
+					.. ")"
+			)
 		end
 		shopProductIds[productId] = productKey
 	end
@@ -50,11 +74,24 @@ function ConfigValidationService:Init()
 
 		local productId = serverConfig.ProductId
 		if not productId or typeof(productId) ~= "number" or productId <= 0 then
-			error("ConfigValidation: Invalid ProductId for key " .. productKey .. " in DeveloperProductConfig: " .. tostring(productId))
+			error(
+				"ConfigValidation: Invalid ProductId for key "
+					.. productKey
+					.. " in DeveloperProductConfig: "
+					.. tostring(productId)
+			)
 		end
 
 		if serverProductIds[productId] then
-			error("ConfigValidation: Duplicate ProductId in DeveloperProductConfig: " .. productId .. " (keys: " .. serverProductIds[productId] .. ", " .. productKey .. ")")
+			error(
+				"ConfigValidation: Duplicate ProductId in DeveloperProductConfig: "
+					.. productId
+					.. " (keys: "
+					.. serverProductIds[productId]
+					.. ", "
+					.. productKey
+					.. ")"
+			)
 		end
 		serverProductIds[productId] = productKey
 
@@ -65,7 +102,15 @@ function ConfigValidationService:Init()
 		end
 
 		if serverAnalyticsKeys[analyticsKey] then
-			error("ConfigValidation: Duplicate AnalyticsKey: " .. analyticsKey .. " (keys: " .. serverAnalyticsKeys[analyticsKey] .. ", " .. productKey .. ")")
+			error(
+				"ConfigValidation: Duplicate AnalyticsKey: "
+					.. analyticsKey
+					.. " (keys: "
+					.. serverAnalyticsKeys[analyticsKey]
+					.. ", "
+					.. productKey
+					.. ")"
+			)
 		end
 		serverAnalyticsKeys[analyticsKey] = productKey
 
@@ -78,14 +123,26 @@ function ConfigValidationService:Init()
 		for i, reward in ipairs(rewards) do
 			local rType = reward.Type
 			if not rType or typeof(rType) ~= "string" or not RewardType[rType] then
-				error("ConfigValidation: Unknown or missing RewardType: " .. tostring(rType) .. " in ProductKey: " .. productKey)
+				error(
+					"ConfigValidation: Unknown or missing RewardType: "
+						.. tostring(rType)
+						.. " in ProductKey: "
+						.. productKey
+				)
 			end
 
 			-- Check specific reward configurations (e.g. Bigger needs Amount)
 			if rType == RewardType.Bigger or rType == RewardType.Coins then
 				local amount = reward.Amount
 				if not amount or typeof(amount) ~= "number" or amount <= 0 then
-					error("ConfigValidation: Reward index " .. i .. " for ProductKey " .. productKey .. " must have an Amount > 0. Got: " .. tostring(amount))
+					error(
+						"ConfigValidation: Reward index "
+							.. i
+							.. " for ProductKey "
+							.. productKey
+							.. " must have an Amount > 0. Got: "
+							.. tostring(amount)
+					)
 				end
 			end
 		end
@@ -94,18 +151,33 @@ function ConfigValidationService:Init()
 	-- 3. Verify 1-to-1 match between ShopUIConfig and DeveloperProductConfig
 	for productKey in pairs(shopKeys) do
 		if not serverKeys[productKey] then
-			error("ConfigValidation: Mismatched configuration. ProductKey '" .. productKey .. "' exists in ShopUIConfig but is missing in DeveloperProductConfig!")
+			error(
+				"ConfigValidation: Mismatched configuration. ProductKey '"
+					.. productKey
+					.. "' exists in ShopUIConfig but is missing in DeveloperProductConfig!"
+			)
 		end
 
 		-- Verify ProductIds match
 		if ShopUIConfig[productKey].ProductId ~= DeveloperProductConfig[productKey].ProductId then
-			error("ConfigValidation: Mismatched ProductIds for ProductKey '" .. productKey .. "'. ShopUIConfig has " .. ShopUIConfig[productKey].ProductId .. " while DeveloperProductConfig has " .. DeveloperProductConfig[productKey].ProductId)
+			error(
+				"ConfigValidation: Mismatched ProductIds for ProductKey '"
+					.. productKey
+					.. "'. ShopUIConfig has "
+					.. ShopUIConfig[productKey].ProductId
+					.. " while DeveloperProductConfig has "
+					.. DeveloperProductConfig[productKey].ProductId
+			)
 		end
 	end
 
 	for productKey in pairs(serverKeys) do
 		if not shopKeys[productKey] then
-			error("ConfigValidation: Mismatched configuration. ProductKey '" .. productKey .. "' exists in DeveloperProductConfig but is missing in ShopUIConfig!")
+			error(
+				"ConfigValidation: Mismatched configuration. ProductKey '"
+					.. productKey
+					.. "' exists in DeveloperProductConfig but is missing in ShopUIConfig!"
+			)
 		end
 	end
 

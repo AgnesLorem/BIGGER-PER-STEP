@@ -34,8 +34,4 @@ function Sessions.Remove(Player: Player)
 	ActiveSessions[Player] = nil
 end
 
-function Sessions.GetAll(): { [Player]: Session }
-	return ActiveSessions
-end
-
 return table.freeze(Sessions)

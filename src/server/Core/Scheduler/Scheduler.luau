@@ -22,6 +22,15 @@ local Jobs: { [string]: JobConfig } = {}
 local Scheduler = {}
 
 function Scheduler.AddJob(Config: JobConfig)
+	if Config.Name == "" then
+		error("[Scheduler] Job name cannot be empty")
+	end
+	if Config.IntervalSeconds <= 0 then
+		error("[Scheduler] IntervalSeconds must be positive")
+	end
+	if Jobs[Config.Name] then
+		error(`[Scheduler] Job already exists: {Config.Name}`)
+	end
 	Jobs[Config.Name] = Config
 end
 
@@ -42,7 +51,10 @@ function Scheduler.Start()
 		local Handle = task.spawn(function()
 			while true do
 				task.wait(Config.IntervalSeconds)
-				Config.Callback()
+				local Success, Message = xpcall(Config.Callback, debug.traceback)
+				if not Success then
+					Logger.Warn("Scheduler", "Job %s failed: %s", Name, tostring(Message))
+				end
 			end
 		end)
 		Timers.Set(Name, Handle)
