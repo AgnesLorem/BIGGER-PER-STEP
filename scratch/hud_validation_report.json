@@ -1,25 +1,8 @@
 {
-	"Timestamp": "2026-07-17T15:34:44Z",
-	"ComplianceScore": 88.0,
+	"Timestamp": "2026-07-17T18:23:46Z",
+	"ComplianceScore": 100,
 	"FixesApplied": 0,
 	"Errors": [],
-	"Warnings": [
-		{"Message":"Missing UIPadding under LeftSidebar","Path":"StarterGui.MainHUD.LeftSidebar","Type":"MissingPadding"},
-		{"Message":"Missing UICorner under LeftSidebar.Store","Path":"StarterGui.MainHUD.LeftSidebar.Store","Type":"MissingConstraint"},
-		{"Message":"Missing UICorner under LeftSidebar.Gifts","Path":"StarterGui.MainHUD.LeftSidebar.Gifts","Type":"MissingConstraint"},
-		{"Message":"Missing UICorner under LeftSidebar.Rebirth","Path":"StarterGui.MainHUD.LeftSidebar.Rebirth","Type":"MissingConstraint"},
-		{"Message":"Missing UICorner under LeftSidebar.Titles","Path":"StarterGui.MainHUD.LeftSidebar.Titles","Type":"MissingConstraint"},
-		{"Message":"Missing UICorner under LeftSidebar.Settings","Path":"StarterGui.MainHUD.LeftSidebar.Settings","Type":"MissingConstraint"},
-		{"Message":"Missing UICorner under LeftSidebar.AURA","Path":"StarterGui.MainHUD.LeftSidebar.AURA","Type":"MissingConstraint"},
-		{"Message":"Missing UIPadding under BottomHUD.ButtonsContainer","Path":"StarterGui.MainHUD.BottomHUD.ButtonsContainer","Type":"MissingPadding"},
-		{"Message":"Missing UICorner under BottomHUD.ButtonsContainer.Bigger150K","Path":"StarterGui.MainHUD.BottomHUD.ButtonsContainer.Bigger150K","Type":"MissingConstraint"},
-		{"Message":"Missing UICorner under BottomHUD.ButtonsContainer.Bigger1M","Path":"StarterGui.MainHUD.BottomHUD.ButtonsContainer.Bigger1M","Type":"MissingConstraint"},
-		{"Message":"Missing UICorner under BottomHUD.ButtonsContainer.Bigger10M","Path":"StarterGui.MainHUD.BottomHUD.ButtonsContainer.Bigger10M","Type":"MissingConstraint"},
-		{"Message":"Missing UIPadding under RightSidebar","Path":"StarterGui.MainHUD.RightSidebar","Type":"MissingPadding"},
-		{"Message":"Missing UIScale under RightSidebar.DoubleMultiplier","Path":"StarterGui.MainHUD.RightSidebar.DoubleMultiplier","Type":"MissingConstraint"},
-		{"Message":"Missing UICorner under RightSidebar.DoubleMultiplier","Path":"StarterGui.MainHUD.RightSidebar.DoubleMultiplier","Type":"MissingConstraint"},
-		{"Message":"Missing UIScale under RightSidebar.Vip","Path":"StarterGui.MainHUD.RightSidebar.Vip","Type":"MissingConstraint"},
-		{"Message":"Missing UICorner under RightSidebar.Vip","Path":"StarterGui.MainHUD.RightSidebar.Vip","Type":"MissingConstraint"}
-	],
+	"Warnings": [],
 	"Duplicates": []
 }
