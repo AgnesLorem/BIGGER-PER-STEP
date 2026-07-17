@@ -48,10 +48,28 @@ local function RuntimeFor(Player: Player): RuntimeProfile?
 	return Profiles.Get(Player.UserId)
 end
 
-local function Snapshot(Player: Player, RuntimeProfile: RuntimeProfile): Profile
+local function CopyPurchaseIds(PurchaseIds: { [string]: boolean }): { [string]: boolean }
+	local Copy = {}
+	for PurchaseId in PurchaseIds do
+		Copy[PurchaseId] = true
+	end
+	return Copy
+end
+
+local function Snapshot(
+	Player: Player,
+	RuntimeProfile: RuntimeProfile,
+	IncludedPendingPurchaseIds: { [string]: boolean }?
+): Profile
 	local Session = Sessions.Get(Player)
 	if not Session then
 		error("SaveService: authoritative session is unavailable", 2)
+	end
+	local ProcessedPurchaseIds = CopyPurchaseIds(Session.PurchaseHistory)
+	if IncludedPendingPurchaseIds then
+		for PurchaseId in IncludedPendingPurchaseIds do
+			ProcessedPurchaseIds[PurchaseId] = true
+		end
 	end
 	return PlayerProfileSchema.Normalize({
 		SchemaVersion = PlayerProfileSchema.SchemaVersion,
@@ -64,7 +82,7 @@ local function Snapshot(Player: Player, RuntimeProfile: RuntimeProfile): Profile
 		Settings = Session.Settings,
 		HasDoubleMultiplier = Session.HasDoubleMultiplier,
 		HasVip = Session.HasVip,
-		ProcessedPurchaseIds = Session.PurchaseHistory,
+		ProcessedPurchaseIds = ProcessedPurchaseIds,
 		LastActiveTimestamp = Session.LastActiveTimestamp,
 		LastLogoutTimestamp = Session.LastLogoutTimestamp,
 		LastSaveTimestamp = Session.LastSaveTimestamp,
@@ -111,8 +129,13 @@ local function HandleOwnershipLoss(Player: Player, Message: string)
 	Player:Kick("Your data session moved to another server. Please rejoin.")
 end
 
-local function WriteProfile(Player: Player, RuntimeProfile: RuntimeProfile, Release: boolean): Profile
-	local Captured = Snapshot(Player, RuntimeProfile)
+local function WriteProfile(
+	Player: Player,
+	RuntimeProfile: RuntimeProfile,
+	Release: boolean,
+	IncludedPendingPurchaseIds: { [string]: boolean }?
+): Profile
+	local Captured = Snapshot(Player, RuntimeProfile, IncludedPendingPurchaseIds)
 	local Now = os.time()
 	local LeaseExpiresAt = Now + SaveConfig.LeaseDurationSeconds
 	local Key = SaveConfig.ProfileKey(Player.UserId)
@@ -142,7 +165,7 @@ local function QueueSave(Player: Player, Kind: Profiles.RequestKind): Profiles.R
 		return nil
 	end
 	return Profiles.Enqueue(RuntimeProfile, Kind, function()
-		local Success, Result = pcall(WriteProfile, Player, RuntimeProfile, false)
+		local Success, Result = pcall(WriteProfile, Player, RuntimeProfile, false, nil)
 		if not Success then
 			local Message = tostring(Result)
 			if IsOwnershipError(Message) then
@@ -241,10 +264,29 @@ function SaveService:CommitTransaction(
 		return false
 	end
 	local Request = Profiles.Enqueue(RuntimeProfile, "Receipt", function()
-		return WriteProfile(Player, RuntimeProfile, false)
+		local Session = Sessions.Get(Player)
+		if not Session then
+			return false
+		end
+		if Session.PurchaseHistory[TransactionData.PurchaseId] then
+			return true
+		end
+		if not RuntimeProfile.PendingPurchaseIds[TransactionData.PurchaseId] then
+			return false
+		end
+
+		local IncludedPendingPurchaseIds = CopyPurchaseIds(RuntimeProfile.PendingPurchaseIds)
+		WriteProfile(Player, RuntimeProfile, false, IncludedPendingPurchaseIds)
+		Sessions.Mutate(Player, function(CurrentSession)
+			for PurchaseId in IncludedPendingPurchaseIds do
+				CurrentSession.PurchaseHistory[PurchaseId] = true
+				RuntimeProfile.PendingPurchaseIds[PurchaseId] = nil
+			end
+		end)
+		return true
 	end)
-	local Success = Profiles.Await(Request)
-	return Success
+	local Success, Durable = Profiles.Await(Request)
+	return Success and Durable == true
 end
 
 function SaveService:ReleaseProfile(Player: Player): boolean
@@ -254,7 +296,7 @@ function SaveService:ReleaseProfile(Player: Player): boolean
 	end
 	self:FreezeMutations(Player, "ProfileRelease")
 	local Request = Profiles.Enqueue(RuntimeProfile, "Final", function()
-		local Success, Result = pcall(WriteProfile, Player, RuntimeProfile, true)
+		local Success, Result = pcall(WriteProfile, Player, RuntimeProfile, true, nil)
 		if not Success then
 			local Message = tostring(Result)
 			if IsOwnershipError(Message) then

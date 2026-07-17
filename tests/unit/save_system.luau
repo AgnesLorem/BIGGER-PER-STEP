@@ -381,9 +381,16 @@ local function loadSaveService(StoredProfile)
 		Data = { Player_2001 = StoredProfile },
 		UpdateCalls = 0,
 		FailWrites = 0,
+		ApparentErrors = 0,
+		BeforeUpdate = nil,
 	}
 	function Store:UpdateAsync(Key, Transform)
 		self.UpdateCalls += 1
+		if self.BeforeUpdate then
+			local Callback = self.BeforeUpdate
+			self.BeforeUpdate = nil
+			Callback()
+		end
 		if self.FailWrites > 0 then
 			self.FailWrites -= 1
 			error("expected datastore failure")
@@ -391,6 +398,10 @@ local function loadSaveService(StoredProfile)
 		local Updated = Transform(self.Data[Key])
 		if Updated ~= nil then
 			self.Data[Key] = Updated
+		end
+		if self.ApparentErrors > 0 then
+			self.ApparentErrors -= 1
+			error("expected apparent datastore failure")
 		end
 		return self.Data[Key]
 	end
@@ -896,5 +907,237 @@ assert(EntitledLoaded.Bigger == 1201)
 local EntitledEntry = Profiles.Get(2001)
 assert(EntitledEntry ~= nil)
 Profiles.Remove(2001, EntitledEntry)
+
+local ReceiptSaveService, ReceiptPersistence = loadSaveService(nil)
+ReceiptSaveService:Init()
+local ReceiptProfile = ReceiptSaveService:LoadProfile(ReceiptPersistence.Player)
+local ReceiptSession = sessionFromProfile(ReceiptPersistence.Player, ReceiptProfile)
+Sessions.Set(ReceiptPersistence.Player, ReceiptSession)
+local ReceiptEntry = assert(Profiles.Get(2001))
+
+ReceiptSession.Bigger = 51
+ReceiptEntry.PendingPurchaseIds["Purchase:One"] = true
+assert(ReceiptSaveService:CommitTransaction(ReceiptPersistence.Player, {
+	PurchaseId = "Purchase:One",
+	Rewards = { { Type = "Bigger", Amount = 999999 } },
+}) == true)
+assert(ReceiptSession.Bigger == 51)
+assert(ReceiptSession.PurchaseHistory["Purchase:One"] == true)
+assert(ReceiptEntry.PendingPurchaseIds["Purchase:One"] == nil)
+assert(ReceiptPersistence.Store.Data.Player_2001.ProcessedPurchaseIds["Purchase:One"] == true)
+
+ReceiptEntry.PendingPurchaseIds["Purchase:Two"] = true
+ReceiptEntry.PendingPurchaseIds["Purchase:Three"] = true
+assert(ReceiptSaveService:CommitTransaction(ReceiptPersistence.Player, {
+	PurchaseId = "Purchase:Two",
+	Rewards = {},
+}) == true)
+assert(ReceiptSession.PurchaseHistory["Purchase:Two"] == true)
+assert(ReceiptSession.PurchaseHistory["Purchase:Three"] == true)
+
+ReceiptEntry.PendingPurchaseIds["Purchase:Snapshot"] = true
+ReceiptPersistence.Store.BeforeUpdate = function()
+	ReceiptEntry.PendingPurchaseIds["Purchase:Late"] = true
+end
+assert(ReceiptSaveService:CommitTransaction(ReceiptPersistence.Player, {
+	PurchaseId = "Purchase:Snapshot",
+	Rewards = {},
+}) == true)
+assert(ReceiptSession.PurchaseHistory["Purchase:Snapshot"] == true)
+assert(ReceiptSession.PurchaseHistory["Purchase:Late"] == nil)
+assert(ReceiptEntry.PendingPurchaseIds["Purchase:Late"] == true)
+assert(ReceiptPersistence.Store.Data.Player_2001.ProcessedPurchaseIds["Purchase:Late"] == nil)
+
+ReceiptEntry.PendingPurchaseIds["Purchase:Failure"] = true
+ReceiptPersistence.Store.FailWrites = 4
+assert(ReceiptSaveService:CommitTransaction(ReceiptPersistence.Player, {
+	PurchaseId = "Purchase:Failure",
+	Rewards = {},
+}) == false)
+assert(ReceiptEntry.PendingPurchaseIds["Purchase:Failure"] == true)
+assert(ReceiptSession.PurchaseHistory["Purchase:Failure"] == nil)
+
+ReceiptEntry.PendingPurchaseIds["Purchase:Ambiguous"] = true
+ReceiptPersistence.Store.ApparentErrors = 4
+assert(ReceiptSaveService:CommitTransaction(ReceiptPersistence.Player, {
+	PurchaseId = "Purchase:Ambiguous",
+	Rewards = {},
+}) == false)
+assert(ReceiptPersistence.Store.Data.Player_2001.ProcessedPurchaseIds["Purchase:Ambiguous"] == true)
+assert(ReceiptEntry.PendingPurchaseIds["Purchase:Ambiguous"] == true)
+assert(ReceiptSaveService:CommitTransaction(ReceiptPersistence.Player, {
+	PurchaseId = "Purchase:Ambiguous",
+	Rewards = {},
+}) == true)
+assert(ReceiptSession.PurchaseHistory["Purchase:Ambiguous"] == true)
+
+Profiles.Remove(2001, ReceiptEntry)
+Sessions.Remove(ReceiptPersistence.Player)
+
+local function loadReceiptProcessingService(UserId, PurchaseHistory, PendingPurchaseIds, GrantResult, CommitResult)
+	local Player = {
+		UserId = UserId,
+		Name = "ReceiptPlayer",
+	}
+	local Players = {}
+	function Players:GetPlayerByUserId(RequestedUserId)
+		return if RequestedUserId == UserId then Player else nil
+	end
+
+	local MarketplaceService = {}
+	local Logger = { CriticalWarnings = 0 }
+	function Logger.Info() end
+	function Logger.Warn(Category)
+		if Category == "Critical" then
+			Logger.CriticalWarnings += 1
+		end
+	end
+	function Logger.Error() end
+
+	local RewardService = { GrantCalls = 0, PendingSeenDuringGrant = false }
+	function RewardService:Grant(_, _)
+		self.GrantCalls += 1
+		local RuntimeProfile = assert(Profiles.Get(UserId))
+		self.PendingSeenDuringGrant = next(RuntimeProfile.PendingPurchaseIds) ~= nil
+		return GrantResult
+	end
+	local SaveService = { CommitCalls = 0 }
+	function SaveService:IsProfileWritable()
+		return true
+	end
+	function SaveService:CommitTransaction(_, Transaction)
+		self.CommitCalls += 1
+		self.LastTransaction = Transaction
+		return CommitResult
+	end
+	local ServiceRegistry = {}
+	function ServiceRegistry.Get(Name)
+		return if Name == "RewardService" then RewardService else SaveService
+	end
+
+	local DeveloperProductConfig = {
+		BiggerPack = {
+			ProductId = 1234,
+			Rewards = { { Type = "Bigger", Amount = 10 } },
+			AnalyticsKey = "Bigger_Pack",
+		},
+	}
+	local ServicesFolder = {}
+	local CoreFolder = {
+		Config = { DeveloperProductConfig = DeveloperProductConfig },
+		Registry = {
+			ServiceRegistry = ServiceRegistry,
+			RuntimeRegistry = { Profiles = Profiles, Sessions = Sessions },
+		},
+		Utilities = { Logger = Logger, PlayerProfileSchema = PlayerProfileSchema },
+	}
+	ServicesFolder.Parent = CoreFolder
+	local Game = {}
+	function Game:GetService(Name)
+		return if Name == "MarketplaceService" then MarketplaceService else Players
+	end
+
+	local Source = fs.readFile("src/server/Core/Services/ReceiptProcessingService.luau")
+	local Chunk = luau.load(Source, "ReceiptProcessingService")
+	setfenv(
+		Chunk,
+		setmetatable({
+			game = Game,
+			script = { Parent = ServicesFolder },
+			Enum = {
+				ProductPurchaseDecision = {
+					NotProcessedYet = "NotProcessedYet",
+					PurchaseGranted = "PurchaseGranted",
+				},
+			},
+			require = function(Dependency)
+				return Dependency
+			end,
+		}, { __index = getfenv() })
+	)
+
+	local Entry = Profiles.Create(UserId, "receipt-owner", function()
+		return 1
+	end)
+	await(Profiles.Enqueue(Entry, "Load", function() end))
+	Entry.PendingPurchaseIds = PendingPurchaseIds
+	Sessions.Set(Player, {
+		Player = Player,
+		PurchaseHistory = PurchaseHistory,
+		ProfileMutationsFrozen = false,
+	})
+	local Service = Chunk()
+	Service:Init()
+	return {
+		Entry = Entry,
+		Logger = Logger,
+		MarketplaceService = MarketplaceService,
+		Player = Player,
+		RewardService = RewardService,
+		SaveService = SaveService,
+	}
+end
+
+local function receiptInfo(UserId, PurchaseId)
+	return {
+		PlayerId = UserId,
+		ProductId = 1234,
+		PurchaseId = PurchaseId,
+	}
+end
+
+local DurableHistory = dictionary("Durable:", 5000)
+DurableHistory["Durable:5000"] = nil
+DurableHistory["Purchase:Duplicate"] = true
+local DurableDuplicate = loadReceiptProcessingService(3001, DurableHistory, {}, { Success = true }, true)
+assert(DurableDuplicate.MarketplaceService.ProcessReceipt(receiptInfo(3001, "Purchase:Duplicate")) == "PurchaseGranted")
+assert(DurableDuplicate.RewardService.GrantCalls == 0)
+assert(DurableDuplicate.SaveService.CommitCalls == 0)
+
+local AtCapacity = loadReceiptProcessingService(3002, dictionary("Durable:", 5000), {}, { Success = true }, true)
+assert(AtCapacity.MarketplaceService.ProcessReceipt(receiptInfo(3002, "Purchase:New")) == "NotProcessedYet")
+assert(AtCapacity.RewardService.GrantCalls == 0)
+assert(AtCapacity.Logger.CriticalWarnings == 1)
+
+local PendingDuplicate = loadReceiptProcessingService(
+	3003,
+	dictionary("Durable:", 4999),
+	{ ["Purchase:Pending"] = true },
+	{ Success = true },
+	true
+)
+assert(PendingDuplicate.MarketplaceService.ProcessReceipt(receiptInfo(3003, "Purchase:Pending")) == "PurchaseGranted")
+assert(PendingDuplicate.RewardService.GrantCalls == 0)
+assert(PendingDuplicate.SaveService.CommitCalls == 1)
+
+local NewReceipt = loadReceiptProcessingService(3004, {}, {}, { Success = true }, true)
+assert(NewReceipt.MarketplaceService.ProcessReceipt(receiptInfo(3004, "Purchase:New")) == "PurchaseGranted")
+assert(NewReceipt.RewardService.GrantCalls == 1)
+assert(NewReceipt.RewardService.PendingSeenDuringGrant == true)
+assert(NewReceipt.SaveService.CommitCalls == 1)
+assert(NewReceipt.MarketplaceService.ProcessReceipt(receiptInfo(3004, "bad/id")) == "NotProcessedYet")
+assert(NewReceipt.RewardService.GrantCalls == 1)
+
+local FailedDispatch = loadReceiptProcessingService(3005, {}, {}, { Success = false }, true)
+assert(FailedDispatch.MarketplaceService.ProcessReceipt(receiptInfo(3005, "Purchase:Failed")) == "NotProcessedYet")
+assert(FailedDispatch.Entry.PendingPurchaseIds["Purchase:Failed"] == nil)
+assert(FailedDispatch.SaveService.CommitCalls == 0)
+
+local FailedCommit = loadReceiptProcessingService(3006, {}, {}, { Success = true }, false)
+assert(FailedCommit.MarketplaceService.ProcessReceipt(receiptInfo(3006, "Purchase:Retry")) == "NotProcessedYet")
+assert(FailedCommit.Entry.PendingPurchaseIds["Purchase:Retry"] == true)
+assert(FailedCommit.MarketplaceService.ProcessReceipt(receiptInfo(3006, "Purchase:Retry")) == "NotProcessedYet")
+assert(FailedCommit.RewardService.GrantCalls == 1)
+assert(FailedCommit.SaveService.CommitCalls == 2)
+
+for _, Case in { DurableDuplicate, AtCapacity, PendingDuplicate, NewReceipt, FailedDispatch, FailedCommit } do
+	Profiles.Remove(Case.Player.UserId, Case.Entry)
+	Sessions.Remove(Case.Player)
+end
+
+local RewardServiceSource = fs.readFile("src/server/Core/Services/RewardService.luau")
+assert(string.find(RewardServiceSource, "RewardDispatcher.Dispatch", 1, true) ~= nil)
+assert(string.find(RewardServiceSource, "CommitTransaction", 1, true) == nil)
+assert(string.find(RewardServiceSource, "PurchaseHistory[transactionId] = true", 1, true) == nil)
 
 print("save_system: PASS")
