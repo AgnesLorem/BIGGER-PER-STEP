@@ -2,12 +2,15 @@
 -- GuiController.luau
 -- References and manages the main HUD, responsiveness, and shop purchases.
 
+--// Raw Requirings \\--
+local GuiService = game:GetService("GuiService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
-local LocalPlayer = Players.LocalPlayer
+--// Requirings \\--
 local FormatNumber = require(
 	ReplicatedStorage:WaitForChild("BiggerShared")
 		:WaitForChild("Core")
@@ -26,7 +29,15 @@ local LevelFormula = require(
 		:WaitForChild("Progression")
 		:WaitForChild("LevelFormula")
 )
+local ResponsiveController = require(script.Parent:WaitForChild("ResponsiveController"))
+local ResponsivePolicy = require(script.Parent:WaitForChild("ResponsivePolicy"))
+local UIEventBus = require(script.Parent:WaitForChild("UIEventBus"))
 
+--// Types \\--
+type ViewportProfile = ResponsiveController.ViewportProfile
+
+--// Variables \\--
+local LocalPlayer = Players.LocalPlayer
 local GuiController = {}
 
 --// Referencing \\--
@@ -34,6 +45,13 @@ local ScreenGui: ScreenGui
 local LevelLabel: TextLabel
 local ProgressFill: ImageLabel
 local ProgressTextLabel: TextLabel
+
+local LeftSidebar: Frame
+local BottomHUD: Frame
+local ProgressBarFrame: Frame
+local ButtonsContainer: Frame
+local RightSidebar: Frame?
+local SelectionOutline: Frame
 
 --// Helpers \\--
 local function CalculateLevelProgress(bigger: number, _level: number): (number, number, number)
@@ -97,14 +115,167 @@ local function ApplyHoverAnimation(button: ImageButton)
 	end)
 end
 
+local function getSortedButtons(container: GuiObject): { ImageButton }
+	local buttons = {}
+	for _, child in ipairs(container:GetChildren()) do
+		if child:IsA("ImageButton") and child.Visible then
+			table.insert(buttons, child)
+		end
+	end
+	table.sort(buttons, function(a, b)
+		if a.LayoutOrder == b.LayoutOrder then
+			return a.Name < b.Name
+		else
+			return a.LayoutOrder < b.LayoutOrder
+		end
+	end)
+	return buttons
+end
+
+local function ConfigureGamepadNavigation()
+	local leftButtons = getSortedButtons(LeftSidebar)
+	local rightButtons = RightSidebar and getSortedButtons(RightSidebar) or {}
+	local bottomButtons = getSortedButtons(ButtonsContainer)
+
+	-- 1. LeftSidebar (Grid / List)
+	local numLeft = #leftButtons
+	if numLeft > 0 then
+		for i, btn in ipairs(leftButtons) do
+			btn.SelectionImageObject = SelectionOutline
+			btn.SelectionGroup = true
+			
+			if numLeft <= 2 then
+				local prev = leftButtons[i - 1] or leftButtons[numLeft]
+				local next = leftButtons[i + 1] or leftButtons[1]
+				btn.NextSelectionUp = prev
+				btn.NextSelectionDown = next
+				btn.NextSelectionLeft = btn
+				btn.NextSelectionRight = (#bottomButtons > 0) and bottomButtons[1] or btn
+			else
+				local isLeftCol = (i % 2 == 1)
+				local partnerIdx = isLeftCol and (i + 1) or (i - 1)
+				local partner = leftButtons[partnerIdx] or btn
+				
+				btn.NextSelectionLeft = isLeftCol and partner or btn
+				btn.NextSelectionRight = isLeftCol and partner or ((#bottomButtons > 0) and bottomButtons[1] or btn)
+				
+				local upIdx = i - 2
+				if upIdx < 1 then
+					upIdx = (numLeft % 2 == 0) and (numLeft - (2 - i)) or (numLeft - (1 - i % 2))
+					if upIdx > numLeft then upIdx = numLeft end
+				end
+				local downIdx = i + 2
+				if downIdx > numLeft then
+					downIdx = i % 2 == 1 and 1 or 2
+				end
+				btn.NextSelectionUp = leftButtons[upIdx] or btn
+				btn.NextSelectionDown = leftButtons[downIdx] or btn
+			end
+		end
+	end
+
+	-- 2. RightSidebar (Vertical List)
+	local numRight = #rightButtons
+	if numRight > 0 then
+		for i, btn in ipairs(rightButtons) do
+			btn.SelectionImageObject = SelectionOutline
+			btn.SelectionGroup = true
+
+			local prev = rightButtons[i - 1] or rightButtons[numRight]
+			local next = rightButtons[i + 1] or rightButtons[1]
+			btn.NextSelectionUp = prev
+			btn.NextSelectionDown = next
+			btn.NextSelectionRight = btn
+			btn.NextSelectionLeft = (#bottomButtons > 0) and bottomButtons[#bottomButtons] or btn
+		end
+	end
+
+	-- 3. BottomHUD ButtonsContainer (Horizontal List)
+	local numBottom = #bottomButtons
+	if numBottom > 0 then
+		for i, btn in ipairs(bottomButtons) do
+			btn.SelectionImageObject = SelectionOutline
+			btn.SelectionGroup = true
+
+			local prev = bottomButtons[i - 1] or bottomButtons[numBottom]
+			local next = bottomButtons[i + 1] or bottomButtons[1]
+			btn.NextSelectionLeft = prev
+			btn.NextSelectionRight = next
+			btn.NextSelectionUp = (numLeft > 0) and leftButtons[1] or btn
+			btn.NextSelectionDown = btn
+		end
+	end
+end
+
+local function ApplyProfile(profile: ViewportProfile)
+	local category = profile.Category
+	local layout = ResponsivePolicy.GetPolicy(category)
+
+	-- 1. Apply sidebars visibility and sizes
+	LeftSidebar.Visible = (layout.LeftSidebarMode ~= "Hidden")
+	if LeftSidebar.Visible then
+		LeftSidebar.Size = UDim2.new(layout.SidebarWidthScale, 0, LeftSidebar.Size.Y.Scale, LeftSidebar.Size.Y.Offset)
+		local grid = LeftSidebar:FindFirstChildOfClass("UIGridLayout")
+		if grid then
+			grid.CellSize = layout.GridCellSize
+		end
+		if layout.LeftSidebarMode == "Collapsed" then
+			UIEventBus.Publish("SidebarCollapsed", "LeftSidebar")
+		end
+	end
+
+	if RightSidebar then
+		RightSidebar.Visible = (layout.RightSidebarMode ~= "Hidden")
+		if RightSidebar.Visible then
+			RightSidebar.Size = UDim2.new(layout.SidebarWidthScale, 0, RightSidebar.Size.Y.Scale, RightSidebar.Size.Y.Offset)
+			if layout.RightSidebarMode == "Collapsed" then
+				UIEventBus.Publish("SidebarCollapsed", "RightSidebar")
+			end
+		end
+	end
+
+	-- 2. Apply BottomHUD layout
+	BottomHUD.Size = UDim2.new(BottomHUD.Size.X.Scale, BottomHUD.Size.X.Offset, layout.HUDHeightScale, 0)
+	
+	ProgressBarFrame.Visible = (layout.BottomHUDStyle == "Full")
+	if layout.BottomHUDStyle == "Compact" then
+		ButtonsContainer.Position = UDim2.new(0, 0, 0, 0)
+		ButtonsContainer.Size = UDim2.new(1, 0, 1, 0)
+	else
+		ButtonsContainer.Position = UDim2.new(0, 0, 0.65, 0)
+		ButtonsContainer.Size = UDim2.new(1, 0, 0.35, 0)
+	end
+
+	-- 3. Configure Gamepad Navigation
+	ConfigureGamepadNavigation()
+
+	-- 4. Publish LayoutChanged event
+	UIEventBus.Publish("LayoutChanged", layout)
+end
+
 --// Initialization \\--
 function GuiController.Init()
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 	ScreenGui = playerGui:WaitForChild("MainHUD") :: ScreenGui
 
+	-- Create SelectionOutline highlight
+	SelectionOutline = Instance.new("Frame")
+	SelectionOutline.Name = "SelectionOutline"
+	SelectionOutline.BackgroundTransparency = 1
+	SelectionOutline.Size = UDim2.new(1, 0, 1, 0)
+	SelectionOutline.Position = UDim2.new(0, 0, 0, 0)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(255, 200, 0)
+	stroke.Thickness = 3
+	stroke.Parent = SelectionOutline
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = SelectionOutline
+	SelectionOutline.Parent = ScreenGui
+
 	-- Reference LeftSidebar
-	local leftSidebar = ScreenGui:WaitForChild("LeftSidebar") :: Frame
-	for _, child in ipairs(leftSidebar:GetChildren()) do
+	LeftSidebar = ScreenGui:WaitForChild("LeftSidebar") :: Frame
+	for _, child in ipairs(LeftSidebar:GetChildren()) do
 		if child:IsA("ImageButton") then
 			ApplyHoverAnimation(child)
 			child.MouseButton1Click:Connect(function()
@@ -114,11 +285,11 @@ function GuiController.Init()
 	end
 
 	-- Reference BottomHUD
-	local bottomHUD = ScreenGui:WaitForChild("BottomHUD") :: Frame
+	BottomHUD = ScreenGui:WaitForChild("BottomHUD") :: Frame
 
 	-- Reference Progress Bar components
-	local progressBarFrame = bottomHUD:WaitForChild("ProgressBarFrame") :: Frame
-	local progressBG = progressBarFrame:WaitForChild("ProgressBG") :: ImageLabel
+	ProgressBarFrame = BottomHUD:WaitForChild("ProgressBarFrame") :: Frame
+	local progressBG = ProgressBarFrame:WaitForChild("ProgressBG") :: ImageLabel
 
 	LevelLabel = progressBG:WaitForChild("LevelLabel") :: TextLabel
 	local barContainer = progressBG:WaitForChild("BarContainer") :: Frame
@@ -126,8 +297,8 @@ function GuiController.Init()
 	ProgressTextLabel = progressBG:WaitForChild("ProgressTextLabel") :: TextLabel
 
 	-- Reference Bottom Buttons (Developer Products)
-	local buttonsContainer = bottomHUD:WaitForChild("ButtonsContainer") :: Frame
-	for _, child in ipairs(buttonsContainer:GetChildren()) do
+	ButtonsContainer = BottomHUD:WaitForChild("ButtonsContainer") :: Frame
+	for _, child in ipairs(ButtonsContainer:GetChildren()) do
 		if child:IsA("ImageButton") then
 			ApplyHoverAnimation(child)
 			local config = ShopUIConfig[child.Name]
@@ -147,9 +318,9 @@ function GuiController.Init()
 	end
 
 	-- Reference RightSidebar (VIP and Double Multiplier)
-	local rightSidebar = ScreenGui:WaitForChild("RightSidebar", 5) :: Frame?
-	if rightSidebar then
-		for _, child in ipairs(rightSidebar:GetChildren()) do
+	RightSidebar = ScreenGui:WaitForChild("RightSidebar", 5) :: Frame?
+	if RightSidebar then
+		for _, child in ipairs(RightSidebar:GetChildren()) do
 			if child:IsA("ImageButton") then
 				ApplyHoverAnimation(child)
 				local config = ShopUIConfig[child.Name]
@@ -168,6 +339,21 @@ function GuiController.Init()
 			end
 		end
 	end
+
+	-- Focus first button on gamepad input
+	UserInputService.LastInputTypeChanged:Connect(function(lastInputType)
+		if lastInputType == Enum.UserInputType.Gamepad1 then
+			local bottomButtons = getSortedButtons(ButtonsContainer)
+			if #bottomButtons > 0 then
+				GuiService.SelectedObject = bottomButtons[1]
+			else
+				local leftButtons = getSortedButtons(LeftSidebar)
+				if #leftButtons > 0 then
+					GuiService.SelectedObject = leftButtons[1]
+				end
+			end
+		end
+	end)
 end
 
 function GuiController.Start()
@@ -178,6 +364,14 @@ function GuiController.Start()
 
 	-- Initial HUD update
 	UpdateHUD()
+
+	-- Connect to profile changes and apply layout
+	ResponsiveController.ProfileChanged:Connect(function(profile)
+		ApplyProfile(profile)
+	end)
+
+	-- Apply initial profile
+	ApplyProfile(ResponsiveController:GetProfile())
 end
 
 return GuiController
