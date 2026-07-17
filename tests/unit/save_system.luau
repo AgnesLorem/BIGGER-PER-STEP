@@ -745,4 +745,89 @@ local SaveBootIndex = assert(string.find(BootstrapSource, '{ Name = "SaveService
 local SessionBootIndex = assert(string.find(BootstrapSource, '{ Name = "SessionService"', 1, true))
 assert(SaveBootIndex < SessionBootIndex)
 
+local FrozenPlayer = { UserId = 4001, Name = "FrozenPlayer" }
+local FrozenProfile = PlayerProfileSchema.Defaults()
+local FrozenSession = sessionFromProfile(FrozenPlayer, FrozenProfile)
+FrozenSession.ProfileMutationsFrozen = true
+Sessions.Set(FrozenPlayer, FrozenSession)
+
+local function persistentSnapshot(Session)
+	return PlayerProfileSchema.Normalize({
+		SchemaVersion = 1,
+		Bigger = Session.Bigger,
+		Destruction = Session.Destruction,
+		Rebirth = Session.Rebirth,
+		UnlockedGrowthUpgrades = Session.UnlockedGrowthUpgrades,
+		EquippedGrowthUpgrade = Session.EquippedGrowthUpgrade,
+		CompletedPortals = Session.CompletedPortals,
+		Settings = Session.Settings,
+		HasDoubleMultiplier = Session.HasDoubleMultiplier,
+		HasVip = Session.HasVip,
+		ProcessedPurchaseIds = Session.PurchaseHistory,
+		LastActiveTimestamp = Session.LastActiveTimestamp,
+		LastLogoutTimestamp = Session.LastLogoutTimestamp,
+		LastSaveTimestamp = Session.LastSaveTimestamp,
+	})
+end
+
+local function deepEqual(Left, Right)
+	if type(Left) ~= type(Right) then
+		return false
+	end
+	if type(Left) ~= "table" then
+		return Left == Right
+	end
+	for Key, Value in Left do
+		if not deepEqual(Value, Right[Key]) then
+			return false
+		end
+	end
+	for Key in Right do
+		if Left[Key] == nil then
+			return false
+		end
+	end
+	return true
+end
+
+local BeforeFrozenMutations = persistentSnapshot(FrozenSession)
+local FrozenMutations = {
+	function(Session)
+		Session.Bigger = 99
+	end,
+	function(Session)
+		Session.Destruction = 99
+	end,
+	function(Session)
+		Session.Rebirth = 99
+	end,
+	function(Session)
+		Session.UnlockedGrowthUpgrades.Upgrade_1 = true
+	end,
+	function(Session)
+		Session.EquippedGrowthUpgrade = "Upgrade_1"
+	end,
+	function(Session)
+		Session.CompletedPortals.Portal_1 = true
+	end,
+	function(Session)
+		Session.Settings.SoundEnabled = false
+	end,
+	function(Session)
+		Session.HasDoubleMultiplier = true
+	end,
+	function(Session)
+		Session.HasVip = true
+	end,
+	function(Session)
+		Session.PurchaseHistory["Purchase:Frozen"] = true
+	end,
+}
+for _, Mutation in FrozenMutations do
+	assert(Sessions.Mutate(FrozenPlayer, Mutation) == false)
+end
+local AfterFrozenMutations = persistentSnapshot(FrozenSession)
+assert(deepEqual(BeforeFrozenMutations, AfterFrozenMutations))
+Sessions.Remove(FrozenPlayer)
+
 print("save_system: PASS")

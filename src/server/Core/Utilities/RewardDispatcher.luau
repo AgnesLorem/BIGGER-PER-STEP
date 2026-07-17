@@ -60,34 +60,22 @@ local Handlers = table.freeze({
 		return true
 	end,
 	[RewardType.DoubleMultiplier] = function(Player: Player, _Reward: Reward): boolean
-		local session = Sessions.Get(Player)
-		if session then
-			session.HasDoubleMultiplier = true
-			local SaveService = ServiceRegistry.Get("SaveService")
-			if SaveService then
-				local profile = SaveService:LoadProfile(Player)
-				if profile then
-					profile.HasDoubleMultiplier = true
-				end
-			end
+		local Mutated = Sessions.Mutate(Player, function(Session)
+			Session.HasDoubleMultiplier = true
+		end)
+		if Mutated then
 			local GrowthService = GetGrowthService()
 			if GrowthService then
 				GrowthService:UpdateMultiplierAttribute(Player)
 			end
 		end
-		return true
+		return Mutated
 	end,
 	[RewardType.Vip] = function(Player: Player, _Reward: Reward): boolean
-		local session = Sessions.Get(Player)
-		if session then
-			session.HasVip = true
-			local SaveService = ServiceRegistry.Get("SaveService")
-			if SaveService then
-				local profile = SaveService:LoadProfile(Player)
-				if profile then
-					profile.HasVip = true
-				end
-			end
+		local Mutated = Sessions.Mutate(Player, function(Session)
+			Session.HasVip = true
+		end)
+		if Mutated then
 			local GrowthService = GetGrowthService()
 			if GrowthService then
 				GrowthService:UpdateMultiplierAttribute(Player)
@@ -97,7 +85,7 @@ local Handlers = table.freeze({
 				CharacterScaleService:UpdateVipTag(Player)
 			end
 		end
-		return true
+		return Mutated
 	end,
 })
 

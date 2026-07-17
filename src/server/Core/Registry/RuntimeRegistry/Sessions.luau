@@ -46,4 +46,13 @@ function Sessions.Remove(Player: Player)
 	ActiveSessions[Player] = nil
 end
 
+function Sessions.Mutate(Player: Player, Callback: (Session) -> ()): boolean
+	local Session = ActiveSessions[Player]
+	if not Session or Session.ProfileMutationsFrozen then
+		return false
+	end
+	Callback(Session)
+	return true
+end
+
 return table.freeze(Sessions)

@@ -41,7 +41,7 @@ local function ProcessReceipt(receiptInfo: ReceiptInfo): Enum.ProductPurchaseDec
 	end
 
 	local session = Sessions.Get(player)
-	if not session then
+	if not session or session.ProfileMutationsFrozen then
 		Logger.Info(
 			"Receipt",
 			"Session not loaded yet for %s. Returning NotProcessedYet for transaction %s.",

@@ -49,7 +49,7 @@ function RewardService:Grant(Player: Player, Options: GrantOptions): GrantResult
 	end
 
 	local session = Sessions.Get(Player)
-	if not session then
+	if not session or session.ProfileMutationsFrozen then
 		return { Success = false, ErrorCode = RewardError.InvalidPayload }
 	end
 
@@ -91,7 +91,13 @@ function RewardService:Grant(Player: Player, Options: GrantOptions): GrantResult
 		end
 
 		-- 3. Update runtime session cache IMMEDIATELY after dispatching
-		session.PurchaseHistory[transactionId] = true
+		if
+			not Sessions.Mutate(Player, function(CurrentSession)
+				CurrentSession.PurchaseHistory[transactionId] = true
+			end)
+		then
+			return { Success = false, ErrorCode = RewardError.PersistenceFailed }
+		end
 		Logger.Info(
 			"Reward",
 			"Successfully dispatched rewards in memory for %s (Transaction: %s)",
