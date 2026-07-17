@@ -12,6 +12,14 @@ local GrowthService = require(script.Parent.GrowthService)
 --// Types \\--
 type Session = Sessions.Session
 
+--// Variables \\--
+local AllowedTransitions: { [string]: { [string]: boolean } } = table.freeze({
+	InLobby = table.freeze({ EnteringWorld = true }),
+	EnteringWorld = table.freeze({ InWorld = true }),
+	InWorld = table.freeze({ Returning = true }),
+	Returning = table.freeze({}),
+})
+
 --// Helpers \\--
 local function CreateLeaderstats(Player: Player, Session: Session)
 	local Leaderstats = Instance.new("Folder")
@@ -88,6 +96,35 @@ end
 
 function SessionService:GetSession(Player: Player): Session?
 	return Sessions.Get(Player)
+end
+
+function SessionService:TransitionState(Player: Player, ExpectedState: string, NextState: string): boolean
+	local Session = Sessions.Get(Player)
+	if not Session or Session.State ~= ExpectedState then
+		return false
+	end
+
+	local NextStates = AllowedTransitions[ExpectedState]
+	if not NextStates or not NextStates[NextState] then
+		return false
+	end
+
+	Session.State = NextState
+	return true
+end
+
+function SessionService:RecoverToLobby(Player: Player, Reason: string): boolean
+	local Session = Sessions.Get(Player)
+	if not Session then
+		Logger.Warn("Session", "Lobby recovery skipped without session for %s (%s)", Player.Name, Reason)
+		return false
+	end
+
+	Session.State = "InLobby"
+	Session.CurrentWorldInstanceId = nil
+	ClearObjectiveAttributes(Player)
+	Logger.Warn("Session", "Recovered %s to lobby state (%s)", Player.Name, Reason)
+	return true
 end
 
 return SessionService

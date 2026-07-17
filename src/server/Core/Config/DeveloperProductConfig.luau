@@ -2,7 +2,13 @@
 -- DeveloperProductConfig.luau
 -- Server-only gameplay configuration for Developer Products.
 
-local RewardType = require(game:GetService("ReplicatedStorage"):WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType"))
+local RewardType = require(
+	game:GetService("ReplicatedStorage")
+		:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Enums")
+		:WaitForChild("RewardType")
+)
 
 export type Reward = {
 	Type: string,
@@ -12,7 +18,7 @@ export type Reward = {
 
 export type ProductConfig = {
 	ProductId: number,
-	Rewards: {Reward},
+	Rewards: { Reward },
 	AnalyticsKey: string,
 }
 

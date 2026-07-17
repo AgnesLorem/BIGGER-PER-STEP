@@ -31,19 +31,34 @@ local function ProcessReceipt(receiptInfo: ReceiptInfo): Enum.ProductPurchaseDec
 
 	local player = Players:GetPlayerByUserId(userId)
 	if not player then
-		Logger.Info("Receipt", "Player with UserId %d not found in server. Returning NotProcessedYet for transaction %s.", userId, purchaseId)
+		Logger.Info(
+			"Receipt",
+			"Player with UserId %d not found in server. Returning NotProcessedYet for transaction %s.",
+			userId,
+			purchaseId
+		)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
 	local session = Sessions.Get(player)
 	if not session then
-		Logger.Info("Receipt", "Session not loaded yet for %s. Returning NotProcessedYet for transaction %s.", player.Name, purchaseId)
+		Logger.Info(
+			"Receipt",
+			"Session not loaded yet for %s. Returning NotProcessedYet for transaction %s.",
+			player.Name,
+			purchaseId
+		)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
 	-- 1. Check runtime cache first to prevent double-spending in retry loops
 	if session.PurchaseHistory[purchaseId] then
-		Logger.Info("Receipt", "Duplicate purchase check: transaction %s already processed in session cache for %s. Granting purchase.", purchaseId, player.Name)
+		Logger.Info(
+			"Receipt",
+			"Duplicate purchase check: transaction %s already processed in session cache for %s. Granting purchase.",
+			purchaseId,
+			player.Name
+		)
 		return Enum.ProductPurchaseDecision.PurchaseGranted
 	end
 
@@ -59,7 +74,12 @@ local function ProcessReceipt(receiptInfo: ReceiptInfo): Enum.ProductPurchaseDec
 	end
 
 	if not targetConfig then
-		Logger.Warn("Receipt", "Unknown ProductId %d for transaction %s. Returning NotProcessedYet.", receiptInfo.ProductId, purchaseId)
+		Logger.Warn(
+			"Receipt",
+			"Unknown ProductId %d for transaction %s. Returning NotProcessedYet.",
+			receiptInfo.ProductId,
+			purchaseId
+		)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
@@ -78,10 +98,23 @@ local function ProcessReceipt(receiptInfo: ReceiptInfo): Enum.ProductPurchaseDec
 	})
 
 	if grantResult.Success then
-		Logger.Info("Receipt", "Developer Product purchase processed successfully for %s: %s (Product: %s, Transaction: %s)", player.Name, targetConfig.AnalyticsKey, productKey, purchaseId)
+		Logger.Info(
+			"Receipt",
+			"Developer Product purchase processed successfully for %s: %s (Product: %s, Transaction: %s)",
+			player.Name,
+			targetConfig.AnalyticsKey,
+			productKey,
+			purchaseId
+		)
 		return Enum.ProductPurchaseDecision.PurchaseGranted
 	else
-		Logger.Warn("Receipt", "Failed to grant developer product rewards for %s: %s (Transaction: %s). Returning NotProcessedYet.", player.Name, tostring(grantResult.ErrorCode), purchaseId)
+		Logger.Warn(
+			"Receipt",
+			"Failed to grant developer product rewards for %s: %s (Transaction: %s). Returning NotProcessedYet.",
+			player.Name,
+			tostring(grantResult.ErrorCode),
+			purchaseId
+		)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 end

@@ -46,13 +46,19 @@ end
 
 local function CreateVipTag(Player: Player, Character: Model)
 	local Head = Character:WaitForChild("Head", 5) :: BasePart?
-	if not Head then return end
+	if not Head then
+		return
+	end
 
 	local existing = Head:FindFirstChild("VipTag")
-	if existing then existing:Destroy() end
+	if existing then
+		existing:Destroy()
+	end
 
 	local session = Sessions.Get(Player)
-	if not session or not session.HasVip then return end
+	if not session or not session.HasVip then
+		return
+	end
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "VipTag"

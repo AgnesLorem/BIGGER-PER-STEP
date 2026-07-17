@@ -48,7 +48,10 @@ function SaveService:SaveProfile(Player: Player)
 	Logger.Info("Save", "SaveProfile called for %s (stub)", Player.Name)
 end
 
-function SaveService:CommitTransaction(Player: Player, TransactionData: { PurchaseId: string, Rewards: { [any]: any } }): boolean
+function SaveService:CommitTransaction(
+	Player: Player,
+	TransactionData: { PurchaseId: string, Rewards: { [any]: any } }
+): boolean
 	local Profile = Profiles[Player]
 	if not Profile then
 		Logger.Warn("Save", "No profile found for %s to commit transaction %s", Player.Name, TransactionData.PurchaseId)

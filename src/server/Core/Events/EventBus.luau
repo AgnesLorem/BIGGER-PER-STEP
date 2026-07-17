@@ -1,4 +1,8 @@
 --!strict
+--// Requirings \\--
+
+local Logger = require(script.Parent.Parent.Utilities.Logger)
+
 --// Types \\--
 
 type Subscriber = {
@@ -40,8 +44,14 @@ function EventBus.Publish(EventName: string, ...: any)
 	if not List then
 		return
 	end
+	local Arguments = table.pack(...)
 	for _, Entry in List do
-		Entry.Callback(...)
+		local Success, Message = xpcall(function()
+			Entry.Callback(table.unpack(Arguments, 1, Arguments.n))
+		end, debug.traceback)
+		if not Success then
+			Logger.Warn("EventBus", "Subscriber failed for %s: %s", EventName, tostring(Message))
+		end
 	end
 end
 

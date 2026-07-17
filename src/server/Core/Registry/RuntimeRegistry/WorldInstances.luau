@@ -32,8 +32,4 @@ function WorldInstances.Remove(Player: Player)
 	ActiveWorldInstances[Player] = nil
 end
 
-function WorldInstances.GetAll(): { [Player]: WorldInstance }
-	return ActiveWorldInstances
-end
-
 return table.freeze(WorldInstances)
