@@ -1,7 +1,10 @@
 local task = require("@lune/task")
+local fs = require("@lune/fs")
+local luau = require("@lune/luau")
 local PlayerProfileSchema = require("../../src/server/Core/Utilities/PlayerProfileSchema")
 local SaveConfig = require("../../src/server/Core/Config/SaveConfig")
 local Profiles = require("../../src/server/Core/Registry/RuntimeRegistry/Profiles")
+local Sessions = require("../../src/server/Core/Registry/RuntimeRegistry/Sessions")
 
 local function expectError(Callback)
 	local Success = pcall(Callback)
@@ -358,5 +361,388 @@ assert(Profiles.Get(1006) == nil)
 
 Profiles.Remove(1001, FirstEntry)
 Profiles.Remove(1002, SecondEntry)
+
+local function loadSaveService(StoredProfile)
+	local PlayerRemovingCallbacks = {}
+	local Players = {
+		CharacterAutoLoads = true,
+		Players = {},
+		PlayerRemoving = {
+			Connect = function(_, Callback)
+				table.insert(PlayerRemovingCallbacks, Callback)
+			end,
+		},
+	}
+	function Players:GetPlayers()
+		return self.Players
+	end
+
+	local Store = {
+		Data = { Player_2001 = StoredProfile },
+		UpdateCalls = 0,
+		FailWrites = 0,
+	}
+	function Store:UpdateAsync(Key, Transform)
+		self.UpdateCalls += 1
+		if self.FailWrites > 0 then
+			self.FailWrites -= 1
+			error("expected datastore failure")
+		end
+		local Updated = Transform(self.Data[Key])
+		if Updated ~= nil then
+			self.Data[Key] = Updated
+		end
+		return self.Data[Key]
+	end
+
+	local DataStoreService = {
+		StoreName = nil,
+		Scope = nil,
+	}
+	function DataStoreService:GetDataStore(StoreName, Scope)
+		self.StoreName = StoreName
+		self.Scope = Scope
+		return Store
+	end
+
+	local RunService = {}
+	function RunService:IsStudio()
+		return true
+	end
+	local HttpService = {}
+	function HttpService:GenerateGUID()
+		return "guid-test"
+	end
+
+	local Scheduler = { Jobs = {} }
+	function Scheduler.AddJob(Config)
+		Scheduler.Jobs[Config.Name] = Config
+	end
+
+	local Logger = {}
+	function Logger.Info() end
+	function Logger.Warn() end
+	function Logger.Error(_, Message, ...)
+		error(string.format(Message, ...))
+	end
+
+	local FakeTask = { Delays = {} }
+	function FakeTask.wait(Delay)
+		table.insert(FakeTask.Delays, Delay)
+		return Delay or 0
+	end
+
+	local ServicesFolder = {}
+	local CoreFolder = {
+		Config = { SaveConfig = SaveConfig },
+		Registry = { RuntimeRegistry = { Profiles = Profiles, Sessions = Sessions } },
+		Scheduler = { Scheduler = Scheduler },
+		Utilities = { Logger = Logger, PlayerProfileSchema = PlayerProfileSchema },
+	}
+	ServicesFolder.Parent = CoreFolder
+	local Script = { Parent = ServicesFolder }
+	local Game = {
+		JobId = "job-test",
+		PlaceId = SaveConfig.ProductionPlaceId,
+	}
+	function Game:GetService(Name)
+		if Name == "Players" then
+			return Players
+		elseif Name == "DataStoreService" then
+			return DataStoreService
+		elseif Name == "RunService" then
+			return RunService
+		elseif Name == "HttpService" then
+			return HttpService
+		end
+		error("unexpected service: " .. Name)
+	end
+
+	local Source = fs.readFile("src/server/Core/Services/SaveService.luau")
+	local Chunk = luau.load(Source, "SaveService")
+	setfenv(
+		Chunk,
+		setmetatable({
+			game = Game,
+			script = Script,
+			task = FakeTask,
+			os = {
+				time = function()
+					return 1000
+				end,
+			},
+			require = function(Dependency)
+				return Dependency
+			end,
+		}, { __index = getfenv() })
+	)
+
+	local Player = {
+		UserId = 2001,
+		Name = "LifecyclePlayer",
+		Kicked = nil,
+	}
+	function Player:Kick(Message)
+		self.Kicked = Message
+	end
+
+	return Chunk(),
+		{
+			DataStoreService = DataStoreService,
+			FakeTask = FakeTask,
+			Player = Player,
+			Players = Players,
+			Scheduler = Scheduler,
+			Store = Store,
+		}
+end
+
+local ExistingRuntime = Profiles.Get(2001)
+if ExistingRuntime then
+	Profiles.Remove(2001, ExistingRuntime)
+end
+
+local LifecycleSaveService, Lifecycle = loadSaveService(nil)
+LifecycleSaveService:Init()
+assert(Lifecycle.Players.CharacterAutoLoads == false)
+assert(Lifecycle.DataStoreService.StoreName == SaveConfig.StoreName)
+assert(Lifecycle.DataStoreService.Scope == "Studio")
+assert(type(LifecycleSaveService.IsProfileWritable) == "function")
+assert(type(LifecycleSaveService.FreezeMutations) == "function")
+assert(type(LifecycleSaveService.ReleaseProfile) == "function")
+
+local LoadedProfile = LifecycleSaveService:LoadProfile(Lifecycle.Player)
+assert(Lifecycle.Store.UpdateCalls == 1)
+assert(LoadedProfile.LeaseOwner == "job-test")
+assert(LoadedProfile.LeaseExpiresAt == 1180)
+local LifecycleEntry = Profiles.Get(2001)
+assert(LifecycleEntry ~= nil)
+assert(LifecycleEntry.Phase == "Active")
+
+local function sessionFromProfile(Player, Profile)
+	return {
+		Player = Player,
+		Bigger = Profile.Bigger,
+		Destruction = Profile.Destruction,
+		Rebirth = Profile.Rebirth,
+		UnlockedGrowthUpgrades = Profile.UnlockedGrowthUpgrades,
+		EquippedGrowthUpgrade = Profile.EquippedGrowthUpgrade,
+		CompletedPortals = Profile.CompletedPortals,
+		Settings = Profile.Settings,
+		HasDoubleMultiplier = Profile.HasDoubleMultiplier,
+		HasVip = Profile.HasVip,
+		PurchaseHistory = Profile.ProcessedPurchaseIds,
+		LastActiveTimestamp = Profile.LastActiveTimestamp,
+		LastLogoutTimestamp = Profile.LastLogoutTimestamp,
+		LastSaveTimestamp = Profile.LastSaveTimestamp,
+		ProfileMutationsFrozen = false,
+		State = "InLobby",
+		JoinedAt = 1000,
+	}
+end
+
+local LifecycleSession = sessionFromProfile(Lifecycle.Player, LoadedProfile)
+Sessions.Set(Lifecycle.Player, LifecycleSession)
+assert(LifecycleSaveService:IsProfileWritable(Lifecycle.Player) == true)
+LifecycleSaveService:Start()
+local AutosaveJob = Lifecycle.Scheduler.Jobs.ProfileAutosave
+assert(AutosaveJob ~= nil)
+assert(AutosaveJob.IntervalSeconds == 60)
+
+local BeforeSaveCalls = Lifecycle.Store.UpdateCalls
+LifecycleSession.Bigger = 25
+LifecycleSaveService:SaveProfile(Lifecycle.Player)
+assert(Lifecycle.Store.UpdateCalls == BeforeSaveCalls + 1)
+assert(Lifecycle.Store.Data.Player_2001.Bigger == 25)
+assert(Lifecycle.Store.Data.Player_2001.LeaseOwner == "job-test")
+assert(Lifecycle.Store.Data.Player_2001.LastLogoutTimestamp == 0)
+
+Lifecycle.Store.FailWrites = 2
+table.clear(Lifecycle.FakeTask.Delays)
+LifecycleSaveService:SaveProfile(Lifecycle.Player)
+assert(table.concat(Lifecycle.FakeTask.Delays, ",") == "1,2")
+
+assert(LifecycleSaveService:ReleaseProfile(Lifecycle.Player) == true)
+assert(LifecycleSession.ProfileMutationsFrozen == true)
+assert(Lifecycle.Store.Data.Player_2001.LeaseOwner == nil)
+assert(Lifecycle.Store.Data.Player_2001.LeaseExpiresAt == nil)
+assert(Lifecycle.Store.Data.Player_2001.LastLogoutTimestamp == 1000)
+assert(Profiles.Get(2001) == nil)
+Sessions.Remove(Lifecycle.Player)
+
+local ForeignProfile = PlayerProfileSchema.Defaults()
+ForeignProfile.LeaseOwner = "foreign-server"
+ForeignProfile.LeaseExpiresAt = 2000
+local ForeignSaveService, Foreign = loadSaveService(ForeignProfile)
+ForeignSaveService:Init()
+local ForeignLoadSuccess, ForeignLoadError = pcall(ForeignSaveService.LoadProfile, ForeignSaveService, Foreign.Player)
+assert(ForeignLoadSuccess == false)
+assert(string.find(ForeignLoadError, "unexpired foreign lease", 1, true) ~= nil)
+assert(Foreign.Store.UpdateCalls == 5)
+assert(table.concat(Foreign.FakeTask.Delays, ",") == "1,2,4,8")
+assert(Profiles.Get(2001) == nil)
+
+local OwnershipSaveService, Ownership = loadSaveService(nil)
+OwnershipSaveService:Init()
+local OwnershipProfile = OwnershipSaveService:LoadProfile(Ownership.Player)
+local OwnershipSession = sessionFromProfile(Ownership.Player, OwnershipProfile)
+Sessions.Set(Ownership.Player, OwnershipSession)
+Ownership.Store.Data.Player_2001.LeaseOwner = "foreign-server"
+Ownership.Store.Data.Player_2001.LeaseExpiresAt = 2000
+OwnershipSaveService:SaveProfile(Ownership.Player)
+assert(OwnershipSession.ProfileMutationsFrozen == true)
+assert(Ownership.Player.Kicked ~= nil)
+local OwnershipEntry = Profiles.Get(2001)
+assert(OwnershipEntry ~= nil)
+Profiles.Remove(2001, OwnershipEntry)
+Sessions.Remove(Ownership.Player)
+
+local SaveSource = fs.readFile("src/server/Core/Services/SaveService.luau")
+assert(string.find(SaveSource, ":UpdateAsync", 1, true) ~= nil)
+assert(string.find(SaveSource, ":SetAsync", 1, true) == nil)
+assert(string.find(SaveSource, ":GetAsync", 1, true) == nil)
+
+local function loadSessionService()
+	local AddedCallbacks = {}
+	local RemovingCallbacks = {}
+	local Players = {
+		PlayerAdded = {
+			Connect = function(_, Callback)
+				table.insert(AddedCallbacks, Callback)
+			end,
+		},
+		PlayerRemoving = {
+			Connect = function(_, Callback)
+				table.insert(RemovingCallbacks, Callback)
+			end,
+		},
+	}
+	function Players:GetPlayers()
+		return {}
+	end
+
+	local SaveService = {
+		FailLoad = false,
+		ReleaseSawSession = false,
+	}
+	function SaveService:LoadProfile()
+		if self.FailLoad then
+			error("expected controlled load failure")
+		end
+		return PlayerProfileSchema.Defaults()
+	end
+	function SaveService:FreezeMutations(Player)
+		local Session = Sessions.Get(Player)
+		if Session then
+			Session.ProfileMutationsFrozen = true
+		end
+		return Session ~= nil
+	end
+	function SaveService:ReleaseProfile(Player)
+		self.ReleaseSawSession = Sessions.Get(Player) ~= nil
+		return true
+	end
+
+	local EventBus = { Publish = function() end }
+	local GrowthService = { UpdateMultiplierAttribute = function() end }
+	local Logger = { Info = function() end, Warn = function() end }
+	local ServicesFolder = { SaveService = SaveService, GrowthService = GrowthService }
+	local CoreFolder = {
+		Events = { EventBus = EventBus },
+		Registry = { RuntimeRegistry = { Sessions = Sessions } },
+		Utilities = { Logger = Logger },
+	}
+	ServicesFolder.Parent = CoreFolder
+	local Game = {}
+	function Game:GetService(Name)
+		assert(Name == "Players")
+		return Players
+	end
+
+	local FakeInstance = {}
+	function FakeInstance.new(ClassName)
+		return {
+			ClassName = ClassName,
+			IsA = function(self, Expected)
+				return self.ClassName == Expected
+			end,
+		}
+	end
+
+	local Source = fs.readFile("src/server/Core/Services/SessionService.luau")
+	local Chunk = luau.load(Source, "SessionService")
+	setfenv(
+		Chunk,
+		setmetatable({
+			game = Game,
+			script = { Parent = ServicesFolder },
+			Instance = FakeInstance,
+			task = task,
+			tick = function()
+				return 1000
+			end,
+			require = function(Dependency)
+				return Dependency
+			end,
+		}, { __index = getfenv() })
+	)
+
+	local Player = {
+		UserId = 3001,
+		Name = "SessionPlayer",
+		Attributes = {},
+		Kicked = nil,
+		LoadCharacterCalls = 0,
+	}
+	function Player:SetAttribute(Key, Value)
+		self.Attributes[Key] = Value
+	end
+	function Player:LoadCharacter()
+		self.LoadCharacterCalls += 1
+	end
+	function Player:Kick(Message)
+		self.Kicked = Message
+	end
+	function Player:FindFirstChild()
+		return nil
+	end
+
+	return Chunk(),
+		{
+			AddedCallbacks = AddedCallbacks,
+			Player = Player,
+			RemovingCallbacks = RemovingCallbacks,
+			SaveService = SaveService,
+		}
+end
+
+local LifecycleSessionService, SessionLifecycle = loadSessionService()
+LifecycleSessionService:Init()
+SessionLifecycle.SaveService.FailLoad = true
+local FailedJoinCallback = SessionLifecycle.AddedCallbacks[1]
+local FailedJoinSuccess = pcall(FailedJoinCallback, SessionLifecycle.Player)
+assert(FailedJoinSuccess == true)
+assert(Sessions.Get(SessionLifecycle.Player) == nil)
+assert(SessionLifecycle.Player.Kicked ~= nil)
+assert(SessionLifecycle.Player.LoadCharacterCalls == 0)
+
+SessionLifecycle.SaveService.FailLoad = false
+SessionLifecycle.Player.Kicked = nil
+FailedJoinCallback(SessionLifecycle.Player)
+local AuthoritativeSession = Sessions.Get(SessionLifecycle.Player)
+assert(AuthoritativeSession ~= nil)
+assert(AuthoritativeSession.ProfileMutationsFrozen == false)
+assert(AuthoritativeSession.UnlockedGrowthUpgrades ~= nil)
+assert(AuthoritativeSession.Settings ~= nil)
+assert(SessionLifecycle.Player.LoadCharacterCalls == 1)
+
+SessionLifecycle.RemovingCallbacks[1](SessionLifecycle.Player)
+assert(SessionLifecycle.SaveService.ReleaseSawSession == true)
+assert(Sessions.Get(SessionLifecycle.Player) == nil)
+
+local BootstrapSource = fs.readFile("src/server/Core/Bootstrap/CoreBootstrap.luau")
+local SaveBootIndex = assert(string.find(BootstrapSource, '{ Name = "SaveService"', 1, true))
+local SessionBootIndex = assert(string.find(BootstrapSource, '{ Name = "SessionService"', 1, true))
+assert(SaveBootIndex < SessionBootIndex)
 
 print("save_system: PASS")

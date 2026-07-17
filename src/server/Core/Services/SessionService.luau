@@ -46,18 +46,35 @@ local function ClearObjectiveAttributes(Player: Player)
 end
 
 local function OnPlayerAdded(Player: Player)
-	local Profile = SaveService:LoadProfile(Player)
+	if Sessions.Get(Player) then
+		return
+	end
+	local Loaded, Profile = pcall(SaveService.LoadProfile, SaveService, Player)
+	if not Loaded then
+		Logger.Warn("Session", "Profile load failed for %s: %s", Player.Name, tostring(Profile))
+		Player:Kick("Your data could not be loaded safely. Please rejoin.")
+		return
+	end
 	local Session: Session = {
 		Player = Player,
 		Bigger = Profile.Bigger,
 		Destruction = Profile.Destruction,
 		Rebirth = Profile.Rebirth,
-		HasDoubleMultiplier = Profile.HasDoubleMultiplier or false,
-		HasVip = Profile.HasVip or false,
+		UnlockedGrowthUpgrades = Profile.UnlockedGrowthUpgrades,
+		EquippedGrowthUpgrade = Profile.EquippedGrowthUpgrade,
+		CompletedPortals = Profile.CompletedPortals,
+		Settings = Profile.Settings,
+		HasDoubleMultiplier = Profile.HasDoubleMultiplier,
+		HasVip = Profile.HasVip,
 		State = "InLobby",
 		JoinedAt = tick(),
-		PurchaseHistory = Profile.ProcessedPurchaseIds or {},
+		PurchaseHistory = Profile.ProcessedPurchaseIds,
 		CurrentWorldInstanceId = nil,
+		LastActiveTimestamp = Profile.LastActiveTimestamp,
+		LastLogoutTimestamp = Profile.LastLogoutTimestamp,
+		LastSaveTimestamp = Profile.LastSaveTimestamp,
+		ProfileMutationsFrozen = false,
+		ProfileMutationFreezeReason = nil,
 	}
 
 	Sessions.Set(Player, Session)
@@ -71,9 +88,18 @@ local function OnPlayerAdded(Player: Player)
 	Player:SetAttribute("Level", Level)
 	EventBus.Publish("PlayerSessionCreated", Player, Session)
 	Logger.Info("Session", "Session created for %s", Player.Name)
+	Player:LoadCharacter()
 end
 
 local function OnPlayerRemoving(Player: Player)
+	if not Sessions.Get(Player) then
+		return
+	end
+	SaveService:FreezeMutations(Player, "PlayerRemoving")
+	if not SaveService:ReleaseProfile(Player) then
+		Logger.Warn("Session", "Final profile release failed for %s", Player.Name)
+		return
+	end
 	Sessions.Remove(Player)
 	EventBus.Publish("PlayerSessionDestroyed", Player)
 	Logger.Info("Session", "Session destroyed for %s", Player.Name)
