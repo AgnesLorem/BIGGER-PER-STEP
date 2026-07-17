@@ -30,6 +30,8 @@ local function toSerializable(val: any): any
 		return {val.X, val.Y}
 	elseif typeof(val) == "UDim" then
 		return {val.Scale, val.Offset}
+	elseif typeof(val) == "EnumItem" then
+		return tostring(val)
 	else
 		return val
 	end
@@ -194,6 +196,9 @@ local function runRestore()
 					val = Vector2.new(serializableVal[1], serializableVal[2])
 				elseif propName == "PaddingTop" or propName == "PaddingBottom" or propName == "PaddingLeft" or propName == "PaddingRight" or propName == "CornerRadius" or propName == "Padding" then
 					val = UDim.new(serializableVal[1], serializableVal[2])
+				elseif typeof((inst :: any)[propName]) == "EnumItem" and typeof(serializableVal) == "string" then
+					local parts = string.split(serializableVal, ".")
+					val = (Enum :: any)[parts[2]][parts[3]]
 				else
 					val = serializableVal
 				end
@@ -607,6 +612,13 @@ local function runValidateOrRepair()
 					checkConstraint("BottomHUD.ButtonsContainer." .. child.Name, child, "UIScale", {Scale = 1.0})
 					checkConstraint("BottomHUD.ButtonsContainer." .. child.Name, child, "UICorner", {CornerRadius = UDim.new(0, 8)})
 					checkDuplicates("BottomHUD.ButtonsContainer." .. child.Name, child)
+
+					local textLabel = child:FindFirstChildOfClass("TextLabel")
+					if check(textLabel ~= nil, true, "MissingTextLabel", "StarterGui.MainHUD.BottomHUD.ButtonsContainer." .. child.Name .. ".TextLabel", "Missing TextLabel under BottomHUD.ButtonsContainer." .. child.Name) then
+						checkProperty("BottomHUD.ButtonsContainer." .. child.Name .. ".TextLabel", textLabel, "TextScaled", true, true)
+						checkConstraint("BottomHUD.ButtonsContainer." .. child.Name .. ".TextLabel", textLabel, "UITextSizeConstraint", {MinTextSize = 12, MaxTextSize = 32})
+						checkDuplicates("BottomHUD.ButtonsContainer." .. child.Name .. ".TextLabel", textLabel)
+					end
 				end
 			end
 		end
