@@ -660,8 +660,9 @@ local function loadSessionService()
 	local Logger = { Info = function() end, Warn = function() end }
 	local ServicesFolder = { SaveService = SaveService, GrowthService = GrowthService }
 	local CoreFolder = {
+		Config = { SaveConfig = SaveConfig },
 		Events = { EventBus = EventBus },
-		Registry = { RuntimeRegistry = { Sessions = Sessions } },
+		Registry = { RuntimeRegistry = { Profiles = Profiles, Sessions = Sessions } },
 		Utilities = { Logger = Logger },
 	}
 	ServicesFolder.Parent = CoreFolder
@@ -670,6 +671,7 @@ local function loadSessionService()
 		assert(Name == "Players")
 		return Players
 	end
+	function Game:BindToClose() end
 
 	local FakeInstance = {}
 	function FakeInstance.new(ClassName)
@@ -751,6 +753,171 @@ assert(SessionLifecycle.Player.LoadCharacterCalls == 1)
 SessionLifecycle.RemovingCallbacks[1](SessionLifecycle.Player)
 assert(SessionLifecycle.SaveService.ReleaseSawSession == true)
 assert(Sessions.Get(SessionLifecycle.Player) == nil)
+
+local function loadShutdownSessionService(BlockedUserId)
+	local ShutdownCallbacks = {}
+	local Players = { Players = {} }
+	function Players:GetPlayers()
+		return self.Players
+	end
+	Players.PlayerAdded = { Connect = function() end }
+	Players.PlayerRemoving = { Connect = function() end }
+
+	local Clock = 0
+	local FakeTask = {}
+	function FakeTask.spawn(Callback, ...)
+		return task.spawn(Callback, ...)
+	end
+	function FakeTask.wait()
+		Clock += 0.1
+		task.wait()
+	end
+
+	local ReleaseBlocked = BlockedUserId ~= nil
+	local SaveService = {
+		ActiveReleases = 0,
+		AllFrozenAtRelease = true,
+		MaximumActiveReleases = 0,
+		ReleaseCalls = 0,
+		SaveCalls = 0,
+	}
+	function SaveService:LoadProfile()
+		return PlayerProfileSchema.Defaults()
+	end
+	function SaveService:FreezeMutations(Player)
+		local Session = Sessions.Get(Player)
+		if Session then
+			Session.ProfileMutationsFrozen = true
+		end
+		return Session ~= nil
+	end
+	function SaveService:SaveProfile()
+		self.SaveCalls += 1
+	end
+	function SaveService:ReleaseProfile(Player)
+		self.ReleaseCalls += 1
+		for _, CurrentPlayer in Players.Players do
+			local CurrentSession = Sessions.Get(CurrentPlayer)
+			if CurrentSession and not CurrentSession.ProfileMutationsFrozen then
+				self.AllFrozenAtRelease = false
+			end
+		end
+		self.ActiveReleases += 1
+		self.MaximumActiveReleases = math.max(self.MaximumActiveReleases, self.ActiveReleases)
+		while ReleaseBlocked and Player.UserId == BlockedUserId do
+			task.wait()
+		end
+		task.wait()
+		self.ActiveReleases -= 1
+		return true
+	end
+
+	local RuntimeEntries = {}
+	local FakeProfiles = {}
+	function FakeProfiles.Get(UserId)
+		return RuntimeEntries[UserId]
+	end
+	local Logger = { Warnings = {} }
+	function Logger.Info() end
+	function Logger.Warn(Category, Message, ...)
+		table.insert(Logger.Warnings, Category .. ": " .. string.format(Message, ...))
+	end
+	local EventBus = { Publish = function() end }
+	local GrowthService = { UpdateMultiplierAttribute = function() end }
+	local ServicesFolder = { SaveService = SaveService, GrowthService = GrowthService }
+	local CoreFolder = {
+		Config = { SaveConfig = SaveConfig },
+		Events = { EventBus = EventBus },
+		Registry = { RuntimeRegistry = { Profiles = FakeProfiles, Sessions = Sessions } },
+		Utilities = { Logger = Logger },
+	}
+	ServicesFolder.Parent = CoreFolder
+	local Game = {}
+	function Game:GetService(Name)
+		assert(Name == "Players")
+		return Players
+	end
+	function Game:BindToClose(Callback)
+		table.insert(ShutdownCallbacks, Callback)
+	end
+
+	local Source = fs.readFile("src/server/Core/Services/SessionService.luau")
+	local Chunk = luau.load(Source, "ShutdownSessionService")
+	setfenv(
+		Chunk,
+		setmetatable({
+			game = Game,
+			script = { Parent = ServicesFolder },
+			Instance = { new = function() end },
+			task = FakeTask,
+			os = {
+				clock = function()
+					return Clock
+				end,
+			},
+			require = function(Dependency)
+				return Dependency
+			end,
+		}, { __index = getfenv() })
+	)
+
+	for Index = 1, 2 do
+		local Player = { UserId = 5000 + Index, Name = "ShutdownPlayer" .. Index }
+		table.insert(Players.Players, Player)
+		Sessions.Set(Player, sessionFromProfile(Player, PlayerProfileSchema.Defaults()))
+		RuntimeEntries[Player.UserId] = {
+			Phase = if Player.UserId == BlockedUserId then "Releasing" else "Active",
+			WriteQueue = if Player.UserId == BlockedUserId then { {}, {} } else {},
+			LastError = if Player.UserId == BlockedUserId then "blocked write" else nil,
+		}
+	end
+
+	local Service = Chunk()
+	Service:Init()
+	return {
+		Clock = function()
+			return Clock
+		end,
+		Logger = Logger,
+		Players = Players,
+		SaveService = SaveService,
+		SetReleaseBlocked = function(Value)
+			ReleaseBlocked = Value
+		end,
+		ShutdownCallbacks = ShutdownCallbacks,
+	}
+end
+
+local CompletedShutdown = loadShutdownSessionService(nil)
+assert(#CompletedShutdown.ShutdownCallbacks == 1)
+CompletedShutdown.ShutdownCallbacks[1]()
+assert(CompletedShutdown.SaveService.ReleaseCalls == 2)
+assert(CompletedShutdown.SaveService.MaximumActiveReleases == 2)
+assert(CompletedShutdown.SaveService.AllFrozenAtRelease == true)
+assert(CompletedShutdown.SaveService.SaveCalls == 0)
+assert(CompletedShutdown.Clock() < SaveConfig.ShutdownTimeoutSeconds)
+for _, Player in CompletedShutdown.Players.Players do
+	assert(Sessions.Get(Player) == nil)
+end
+CompletedShutdown.ShutdownCallbacks[1]()
+assert(CompletedShutdown.SaveService.ReleaseCalls == 2)
+
+local BlockedShutdown = loadShutdownSessionService(5001)
+assert(#BlockedShutdown.ShutdownCallbacks == 1)
+BlockedShutdown.ShutdownCallbacks[1]()
+assert(BlockedShutdown.Clock() >= SaveConfig.ShutdownTimeoutSeconds)
+assert(BlockedShutdown.Clock() < SaveConfig.ShutdownTimeoutSeconds + 0.2)
+assert(BlockedShutdown.SaveService.SaveCalls == 0)
+local Diagnostics = table.concat(BlockedShutdown.Logger.Warnings, "\n")
+assert(string.find(Diagnostics, "UserId 5001", 1, true) ~= nil)
+assert(string.find(Diagnostics, "Releasing", 1, true) ~= nil)
+assert(string.find(Diagnostics, "queue=2", 1, true) ~= nil)
+assert(string.find(Diagnostics, "blocked write", 1, true) ~= nil)
+BlockedShutdown.SetReleaseBlocked(false)
+task.wait(0.05)
+for _, Player in BlockedShutdown.Players.Players do
+	Sessions.Remove(Player)
+end
 
 local BootstrapSource = fs.readFile("src/server/Core/Bootstrap/CoreBootstrap.luau")
 local SaveBootIndex = assert(string.find(BootstrapSource, '{ Name = "SaveService"', 1, true))
@@ -971,8 +1138,74 @@ assert(ReceiptSaveService:CommitTransaction(ReceiptPersistence.Player, {
 }) == true)
 assert(ReceiptSession.PurchaseHistory["Purchase:Ambiguous"] == true)
 
-Profiles.Remove(2001, ReceiptEntry)
+ReceiptEntry.PendingPurchaseIds["Purchase:Final"] = true
+assert(ReceiptSaveService:ReleaseProfile(ReceiptPersistence.Player) == true)
+assert(ReceiptPersistence.Store.Data.Player_2001.ProcessedPurchaseIds["Purchase:Final"] == true)
+assert(ReceiptPersistence.Store.Data.Player_2001.ProcessedPurchaseIds["Purchase:Late"] == true)
+assert(ReceiptPersistence.Store.Data.Player_2001.ProcessedPurchaseIds["Purchase:Failure"] == true)
 Sessions.Remove(ReceiptPersistence.Player)
+
+local RepeatedReleaseService, RepeatedRelease = loadSaveService(nil)
+RepeatedReleaseService:Init()
+local RepeatedReleaseProfile = RepeatedReleaseService:LoadProfile(RepeatedRelease.Player)
+Sessions.Set(RepeatedRelease.Player, sessionFromProfile(RepeatedRelease.Player, RepeatedReleaseProfile))
+local ReleaseBlocked = true
+RepeatedRelease.Store.BeforeUpdate = function()
+	while ReleaseBlocked do
+		task.wait()
+	end
+end
+local ReleaseResults = {}
+task.spawn(function()
+	ReleaseResults[1] = RepeatedReleaseService:ReleaseProfile(RepeatedRelease.Player)
+end)
+task.wait()
+task.spawn(function()
+	ReleaseResults[2] = RepeatedReleaseService:ReleaseProfile(RepeatedRelease.Player)
+end)
+task.wait()
+ReleaseBlocked = false
+task.wait(0.05)
+assert(ReleaseResults[1] == true)
+assert(ReleaseResults[2] == true)
+assert(RepeatedRelease.Store.UpdateCalls == 2)
+Sessions.Remove(RepeatedRelease.Player)
+
+local ReceiptThenReleaseService, ReceiptThenRelease = loadSaveService(nil)
+ReceiptThenReleaseService:Init()
+local ReceiptThenReleaseProfile = ReceiptThenReleaseService:LoadProfile(ReceiptThenRelease.Player)
+Sessions.Set(ReceiptThenRelease.Player, sessionFromProfile(ReceiptThenRelease.Player, ReceiptThenReleaseProfile))
+local ReceiptThenReleaseEntry = assert(Profiles.Get(2001))
+ReceiptThenReleaseEntry.PendingPurchaseIds["Purchase:BeforeShutdown"] = true
+local ReceiptWriteBlocked = true
+ReceiptThenRelease.Store.BeforeUpdate = function()
+	while ReceiptWriteBlocked do
+		task.wait()
+	end
+end
+local ReceiptCommitResult = nil
+local ReceiptReleaseResult = nil
+task.spawn(function()
+	ReceiptCommitResult = ReceiptThenReleaseService:CommitTransaction(ReceiptThenRelease.Player, {
+		PurchaseId = "Purchase:BeforeShutdown",
+		Rewards = {},
+	})
+end)
+task.wait()
+task.spawn(function()
+	ReceiptReleaseResult = ReceiptThenReleaseService:ReleaseProfile(ReceiptThenRelease.Player)
+end)
+task.wait()
+assert(ReceiptThenReleaseEntry.ActiveRequest.Kind == "Receipt")
+assert(ReceiptThenReleaseEntry.WriteQueue[1].Kind == "Final")
+ReceiptWriteBlocked = false
+task.wait(0.05)
+assert(ReceiptCommitResult == true)
+assert(ReceiptReleaseResult == true)
+assert(ReceiptThenRelease.Store.UpdateCalls == 3)
+assert(ReceiptThenRelease.Store.Data.Player_2001.ProcessedPurchaseIds["Purchase:BeforeShutdown"] == true)
+assert(ReceiptThenRelease.Store.Data.Player_2001.LeaseOwner == nil)
+Sessions.Remove(ReceiptThenRelease.Player)
 
 local function loadReceiptProcessingService(UserId, PurchaseHistory, PendingPurchaseIds, GrantResult, CommitResult)
 	local Player = {

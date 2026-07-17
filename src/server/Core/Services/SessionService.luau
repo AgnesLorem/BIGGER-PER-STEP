@@ -3,6 +3,8 @@
 local Players = game:GetService("Players")
 
 --// Requirings \\--
+local SaveConfig = require(script.Parent.Parent.Config.SaveConfig)
+local Profiles = require(script.Parent.Parent.Registry.RuntimeRegistry.Profiles)
 local Sessions = require(script.Parent.Parent.Registry.RuntimeRegistry.Sessions)
 local Logger = require(script.Parent.Parent.Utilities.Logger)
 local EventBus = require(script.Parent.Parent.Events.EventBus)
@@ -19,6 +21,7 @@ local AllowedTransitions: { [string]: { [string]: boolean } } = table.freeze({
 	InWorld = table.freeze({ Returning = true }),
 	Returning = table.freeze({}),
 })
+local ShutdownStarted = false
 
 --// Helpers \\--
 local function CreateLeaderstats(Player: Player, Session: Session)
@@ -91,18 +94,74 @@ local function OnPlayerAdded(Player: Player)
 	Player:LoadCharacter()
 end
 
-local function OnPlayerRemoving(Player: Player)
+local function FinalizePlayer(Player: Player, Reason: string): boolean
 	if not Sessions.Get(Player) then
-		return
+		return true
 	end
-	SaveService:FreezeMutations(Player, "PlayerRemoving")
-	if not SaveService:ReleaseProfile(Player) then
+	SaveService:FreezeMutations(Player, Reason)
+	local Called, Released = pcall(SaveService.ReleaseProfile, SaveService, Player)
+	if not Called or not Released then
 		Logger.Warn("Session", "Final profile release failed for %s", Player.Name)
+		return false
+	end
+	if Sessions.Get(Player) then
+		Sessions.Remove(Player)
+		EventBus.Publish("PlayerSessionDestroyed", Player)
+		Logger.Info("Session", "Session destroyed for %s", Player.Name)
+	end
+	return true
+end
+
+local function OnPlayerRemoving(Player: Player)
+	FinalizePlayer(Player, "PlayerRemoving")
+end
+
+local function OnShutdown()
+	if ShutdownStarted then
 		return
 	end
-	Sessions.Remove(Player)
-	EventBus.Publish("PlayerSessionDestroyed", Player)
-	Logger.Info("Session", "Session destroyed for %s", Player.Name)
+	ShutdownStarted = true
+
+	local PlayersToRelease = {}
+	for _, Player in Players:GetPlayers() do
+		if Sessions.Get(Player) then
+			table.insert(PlayersToRelease, Player)
+			SaveService:FreezeMutations(Player, "Shutdown")
+		end
+	end
+
+	local Completed: { [Player]: boolean } = {}
+	local CompletedCount = 0
+	for _, Player in PlayersToRelease do
+		task.spawn(function()
+			FinalizePlayer(Player, "Shutdown")
+			Completed[Player] = true
+			CompletedCount += 1
+		end)
+	end
+
+	local Deadline = os.clock() + SaveConfig.ShutdownTimeoutSeconds
+	while CompletedCount < #PlayersToRelease do
+		local Remaining = Deadline - os.clock()
+		if Remaining <= 0 then
+			break
+		end
+		task.wait(math.min(Remaining, 0.1))
+	end
+
+	for _, Player in PlayersToRelease do
+		if not Completed[Player] then
+			local RuntimeProfile = Profiles.Get(Player.UserId)
+			Logger.Warn(
+				"Session",
+				"Shutdown final save unresolved for UserId %d (phase=%s, queue=%d, lastError=%s)",
+				Player.UserId,
+				if RuntimeProfile then RuntimeProfile.Phase else "Missing",
+				if RuntimeProfile then #RuntimeProfile.WriteQueue else 0,
+				if RuntimeProfile then tostring(RuntimeProfile.LastError) else "nil"
+			)
+		end
+	end
 end
 
 --// Service \\--
@@ -112,6 +171,7 @@ local SessionService = {}
 function SessionService:Init()
 	Players.PlayerAdded:Connect(OnPlayerAdded)
 	Players.PlayerRemoving:Connect(OnPlayerRemoving)
+	game:BindToClose(OnShutdown)
 end
 
 function SessionService:Start()

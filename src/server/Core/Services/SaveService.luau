@@ -177,6 +177,18 @@ local function QueueSave(Player: Player, Kind: Profiles.RequestKind): Profiles.R
 	end)
 end
 
+local function ExistingFinalRequest(RuntimeProfile: RuntimeProfile): Profiles.Request?
+	if RuntimeProfile.ActiveRequest and RuntimeProfile.ActiveRequest.Kind == "Final" then
+		return RuntimeProfile.ActiveRequest
+	end
+	for _, Request in RuntimeProfile.WriteQueue do
+		if Request.Kind == "Final" then
+			return Request
+		end
+	end
+	return nil
+end
+
 function SaveService:Init()
 	Players.CharacterAutoLoads = false
 	local Scope = SaveConfig.ResolveScope(RunService:IsStudio(), game.PlaceId)
@@ -294,18 +306,25 @@ function SaveService:ReleaseProfile(Player: Player): boolean
 	if not RuntimeProfile then
 		return true
 	end
+	if RuntimeProfile.Released then
+		return true
+	end
 	self:FreezeMutations(Player, "ProfileRelease")
-	local Request = Profiles.Enqueue(RuntimeProfile, "Final", function()
-		local Success, Result = pcall(WriteProfile, Player, RuntimeProfile, true, nil)
-		if not Success then
-			local Message = tostring(Result)
-			if IsOwnershipError(Message) then
-				HandleOwnershipLoss(Player, Message)
+	local Request = ExistingFinalRequest(RuntimeProfile)
+	if not Request then
+		Request = Profiles.Enqueue(RuntimeProfile, "Final", function()
+			local IncludedPendingPurchaseIds = CopyPurchaseIds(RuntimeProfile.PendingPurchaseIds)
+			local Success, Result = pcall(WriteProfile, Player, RuntimeProfile, true, IncludedPendingPurchaseIds)
+			if not Success then
+				local Message = tostring(Result)
+				if IsOwnershipError(Message) then
+					HandleOwnershipLoss(Player, Message)
+				end
+				error(Message, 0)
 			end
-			error(Message, 0)
-		end
-		return Result
-	end)
+			return Result
+		end)
+	end
 	local Success = Profiles.Await(Request)
 	return Success
 end
