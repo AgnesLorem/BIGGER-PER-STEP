@@ -1,0 +1,248 @@
+{
+  "LeftSidebar.Settings.UIAspectRatioConstraint": {
+    "Properties": { "AspectRatio": 1 },
+    "ClassName": "UIAspectRatioConstraint"
+  },
+  "LeftSidebar": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "ZIndex": 1,
+      "Size": [0.11999999731779099, 0, 0.3499999940395355, 0],
+      "Position": [0.019999999552965165, 0, 0.3499999940395355, 0]
+    },
+    "ClassName": "Frame"
+  },
+  "BottomHUD.ProgressBarFrame.ProgressBG": {
+    "Properties": {
+      "AnchorPoint": [0, 1],
+      "Size": [1, 0, 2.881977081298828, 0],
+      "Position": [0, 0, 1.4928812980651856, 0]
+    },
+    "ClassName": "ImageLabel"
+  },
+  "LeftSidebar.AURA": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [0, 0, 0, 0],
+      "Position": [0, 0, 0, 0]
+    },
+    "ClassName": "ImageButton"
+  },
+  "BottomHUD.ButtonsContainer": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [1, 0, 0.3499999940395355, 0],
+      "Position": [0, 0, 0.6499999761581421, 0]
+    },
+    "ClassName": "Frame"
+  },
+  "SafeAreaRoot.OverlayHUD": {
+    "Properties": {
+      "Position": [0, 0, 0, 0],
+      "BackgroundTransparency": 1,
+      "Size": [1, 0, 1, 0]
+    },
+    "ClassName": "Frame"
+  },
+  "LeftSidebar.Gifts.UIAspectRatioConstraint": {
+    "Properties": { "AspectRatio": 1 },
+    "ClassName": "UIAspectRatioConstraint"
+  },
+  "SafeAreaRoot.PersistentHUD": {
+    "Properties": {
+      "Position": [0, 0, 0, 0],
+      "BackgroundTransparency": 1,
+      "Size": [1, 0, 1, 0]
+    },
+    "ClassName": "Frame"
+  },
+  "SafeAreaRoot": {
+    "Properties": {
+      "Position": [0, 0, 0, 0],
+      "BackgroundTransparency": 1,
+      "Size": [1, 0, 1, 0]
+    },
+    "ClassName": "Frame"
+  },
+  "BottomHUD.ProgressBarFrame.ProgressBG.BarContainer": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [1, -8, 1, -8],
+      "Position": [0, 4, 0, 4]
+    },
+    "ClassName": "Frame"
+  },
+  "LeftSidebar.Store.UIAspectRatioConstraint": {
+    "Properties": { "AspectRatio": 1 },
+    "ClassName": "UIAspectRatioConstraint"
+  },
+  "RightSidebar.Vip": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [1, 0, 0.44999998807907107, 0],
+      "Position": [0, 0, 0, 0]
+    },
+    "ClassName": "ImageButton"
+  },
+  "LeftSidebar.Titles.UIAspectRatioConstraint": {
+    "Properties": { "AspectRatio": 1 },
+    "ClassName": "UIAspectRatioConstraint"
+  },
+  "BottomHUD.ButtonsContainer.Bigger150K": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [0.30000001192092898, 0, 0.8999999761581421, 0],
+      "Position": [0, 0, 0, 0]
+    },
+    "ClassName": "ImageButton"
+  },
+  "LeftSidebar.Rebirth": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [0, 0, 0, 0],
+      "Position": [0, 0, 0, 0]
+    },
+    "ClassName": "ImageButton"
+  },
+  "RightSidebar.DoubleMultiplier": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [1, 0, 0.44999998807907107, 0],
+      "Position": [0, 0, -0.06119392439723015, 0]
+    },
+    "ClassName": "ImageButton"
+  },
+  "LeftSidebar.Gifts": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [0, 0, 0, 0],
+      "Position": [0, 0, 0, 0]
+    },
+    "ClassName": "ImageButton"
+  },
+  "BottomHUD.ProgressBarFrame": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [1, 0, 0.30000001192092898, 0],
+      "Position": [0, 0, 0.30000001192092898, 0]
+    },
+    "ClassName": "Frame"
+  },
+  "BottomHUD.ButtonsContainer.Bigger10M": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [0.30000001192092898, 0, 0.8999999761581421, 0],
+      "Position": [0, 0, 0, 0]
+    },
+    "ClassName": "ImageButton"
+  },
+  "RightSidebar.Vip.TextLabel": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [1, -50, 1, 0],
+      "TextScaled": false,
+      "Position": [0, 25, 0, 0]
+    },
+    "ClassName": "TextLabel"
+  },
+  "RightSidebar": {
+    "Properties": {
+      "AnchorPoint": [1, 0.5],
+      "ZIndex": 1,
+      "Size": [0.18000000715255738, 0, 0.2199999988079071, 0],
+      "Position": [0.9800000190734863, 0, 0.44999998807907107, 0]
+    },
+    "ClassName": "Frame"
+  },
+  "BottomHUD.ButtonsContainer.Bigger1M": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [0.30000001192092898, 0, 0.8999999761581421, 0],
+      "Position": [0, 0, 0, 0]
+    },
+    "ClassName": "ImageButton"
+  },
+  "LeftSidebar.Store": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [0, 0, 0, 0],
+      "Position": [0, 0, 0, 0]
+    },
+    "ClassName": "ImageButton"
+  },
+  "RightSidebar.DoubleMultiplier.TextLabel": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [1, -50, 1, 0],
+      "TextScaled": false,
+      "Position": [0, 25, 0, 0]
+    },
+    "ClassName": "TextLabel"
+  },
+  "LeftSidebar.AURA.UIAspectRatioConstraint": {
+    "Properties": { "AspectRatio": 1 },
+    "ClassName": "UIAspectRatioConstraint"
+  },
+  "BottomHUD.ProgressBarFrame.ProgressBG.ProgressTextLabel": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [0.44999998807907107, 0, 1, 0],
+      "TextScaled": false,
+      "Position": [0.5184019804000855, 0, -0.5255684852600098, 0]
+    },
+    "ClassName": "TextLabel"
+  },
+  "LeftSidebar.Rebirth.UIAspectRatioConstraint": {
+    "Properties": { "AspectRatio": 1 },
+    "ClassName": "UIAspectRatioConstraint"
+  },
+  "LeftSidebar.UIGridLayout": {
+    "Properties": {
+      "CellSize": [0.46000000834465029, 0, 0.30000001192092898, 0],
+      "CellPadding": [0.07999999821186066, 0, 0.05000000074505806, 0]
+    },
+    "ClassName": "UIGridLayout"
+  },
+  "BottomHUD.ProgressBarFrame.ProgressBG.LevelLabel": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [0.44999998807907107, 0, 1, 0],
+      "TextScaled": false,
+      "Position": [0.04764007776975632, 0, -0.506566047668457, 0]
+    },
+    "ClassName": "TextLabel"
+  },
+  "BottomHUD": {
+    "Properties": {
+      "AnchorPoint": [0.5, 0.5],
+      "ZIndex": 1,
+      "Size": [0.5, 0, 0.2199999988079071, 0],
+      "Position": [0.5, 0, 0.8199999928474426, 0]
+    },
+    "ClassName": "Frame"
+  },
+  "BottomHUD.ProgressBarFrame.ProgressBG.BarContainer.ProgressFill": {
+    "Properties": {
+      "AnchorPoint": [0, 0.5],
+      "Size": [0.916124701499939, 0, 0.6028147339820862, 0],
+      "Position": [0, 39, 0, 81]
+    },
+    "ClassName": "ImageLabel"
+  },
+  "LeftSidebar.Settings": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [0, 0, 0, 0],
+      "Position": [0, 0, 0, 0]
+    },
+    "ClassName": "ImageButton"
+  },
+  "LeftSidebar.Titles": {
+    "Properties": {
+      "AnchorPoint": [0, 0],
+      "Size": [0, 0, 0, 0],
+      "Position": [0, 0, 0, 0]
+    },
+    "ClassName": "ImageButton"
+  }
+}
