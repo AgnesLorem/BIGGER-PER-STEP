@@ -273,8 +273,11 @@ function GuiController.Init()
 	corner.Parent = SelectionOutline
 	SelectionOutline.Parent = ScreenGui
 
-	-- Reference LeftSidebar
-	LeftSidebar = ScreenGui:WaitForChild("LeftSidebar") :: Frame
+	-- Reference LeftSidebar, BottomHUD, and RightSidebar under SafeAreaRoot and PersistentHUD wrapper
+	local safeAreaRoot = ScreenGui:WaitForChild("SafeAreaRoot")
+	local persistentHUD = safeAreaRoot:WaitForChild("PersistentHUD")
+
+	LeftSidebar = persistentHUD:WaitForChild("LeftSidebar") :: Frame
 	for _, child in ipairs(LeftSidebar:GetChildren()) do
 		if child:IsA("ImageButton") then
 			ApplyHoverAnimation(child)
@@ -285,7 +288,7 @@ function GuiController.Init()
 	end
 
 	-- Reference BottomHUD
-	BottomHUD = ScreenGui:WaitForChild("BottomHUD") :: Frame
+	BottomHUD = persistentHUD:WaitForChild("BottomHUD") :: Frame
 
 	-- Reference Progress Bar components
 	ProgressBarFrame = BottomHUD:WaitForChild("ProgressBarFrame") :: Frame
@@ -322,7 +325,7 @@ function GuiController.Init()
 	end
 
 	-- Reference RightSidebar (VIP and Double Multiplier)
-	RightSidebar = ScreenGui:WaitForChild("RightSidebar", 5) :: Frame?
+	RightSidebar = persistentHUD:WaitForChild("RightSidebar", 5) :: Frame?
 	if RightSidebar then
 		for _, child in ipairs(RightSidebar:GetChildren()) do
 			if child:IsA("ImageButton") then
