@@ -1,6 +1,6 @@
 # Data Persistence & Profiles - Bigger
 
-This document outlines the conceptual data schema, lifecycle, ownership, and saving mechanisms for player data. It does not contain code or language-specific implementation types.
+MVP-004 implements native, server-authoritative persistence with Roblox `DataStoreService` and `UpdateAsync`.
 
 ---
 
@@ -10,41 +10,45 @@ Each player's persistent data is stored within a conceptual `PlayerProfile` stru
 
 A player profile tracks the following data categories:
 
-- **Size**: The player's current physical scale and level.
+- **Bigger**: The integer gameplay growth value used by the current runtime.
 - **Destruction**: The lifetime count of completed portal objectives.
 - **Rebirth**: The number of permanent resets performed.
 - **Growth Upgrades**: A record of all unlocked upgrades.
 - **Equipped Growth Upgrade**: The upgrade currently active and boosting size generation.
 - **Portal Progress**: Portals that have been successfully completed or unlocked.
 - **Player Settings**: Local preferences and options (e.g., sound toggles).
-- **Offline Metadata**: System timestamps tracked for calculating offline rewards.
+- **Entitlements**: Stored 2X Multiplier and VIP ownership booleans. Live Game Pass reconciliation remains externally gated.
+- **Receipt History**: Up to 5,000 durable Developer Product Purchase IDs.
+- **Offline Metadata**: Active, logout, and save timestamps used for atomic offline rewards.
 
 ---
 
 ## Session Lifecycle
 
 ### 1. Load Lifecycle (Player Joining)
-1. The player enters the server.
-2. The server requests the player's saved state from the persistent database.
-3. If no record is found, the server initializes a default profile with base values.
-4. The profile is loaded into server memory.
-5. The server calculates and applies offline rewards (see below).
-6. The server transmits a read-only copy of the profile to the client to update visual components and UI.
+1. The server creates one temporary runtime entry keyed by numeric UserId.
+2. A per-UserId FIFO worker acquires the profile through `UpdateAsync`.
+3. Stored data is normalized to schema v1; malformed known data fails closed.
+4. The same transform claims offline progression and acquires a 180-second lease.
+5. `SessionService` creates the authoritative session only after load succeeds.
+6. The server projects attributes and leaderstats, then explicitly loads the character.
+
+The store is `BiggerPlayerProfiles_v1`, with key `Player_<UserId>`. Studio always uses the isolated `Studio` scope. The production PlaceId uses `Production`; unknown live PlaceIds fail boot. The private `Staging` mapping remains blocked until a real staging PlaceId exists.
 
 ### 2. Gameplay Phase (In-Memory Access)
-- While the player is active in the game, their profile remains cached in the server's memory.
-- All modifications (e.g., adding Size, equipping upgrades, unlocking portals) are applied directly to the in-memory cache on the server.
-- The client receives state updates but has no write-access to this memory.
+- `RuntimeRegistry.Sessions` is the sole mutable gameplay source of truth.
+- All persistent-field mutation paths fail closed after `ProfileMutationsFrozen` is set.
+- The client receives projected state but has no write access to the authoritative profile.
 
 ### 3. Autosave Philosophy (Periodic Saving)
-- To prevent data loss in the event of client disconnections or server instability, the server periodically writes the in-memory profile of all active players back to the persistent database.
-- The write interval should balance safety against network throughput constraints.
+- One global scheduler queues autosaves every 60 seconds.
+- Autosaves, receipts, and final releases share the player's FIFO worker; only duplicate autosaves coalesce.
+- Writes retry after 1, 2, and 4 seconds and atomically renew the lease.
 
 ### 4. Save Lifecycle (Player Unload)
-- The player exits the server or the server initiates a shutdown.
-- The server captures the final in-memory state of the player profile.
-- The server records the logout timestamp to the profile's offline metadata.
-- The server performs a final write to the database and clears the profile from memory.
+- Player removal freezes mutations before the final snapshot, writes logout metadata, clears the lease, and removes the session only after success.
+- Shutdown freezes every active profile first, starts final requests concurrently across UserIds, preserves each FIFO, and waits at most 25 seconds globally.
+- Timeout diagnostics include UserId, phase, queue length, and the last DataStore error. Shutdown never bypasses workers with a replacement write.
 
 ---
 
@@ -63,7 +67,24 @@ Player Rejoins Server
         ↓
 Server calculates 'OfflineDuration' (CurrentTime - LastLogoutTime)
         ↓
-Server determines size reward based on duration & equipped Growth Upgrade multipliers
+Server applies the capped time reward using verified stored entitlement multipliers
         ↓
 Server applies the offline size reward directly to the player's profile in memory
 ```
+
+The atomic acquire transform uses:
+
+```text
+OfflineSeconds = clamp(Now - max(LastActiveTimestamp, LastLogoutTimestamp), 0, 28800)
+OfflineReward = floor(OfflineSeconds / 60 × 30 × GrowthMultiplier)
+```
+
+New and timestamp-less legacy profiles receive zero. The claim timestamp, reward, and lease are persisted together, preventing the same interval from being claimed twice.
+
+## Developer Product Receipts
+
+Durable Purchase IDs live in `Session.PurchaseHistory`; dispatched but unconfirmed IDs live only in `Profiles.PendingPurchaseIds`. Pending retries never redispatch rewards. `PurchaseGranted` is returned only after the Purchase ID and complete authoritative snapshot are durable. At the 5,000-ID combined ceiling, existing duplicates still succeed and new receipts fail closed without dispatch.
+
+## External Monetization Gate
+
+Private staging and verified Game Pass ownership remain blocked pending a real staging PlaceId, an authorized thumbnail source, and real 2X/VIP Game Pass Asset IDs. No placeholder configuration may replace those values.

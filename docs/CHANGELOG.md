@@ -4,6 +4,21 @@ This changelog tracks gameplay-facing changes, features, balancing iterations, a
 
 ---
 
+## [v0.0.4] - 2026-07-17
+
+### Added
+- Added schema-v1 native DataStore persistence with isolated Studio/Production scopes, validation, per-UserId FIFO workers, and 180-second leases.
+- Added 60-second autosaves, atomic offline progression, durable idempotent Developer Product receipts, and concurrent final saves with a 25-second shutdown deadline.
+- Added mutation freezing across authoritative profile mutation paths and a five-stage Studio persistence harness.
+
+### Verification
+- Passed movement, stomp, and save-system Lune suites, full-tree StyLua, source Selene, and Rojo build.
+- Passed five Studio-scope runs covering defaults, autosave, restoration, exact-once offline claims, mutation freeze, and final lease release.
+- The pre-existing `GuiController` wait for `MainHUD.LeftSidebar` still warns during Play Solo and is outside the persistence change.
+
+### Blocked
+- Private staging and Game Pass ownership remain blocked pending a real staging PlaceId, an authorized thumbnail source, and real 2X/VIP Game Pass Asset IDs. No production place was published.
+
 ## [v0.0.3] - 2026-07-16
 
 ### Security
