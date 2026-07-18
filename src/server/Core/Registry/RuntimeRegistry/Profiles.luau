@@ -86,10 +86,15 @@ local function StartWorker(Entry: Entry)
 				end
 			end
 			Entry.ActiveRequest = nil
+			if Request.Kind == "Load" and not Success then
+				Entry.Released = true
+				if Entries[Entry.UserId] == Entry then
+					Entries[Entry.UserId] = nil
+				end
+			end
 			Complete(Request, Success, PackedResults)
 
 			if Request.Kind == "Load" and not Success then
-				Entry.Released = true
 				for _, QueuedRequest in Entry.WriteQueue do
 					Complete(QueuedRequest, false, table.pack(false, Entry.LastError))
 				end

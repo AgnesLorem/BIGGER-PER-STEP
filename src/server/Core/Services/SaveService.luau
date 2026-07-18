@@ -224,25 +224,28 @@ function SaveService:LoadProfile(Player: Player): Profile
 		return Profiles.Get(Player.UserId) == RuntimeProfile and RuntimeProfile.OwnerToken == ExpectedOwnerToken
 	end
 	local Request = Profiles.Enqueue(RuntimeProfile, "Load", function()
-		local Now = os.time()
-		local LeaseExpiresAt = Now + SaveConfig.LeaseDurationSeconds
+		local AcquiredLeaseExpiresAt: number? = nil
 		local Loaded = Retry(function()
-			return ProfileStore:UpdateAsync(SaveConfig.ProfileKey(Player.UserId), function(Stored: any)
+			local AttemptNow = os.time()
+			local AttemptLeaseExpiresAt = AttemptNow + SaveConfig.LeaseDurationSeconds
+			local Result = ProfileStore:UpdateAsync(SaveConfig.ProfileKey(Player.UserId), function(Stored: any)
 				if not IsCurrentLoad() then
 					error("SaveService: profile load is no longer current")
 				end
 				local Normalized = PlayerProfileSchema.Normalize(Stored)
 				local Acquired = PlayerProfileSchema.Acquire(
 					Stored,
-					Now,
+					AttemptNow,
 					RuntimeProfile.OwnerToken,
-					LeaseExpiresAt,
+					AttemptLeaseExpiresAt,
 					RuntimeProfile.EntitlementProbe(Normalized)
 				)
 				return Acquired
 			end)
+			AcquiredLeaseExpiresAt = AttemptLeaseExpiresAt
+			return Result
 		end, LoadRetryDelays)
-		RuntimeProfile.LeaseExpiresAt = LeaseExpiresAt
+		RuntimeProfile.LeaseExpiresAt = assert(AcquiredLeaseExpiresAt, "SaveService: acquired lease expiry missing")
 		return Loaded
 	end)
 

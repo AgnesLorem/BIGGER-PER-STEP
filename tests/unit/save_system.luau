@@ -311,24 +311,30 @@ local RejoinedEntry = Profiles.Create(1001, "owner-1001-rejoin", function()
 end)
 Profiles.Remove(1001, RejoinedEntry)
 
-local LoadFailureEntry = Profiles.Create(1004, "owner-1004", function()
-	return 1
-end)
-local LoadFailureRequest = Profiles.Enqueue(LoadFailureEntry, "Load", function()
-	task.wait()
-	error("expected load failure")
-end)
-local QueuedAfterLoadFailure = Profiles.Enqueue(LoadFailureEntry, "Receipt", function()
-	error("must not run after load failure")
-end)
-waitUntil(function()
-	return LoadFailureRequest.Completed and QueuedAfterLoadFailure.Completed
-end, "load failure requests did not complete")
-assert(LoadFailureRequest.Completed == true)
-assert(LoadFailureRequest.Success == false)
-assert(QueuedAfterLoadFailure.Completed == true)
-assert(QueuedAfterLoadFailure.Success == false)
-assert(Profiles.Get(1004) == nil)
+do
+	local LoadFailureEntry = Profiles.Create(1004, "owner-1004", function()
+		return 1
+	end)
+	local FailedEntryRemovedBeforeCompletion = false
+	local LoadFailureRequest = Profiles.Enqueue(LoadFailureEntry, "Load", function()
+		task.wait()
+		error("expected load failure")
+	end, function()
+		FailedEntryRemovedBeforeCompletion = Profiles.Get(1004) == nil
+	end)
+	local QueuedAfterLoadFailure = Profiles.Enqueue(LoadFailureEntry, "Receipt", function()
+		error("must not run after load failure")
+	end)
+	waitUntil(function()
+		return LoadFailureRequest.Completed and QueuedAfterLoadFailure.Completed
+	end, "load failure requests did not complete")
+	assert(LoadFailureRequest.Completed == true)
+	assert(LoadFailureRequest.Success == false)
+	assert(QueuedAfterLoadFailure.Completed == true)
+	assert(QueuedAfterLoadFailure.Success == false)
+	assert(FailedEntryRemovedBeforeCompletion == true)
+	assert(Profiles.Get(1004) == nil)
+end
 
 local FinalFailureEntry = Profiles.Create(1005, "owner-1005", function()
 	return 1
@@ -379,7 +385,8 @@ assert(Profiles.Get(1006) == nil)
 Profiles.Remove(1001, FirstEntry)
 Profiles.Remove(1002, SecondEntry)
 
-local function loadSaveService(StoredProfile)
+local function loadSaveService(StoredProfile, AdvanceClockOnWait)
+	local Clock = 1000
 	local PlayerRemovingCallbacks = {}
 	local Players = {
 		CharacterAutoLoads = true,
@@ -463,6 +470,9 @@ local function loadSaveService(StoredProfile)
 	local FakeTask = { Delays = {} }
 	function FakeTask.wait(Delay)
 		table.insert(FakeTask.Delays, Delay)
+		if AdvanceClockOnWait then
+			Clock += Delay or 0
+		end
 		return Delay or 0
 	end
 
@@ -502,7 +512,7 @@ local function loadSaveService(StoredProfile)
 			task = FakeTask,
 			os = {
 				time = function()
-					return 1000
+					return Clock
 				end,
 			},
 			require = function(Dependency)
@@ -528,6 +538,9 @@ local function loadSaveService(StoredProfile)
 			Players = Players,
 			Scheduler = Scheduler,
 			Store = Store,
+			Clock = function()
+				return Clock
+			end,
 		}
 end
 
@@ -616,6 +629,21 @@ assert(string.find(ForeignLoadError, "unexpired foreign lease", 1, true) ~= nil)
 assert(Foreign.Store.UpdateCalls == 5)
 assert(table.concat(Foreign.FakeTask.Delays, ",") == "1,2,4,8")
 assert(Profiles.Get(2001) == nil)
+
+do
+	local ExpiringForeignProfile = PlayerProfileSchema.Defaults()
+	ExpiringForeignProfile.LeaseOwner = "foreign-server"
+	ExpiringForeignProfile.LeaseExpiresAt = 1002
+	local ExpiringForeignSaveService, ExpiringForeign = loadSaveService(ExpiringForeignProfile, true)
+	ExpiringForeignSaveService:Init()
+	local ExpiringForeignLoaded = ExpiringForeignSaveService:LoadProfile(ExpiringForeign.Player)
+	assert(ExpiringForeign.Store.UpdateCalls == 3)
+	assert(table.concat(ExpiringForeign.FakeTask.Delays, ",") == "1,2")
+	assert(ExpiringForeign.Clock() == 1003)
+	assert(ExpiringForeignLoaded.LeaseExpiresAt == 1183)
+	local ExpiringForeignEntry = assert(Profiles.Get(2001))
+	Profiles.Remove(2001, ExpiringForeignEntry)
+end
 
 local StaleSuccessSaveService, StaleSuccess = loadSaveService(nil)
 StaleSuccessSaveService:Init()
@@ -1063,7 +1091,15 @@ local function childContainer(Children)
 end
 
 local function loadConfigValidationService(Rewards)
-	local RewardType = { Bigger = "Bigger" }
+	local RewardType = {
+		Bigger = "Bigger",
+		Coins = "Coins",
+		Aura = "Aura",
+		Boost = "Boost",
+		Item = "Item",
+		DoubleMultiplier = "DoubleMultiplier",
+		Vip = "Vip",
+	}
 	local ShopUIConfig = {
 		TestProduct = { ProductId = 1234 },
 	}
@@ -1125,6 +1161,14 @@ expectError(function()
 		{ Type = "Bigger", Amount = 20 },
 	})
 end)
+expectError(function()
+	bootProductConfig({ { Type = "Coins", Amount = 10 } })
+end)
+for _, InvalidAmount in { 0 / 0, math.huge, 1.5, 9007199254740992 } do
+	expectError(function()
+		bootProductConfig({ { Type = "Bigger", Amount = InvalidAmount } })
+	end)
+end
 assert(ReceiptRegistrationCount == 1)
 
 local ConfigValidationBootIndex = assert(string.find(BootstrapSource, '{ Name = "ConfigValidationService"', 1, true))

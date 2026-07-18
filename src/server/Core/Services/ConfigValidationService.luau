@@ -17,6 +17,12 @@ local RewardType = require(
 )
 
 local ConfigValidationService = {}
+local MaximumSafeInteger = 9007199254740991
+local SupportedDeveloperProductRewards = table.freeze({
+	[RewardType.Bigger] = true,
+	[RewardType.DoubleMultiplier] = true,
+	[RewardType.Vip] = true,
+})
 
 function ConfigValidationService:Init()
 	Logger.Info("ConfigValidation", "Starting configuration consistency checks...")
@@ -129,17 +135,26 @@ function ConfigValidationService:Init()
 						.. productKey
 				)
 			end
+			if not SupportedDeveloperProductRewards[rType] then
+				error("ConfigValidation: Unsupported Developer Product RewardType: " .. rType)
+			end
 
-			-- Check specific reward configurations (e.g. Bigger needs Amount)
-			if rType == RewardType.Bigger or rType == RewardType.Coins then
+			if rType == RewardType.Bigger then
 				local amount = reward.Amount
-				if not amount or typeof(amount) ~= "number" or amount <= 0 then
+				if
+					type(amount) ~= "number"
+					or amount ~= amount
+					or amount <= 0
+					or amount >= math.huge
+					or amount % 1 ~= 0
+					or amount > MaximumSafeInteger
+				then
 					error(
 						"ConfigValidation: Reward index "
 							.. i
 							.. " for ProductKey "
 							.. productKey
-							.. " must have an Amount > 0. Got: "
+							.. " must have a positive safe integer Amount. Got: "
 							.. tostring(amount)
 					)
 				end
