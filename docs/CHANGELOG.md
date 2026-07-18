@@ -4,6 +4,16 @@ This changelog tracks gameplay-facing changes, features, balancing iterations, a
 
 ---
 
+## [Unreleased: MVP-005] - 2026-07-18
+
+### Approved Scope
+- Approved the WORLD1 objective popup, post-stomp reward selection, one portal-only 29 Robux triple-reward Developer Product, VIP and Premium Zone Game Pass ownership, seven AFK zones, and fractional growth accumulation.
+- Removed the earlier VIP-discounted 19 Robux Developer Product proposal; VIP retains its tag and global growth x2 but receives no paid-portal discount.
+
+### Release Boundary
+- Runtime IDs must be real and recorded after user-approved thumbnail preflight; fake IDs are prohibited.
+- Studio monetization evidence is synthetic unless private staging is separately authorized. Production publication is not authorized.
+
 ## [v0.0.4] - 2026-07-17
 
 ### Added
