@@ -23,6 +23,14 @@ local function dictionary(Prefix, Count)
 	return Result
 end
 
+local function waitUntil(Predicate, Message)
+	local Deadline = os.clock() + 1
+	while not Predicate() and os.clock() < Deadline do
+		task.wait()
+	end
+	assert(Predicate(), Message)
+end
+
 local Defaults = PlayerProfileSchema.Defaults()
 assert(Defaults.SchemaVersion == 1)
 assert(Defaults.Bigger == 1)
@@ -164,6 +172,11 @@ local ReceiptRequest = Profiles.Enqueue(FirstEntry, "Receipt", function()
 	return "durable"
 end)
 assert(await(LoadRequest) == "loaded")
+expectError(function()
+	Profiles.Create(1001, "active-duplicate", function()
+		return 1
+	end)
+end)
 assert(await(ReceiptRequest) == "durable")
 assert(table.concat(Order, ",") == "load,receipt")
 
@@ -308,7 +321,9 @@ end)
 local QueuedAfterLoadFailure = Profiles.Enqueue(LoadFailureEntry, "Receipt", function()
 	error("must not run after load failure")
 end)
-task.wait(0.05)
+waitUntil(function()
+	return LoadFailureRequest.Completed and QueuedAfterLoadFailure.Completed
+end, "load failure requests did not complete")
 assert(LoadFailureRequest.Completed == true)
 assert(LoadFailureRequest.Success == false)
 assert(QueuedAfterLoadFailure.Completed == true)
@@ -353,7 +368,9 @@ local FinalB = Profiles.Enqueue(MultipleFinalEntry, "Final", function()
 	return "shutdown"
 end)
 assert(FinalA ~= FinalB)
-task.wait(0.05)
+waitUntil(function()
+	return FinalA.Completed and FinalB.Completed
+end, "final requests did not complete")
 assert(FinalA.Completed == true)
 assert(FinalB.Completed == true)
 assert(FinalRuns == 2)
@@ -383,6 +400,7 @@ local function loadSaveService(StoredProfile)
 		FailWrites = 0,
 		ApparentErrors = 0,
 		BeforeUpdate = nil,
+		AfterUpdate = nil,
 	}
 	function Store:UpdateAsync(Key, Transform)
 		self.UpdateCalls += 1
@@ -398,6 +416,11 @@ local function loadSaveService(StoredProfile)
 		local Updated = Transform(self.Data[Key])
 		if Updated ~= nil then
 			self.Data[Key] = Updated
+		end
+		if self.AfterUpdate then
+			local Callback = self.AfterUpdate
+			self.AfterUpdate = nil
+			Callback()
 		end
 		if self.ApparentErrors > 0 then
 			self.ApparentErrors -= 1
@@ -594,6 +617,49 @@ assert(Foreign.Store.UpdateCalls == 5)
 assert(table.concat(Foreign.FakeTask.Delays, ",") == "1,2,4,8")
 assert(Profiles.Get(2001) == nil)
 
+local StaleSuccessSaveService, StaleSuccess = loadSaveService(nil)
+StaleSuccessSaveService:Init()
+local StaleSuccessReplacement
+StaleSuccess.Store.AfterUpdate = function()
+	local OldEntry = assert(Profiles.Get(2001))
+	assert(Profiles.Remove(2001, OldEntry) == true)
+	StaleSuccessReplacement = Profiles.Create(2001, "replacement-owner", function()
+		return 1
+	end)
+end
+assert(pcall(StaleSuccessSaveService.LoadProfile, StaleSuccessSaveService, StaleSuccess.Player) == false)
+assert(Profiles.Get(2001) == StaleSuccessReplacement)
+assert(Sessions.Get(StaleSuccess.Player) == nil)
+Profiles.Remove(2001, StaleSuccessReplacement)
+
+local StaleFailureSaveService, StaleFailure = loadSaveService(nil)
+StaleFailureSaveService:Init()
+local StaleFailureReplacement
+StaleFailure.Store.FailWrites = 5
+StaleFailure.Store.BeforeUpdate = function()
+	local OldEntry = assert(Profiles.Get(2001))
+	assert(Profiles.Remove(2001, OldEntry) == true)
+	StaleFailureReplacement = Profiles.Create(2001, "newer-owner", function()
+		return 1
+	end)
+end
+assert(pcall(StaleFailureSaveService.LoadProfile, StaleFailureSaveService, StaleFailure.Player) == false)
+assert(Profiles.Get(2001) == StaleFailureReplacement)
+assert(Sessions.Get(StaleFailure.Player) == nil)
+Profiles.Remove(2001, StaleFailureReplacement)
+
+local WrongLoadOwnerSaveService, WrongLoadOwner = loadSaveService(nil)
+WrongLoadOwnerSaveService:Init()
+WrongLoadOwner.Store.AfterUpdate = function()
+	assert(Profiles.Get(2001)).OwnerToken = "stale-owner"
+end
+assert(pcall(WrongLoadOwnerSaveService.LoadProfile, WrongLoadOwnerSaveService, WrongLoadOwner.Player) == false)
+assert(Sessions.Get(WrongLoadOwner.Player) == nil)
+local WrongLoadOwnerEntry = Profiles.Get(2001)
+if WrongLoadOwnerEntry then
+	Profiles.Remove(2001, WrongLoadOwnerEntry)
+end
+
 local OwnershipSaveService, Ownership = loadSaveService(nil)
 OwnershipSaveService:Init()
 local OwnershipProfile = OwnershipSaveService:LoadProfile(Ownership.Player)
@@ -618,6 +684,7 @@ local function loadSessionService()
 	local AddedCallbacks = {}
 	local RemovingCallbacks = {}
 	local Players = {
+		Players = {},
 		PlayerAdded = {
 			Connect = function(_, Callback)
 				table.insert(AddedCallbacks, Callback)
@@ -630,18 +697,34 @@ local function loadSessionService()
 		},
 	}
 	function Players:GetPlayers()
-		return {}
+		return self.Players
 	end
 
 	local SaveService = {
 		FailLoad = false,
+		LoadBlocked = false,
+		LoadCalls = 0,
 		ReleaseSawSession = false,
 	}
-	function SaveService:LoadProfile()
-		if self.FailLoad then
-			error("expected controlled load failure")
+	function SaveService:LoadProfile(Player)
+		self.LoadCalls += 1
+		local Entry = Profiles.Create(Player.UserId, "session-owner", function()
+			return 1
+		end)
+		local Request = Profiles.Enqueue(Entry, "Load", function()
+			while self.LoadBlocked do
+				task.wait()
+			end
+			if self.FailLoad then
+				error("expected controlled load failure")
+			end
+			return PlayerProfileSchema.Defaults()
+		end)
+		local Success, Result = Profiles.Await(Request)
+		if not Success then
+			error(Result)
 		end
-		return PlayerProfileSchema.Defaults()
+		return Result
 	end
 	function SaveService:FreezeMutations(Player)
 		local Session = Sessions.Get(Player)
@@ -652,10 +735,17 @@ local function loadSessionService()
 	end
 	function SaveService:ReleaseProfile(Player)
 		self.ReleaseSawSession = Sessions.Get(Player) ~= nil
+		local Entry = Profiles.Get(Player.UserId)
+		if Entry then
+			Profiles.Remove(Player.UserId, Entry)
+		end
 		return true
 	end
 
-	local EventBus = { Publish = function() end }
+	local EventBus = { Published = {} }
+	function EventBus.Publish(Name)
+		EventBus.Published[Name] = (EventBus.Published[Name] or 0) + 1
+	end
 	local GrowthService = { UpdateMultiplierAttribute = function() end }
 	local Logger = { Info = function() end, Warn = function() end }
 	local ServicesFolder = { SaveService = SaveService, GrowthService = GrowthService }
@@ -707,6 +797,7 @@ local function loadSessionService()
 		Attributes = {},
 		Kicked = nil,
 		LoadCharacterCalls = 0,
+		Parent = Players,
 	}
 	function Player:SetAttribute(Key, Value)
 		self.Attributes[Key] = Value
@@ -720,11 +811,14 @@ local function loadSessionService()
 	function Player:FindFirstChild()
 		return nil
 	end
+	Players.Players = { Player }
 
 	return Chunk(),
 		{
 			AddedCallbacks = AddedCallbacks,
+			EventBus = EventBus,
 			Player = Player,
+			Players = Players,
 			RemovingCallbacks = RemovingCallbacks,
 			SaveService = SaveService,
 		}
@@ -753,6 +847,41 @@ assert(SessionLifecycle.Player.LoadCharacterCalls == 1)
 SessionLifecycle.RemovingCallbacks[1](SessionLifecycle.Player)
 assert(SessionLifecycle.SaveService.ReleaseSawSession == true)
 assert(Sessions.Get(SessionLifecycle.Player) == nil)
+
+local ConcurrentSessionService, ConcurrentSession = loadSessionService()
+ConcurrentSessionService:Init()
+ConcurrentSession.SaveService.LoadBlocked = true
+task.spawn(ConcurrentSession.AddedCallbacks[1], ConcurrentSession.Player)
+waitUntil(function()
+	return ConcurrentSession.SaveService.LoadCalls == 1 and Profiles.Get(ConcurrentSession.Player.UserId) ~= nil
+end, "first concurrent load did not start")
+ConcurrentSession.AddedCallbacks[1](ConcurrentSession.Player)
+local ConcurrentLoadCalls = ConcurrentSession.SaveService.LoadCalls
+ConcurrentSession.SaveService.LoadBlocked = false
+waitUntil(function()
+	return Sessions.Get(ConcurrentSession.Player) ~= nil
+end, "valid concurrent load did not create a session")
+assert(ConcurrentLoadCalls == 1)
+assert(ConcurrentSession.EventBus.Published.PlayerSessionCreated == 1)
+assert(ConcurrentSession.Player.LoadCharacterCalls == 1)
+ConcurrentSession.RemovingCallbacks[1](ConcurrentSession.Player)
+
+local DisconnectedSessionService, DisconnectedSession = loadSessionService()
+DisconnectedSessionService:Init()
+DisconnectedSession.SaveService.LoadBlocked = true
+task.spawn(DisconnectedSession.AddedCallbacks[1], DisconnectedSession.Player)
+waitUntil(function()
+	return DisconnectedSession.SaveService.LoadCalls == 1
+end, "disconnected load did not start")
+DisconnectedSession.Player.Parent = nil
+DisconnectedSession.Players.Players = {}
+DisconnectedSession.SaveService.LoadBlocked = false
+waitUntil(function()
+	return DisconnectedSession.SaveService.ReleaseSawSession
+end, "disconnected profile was not released")
+assert(Sessions.Get(DisconnectedSession.Player) == nil)
+assert(DisconnectedSession.EventBus.Published.PlayerSessionCreated == nil)
+assert(DisconnectedSession.Player.LoadCharacterCalls == 0)
 
 local function loadShutdownSessionService(BlockedUserId)
 	local ShutdownCallbacks = {}
@@ -914,7 +1043,9 @@ assert(string.find(Diagnostics, "Releasing", 1, true) ~= nil)
 assert(string.find(Diagnostics, "queue=2", 1, true) ~= nil)
 assert(string.find(Diagnostics, "blocked write", 1, true) ~= nil)
 BlockedShutdown.SetReleaseBlocked(false)
-task.wait(0.05)
+waitUntil(function()
+	return BlockedShutdown.SaveService.ActiveReleases == 0
+end, "blocked shutdown release did not finish")
 for _, Player in BlockedShutdown.Players.Players do
 	Sessions.Remove(Player)
 end
@@ -923,6 +1054,153 @@ local BootstrapSource = fs.readFile("src/server/Core/Bootstrap/CoreBootstrap.lua
 local SaveBootIndex = assert(string.find(BootstrapSource, '{ Name = "SaveService"', 1, true))
 local SessionBootIndex = assert(string.find(BootstrapSource, '{ Name = "SessionService"', 1, true))
 assert(SaveBootIndex < SessionBootIndex)
+
+local function childContainer(Children)
+	function Children:WaitForChild(Name)
+		return assert(self[Name], "missing child " .. Name)
+	end
+	return Children
+end
+
+local function loadConfigValidationService(Rewards)
+	local RewardType = { Bigger = "Bigger" }
+	local ShopUIConfig = {
+		TestProduct = { ProductId = 1234 },
+	}
+	local DeveloperProductConfig = {
+		TestProduct = {
+			ProductId = 1234,
+			Rewards = Rewards,
+			AnalyticsKey = "Test_Product",
+		},
+	}
+	local ReplicatedStorage = childContainer({
+		BiggerShared = childContainer({
+			Core = childContainer({
+				Config = childContainer({ ShopUIConfig = ShopUIConfig }),
+				Enums = childContainer({ RewardType = RewardType }),
+			}),
+		}),
+	})
+	local CoreFolder = {
+		Config = { DeveloperProductConfig = DeveloperProductConfig },
+		Utilities = { Logger = { Info = function() end } },
+	}
+	local ServicesFolder = { Parent = CoreFolder }
+	local Game = {}
+	function Game:GetService(Name)
+		assert(Name == "ReplicatedStorage")
+		return ReplicatedStorage
+	end
+
+	local Source = fs.readFile("src/server/Core/Services/ConfigValidationService.luau")
+	local Chunk = luau.load(Source, "ConfigValidationService")
+	setfenv(
+		Chunk,
+		setmetatable({
+			game = Game,
+			script = { Parent = ServicesFolder },
+			require = function(Dependency)
+				return Dependency
+			end,
+		}, { __index = getfenv() })
+	)
+	return Chunk()
+end
+
+local ReceiptRegistrationCount = 0
+local function bootProductConfig(Rewards)
+	loadConfigValidationService(Rewards):Init()
+	ReceiptRegistrationCount += 1
+end
+
+bootProductConfig({ { Type = "Bigger", Amount = 10 } })
+assert(ReceiptRegistrationCount == 1)
+expectError(function()
+	bootProductConfig({})
+end)
+expectError(function()
+	bootProductConfig({
+		{ Type = "Bigger", Amount = 10 },
+		{ Type = "Bigger", Amount = 20 },
+	})
+end)
+assert(ReceiptRegistrationCount == 1)
+
+local ConfigValidationBootIndex = assert(string.find(BootstrapSource, '{ Name = "ConfigValidationService"', 1, true))
+local ReceiptProcessingBootIndex = assert(string.find(BootstrapSource, '{ Name = "ReceiptProcessingService"', 1, true))
+assert(ConfigValidationBootIndex < ReceiptProcessingBootIndex)
+
+local function loadRewardDispatcher(GrowthService)
+	local RewardType = {
+		Bigger = "Bigger",
+		Coins = "Coins",
+		Aura = "Aura",
+		Boost = "Boost",
+		Item = "Item",
+		DoubleMultiplier = "DoubleMultiplier",
+		Vip = "Vip",
+	}
+	local RewardError = {
+		UnknownReward = "UnknownReward",
+		DispatcherFailed = "DispatcherFailed",
+	}
+	local ReplicatedStorage = childContainer({
+		BiggerShared = childContainer({
+			Core = childContainer({
+				Enums = childContainer({ RewardType = RewardType, RewardError = RewardError }),
+			}),
+		}),
+	})
+	local ServiceRegistry = {}
+	function ServiceRegistry.Get(Name)
+		return if Name == "GrowthService" then GrowthService else nil
+	end
+	local CoreFolder = {
+		Registry = {
+			ServiceRegistry = ServiceRegistry,
+			RuntimeRegistry = { Sessions = Sessions },
+		},
+	}
+	local UtilitiesFolder = { Parent = CoreFolder }
+	local Game = {}
+	function Game:GetService(Name)
+		assert(Name == "ReplicatedStorage")
+		return ReplicatedStorage
+	end
+
+	local Source = fs.readFile("src/server/Core/Utilities/RewardDispatcher.luau")
+	local Chunk = luau.load(Source, "RewardDispatcher")
+	setfenv(
+		Chunk,
+		setmetatable({
+			game = Game,
+			script = { Parent = UtilitiesFolder },
+			require = function(Dependency)
+				return Dependency
+			end,
+		}, { __index = getfenv() })
+	)
+	return Chunk()
+end
+
+local PresentationFailurePlayer = { UserId = 4010, Name = "PresentationFailurePlayer" }
+local PresentationFailureSession = sessionFromProfile(PresentationFailurePlayer, PlayerProfileSchema.Defaults())
+Sessions.Set(PresentationFailurePlayer, PresentationFailureSession)
+local PresentationFailureGrowthService = {}
+function PresentationFailureGrowthService:AddBiggerAbsolute(Player, Amount)
+	Sessions.Mutate(Player, function(Session)
+		Session.Bigger += Amount
+	end)
+	error("expected presentation failure")
+end
+local PresentationFailureDispatcher = loadRewardDispatcher(PresentationFailureGrowthService)
+local PresentationFailureResult = PresentationFailureDispatcher.Dispatch(PresentationFailurePlayer, {
+	{ Type = "Bigger", Amount = 10 },
+})
+assert(PresentationFailureResult.Success == true)
+assert(PresentationFailureSession.Bigger == 11)
+Sessions.Remove(PresentationFailurePlayer)
 
 local FrozenPlayer = { UserId = 4001, Name = "FrozenPlayer" }
 local FrozenProfile = PlayerProfileSchema.Defaults()
@@ -1165,7 +1443,9 @@ task.spawn(function()
 end)
 task.wait()
 ReleaseBlocked = false
-task.wait(0.05)
+waitUntil(function()
+	return ReleaseResults[1] ~= nil and ReleaseResults[2] ~= nil
+end, "repeated releases did not finish")
 assert(ReleaseResults[1] == true)
 assert(ReleaseResults[2] == true)
 assert(RepeatedRelease.Store.UpdateCalls == 2)
@@ -1199,7 +1479,9 @@ task.wait()
 assert(ReceiptThenReleaseEntry.ActiveRequest.Kind == "Receipt")
 assert(ReceiptThenReleaseEntry.WriteQueue[1].Kind == "Final")
 ReceiptWriteBlocked = false
-task.wait(0.05)
+waitUntil(function()
+	return ReceiptCommitResult ~= nil and ReceiptReleaseResult ~= nil
+end, "receipt and release did not finish")
 assert(ReceiptCommitResult == true)
 assert(ReceiptReleaseResult == true)
 assert(ReceiptThenRelease.Store.UpdateCalls == 3)

@@ -110,8 +110,13 @@ function ConfigValidationService:Init()
 
 		-- Check Rewards
 		local rewards = serverConfig.Rewards
-		if not rewards or typeof(rewards) ~= "table" or #rewards == 0 then
-			error("ConfigValidation: Empty or missing Rewards list for ProductKey: " .. productKey)
+		if typeof(rewards) ~= "table" or #rewards ~= 1 then
+			error(
+				"ConfigValidation: ProductKey "
+					.. productKey
+					.. " must contain exactly one reward. Got: "
+					.. tostring(if typeof(rewards) == "table" then #rewards else nil)
+			)
 		end
 
 		for i, reward in ipairs(rewards) do

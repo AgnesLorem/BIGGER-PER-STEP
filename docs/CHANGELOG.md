@@ -12,7 +12,7 @@ This changelog tracks gameplay-facing changes, features, balancing iterations, a
 - Added mutation freezing across authoritative profile mutation paths and a five-stage Studio persistence harness.
 
 ### Verification
-- Passed movement, stomp, and save-system Lune suites, full-tree StyLua, source Selene, and Rojo build.
+- Passed movement, stomp, and save-system Lune suites, StyLua checks for `src` and `tests`, source Selene, and Rojo build.
 - Passed five Studio-scope runs covering defaults, autosave, restoration, exact-once offline claims, mutation freeze, and final lease release.
 - The pre-existing `GuiController` wait for `MainHUD.LeftSidebar` still warns during Play Solo and is outside the persistence change.
 

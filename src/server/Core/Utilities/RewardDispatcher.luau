@@ -41,8 +41,17 @@ local Handlers = table.freeze({
 		if not GrowthService then
 			return false
 		end
-		GrowthService:AddBiggerAbsolute(Player, Reward.Amount or 0)
-		return true
+		local Session = Sessions.Get(Player)
+		if not Session then
+			return false
+		end
+		local ExpectedBigger = math.floor(Session.Bigger + (Reward.Amount or 0))
+		local Called, Applied = pcall(GrowthService.AddBiggerAbsolute, GrowthService, Player, Reward.Amount or 0)
+		if Called then
+			return Applied == true
+		end
+		local CurrentSession = Sessions.Get(Player)
+		return CurrentSession ~= nil and CurrentSession.Bigger == ExpectedBigger
 	end,
 
 	-- Stub handlers for other reward types (for extensibility)
@@ -64,10 +73,12 @@ local Handlers = table.freeze({
 			Session.HasDoubleMultiplier = true
 		end)
 		if Mutated then
-			local GrowthService = GetGrowthService()
-			if GrowthService then
-				GrowthService:UpdateMultiplierAttribute(Player)
-			end
+			pcall(function()
+				local GrowthService = GetGrowthService()
+				if GrowthService then
+					GrowthService:UpdateMultiplierAttribute(Player)
+				end
+			end)
 		end
 		return Mutated
 	end,
@@ -76,14 +87,16 @@ local Handlers = table.freeze({
 			Session.HasVip = true
 		end)
 		if Mutated then
-			local GrowthService = GetGrowthService()
-			if GrowthService then
-				GrowthService:UpdateMultiplierAttribute(Player)
-			end
-			local CharacterScaleService = ServiceRegistry.Get("CharacterScaleService")
-			if CharacterScaleService then
-				CharacterScaleService:UpdateVipTag(Player)
-			end
+			pcall(function()
+				local GrowthService = GetGrowthService()
+				if GrowthService then
+					GrowthService:UpdateMultiplierAttribute(Player)
+				end
+				local CharacterScaleService = ServiceRegistry.Get("CharacterScaleService")
+				if CharacterScaleService then
+					CharacterScaleService:UpdateVipTag(Player)
+				end
+			end)
 		end
 		return Mutated
 	end,

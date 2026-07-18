@@ -219,11 +219,18 @@ function SaveService:LoadProfile(Player: Player): Profile
 		local Multiplier = if Profile.HasDoubleMultiplier then 2 else 1
 		return if Profile.HasVip then Multiplier * 2 else Multiplier
 	end)
+	local ExpectedOwnerToken = RuntimeProfile.OwnerToken
+	local function IsCurrentLoad(): boolean
+		return Profiles.Get(Player.UserId) == RuntimeProfile and RuntimeProfile.OwnerToken == ExpectedOwnerToken
+	end
 	local Request = Profiles.Enqueue(RuntimeProfile, "Load", function()
 		local Now = os.time()
 		local LeaseExpiresAt = Now + SaveConfig.LeaseDurationSeconds
 		local Loaded = Retry(function()
 			return ProfileStore:UpdateAsync(SaveConfig.ProfileKey(Player.UserId), function(Stored: any)
+				if not IsCurrentLoad() then
+					error("SaveService: profile load is no longer current")
+				end
 				local Normalized = PlayerProfileSchema.Normalize(Stored)
 				local Acquired = PlayerProfileSchema.Acquire(
 					Stored,
@@ -245,6 +252,9 @@ function SaveService:LoadProfile(Player: Player): Profile
 			string.format("SaveService: failed to load profile for UserId %d: %s", Player.UserId, tostring(Result)),
 			2
 		)
+	end
+	if not IsCurrentLoad() or RuntimeProfile.Phase ~= "Active" then
+		error(string.format("SaveService: stale profile load completed for UserId %d", Player.UserId), 2)
 	end
 	return Result
 end

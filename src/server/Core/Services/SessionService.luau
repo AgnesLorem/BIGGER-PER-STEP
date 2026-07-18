@@ -22,6 +22,7 @@ local AllowedTransitions: { [string]: { [string]: boolean } } = table.freeze({
 	Returning = table.freeze({}),
 })
 local ShutdownStarted = false
+local LoadingPlayers: { [Player]: {} } = {}
 
 --// Helpers \\--
 local function CreateLeaderstats(Player: Player, Session: Session)
@@ -48,16 +49,33 @@ local function ClearObjectiveAttributes(Player: Player)
 	Player:SetAttribute("ObjectiveReward", nil)
 end
 
+local FinalizePlayer: (Player, string) -> boolean
+
 local function OnPlayerAdded(Player: Player)
-	if Sessions.Get(Player) then
+	if Sessions.Get(Player) or LoadingPlayers[Player] then
 		return
 	end
+	local LoadToken = {}
+	LoadingPlayers[Player] = LoadToken
 	local Loaded, Profile = pcall(SaveService.LoadProfile, SaveService, Player)
+	if LoadingPlayers[Player] ~= LoadToken then
+		return
+	end
 	if not Loaded then
+		LoadingPlayers[Player] = nil
 		Logger.Warn("Session", "Profile load failed for %s: %s", Player.Name, tostring(Profile))
+		if Sessions.Get(Player) or Profiles.Get(Player.UserId) then
+			return
+		end
 		Player:Kick("Your data could not be loaded safely. Please rejoin.")
 		return
 	end
+	local RuntimeProfile = Profiles.Get(Player.UserId)
+	if not RuntimeProfile or RuntimeProfile.Phase ~= "Active" then
+		LoadingPlayers[Player] = nil
+		return
+	end
+	local ExpectedOwnerToken = RuntimeProfile.OwnerToken
 	local Session: Session = {
 		Player = Player,
 		Bigger = Profile.Bigger,
@@ -80,7 +98,23 @@ local function OnPlayerAdded(Player: Player)
 		ProfileMutationFreezeReason = nil,
 	}
 
+	if
+		LoadingPlayers[Player] ~= LoadToken
+		or Profiles.Get(Player.UserId) ~= RuntimeProfile
+		or RuntimeProfile.OwnerToken ~= ExpectedOwnerToken
+		or RuntimeProfile.Phase ~= "Active"
+	then
+		if LoadingPlayers[Player] == LoadToken then
+			LoadingPlayers[Player] = nil
+		end
+		return
+	end
 	Sessions.Set(Player, Session)
+	LoadingPlayers[Player] = nil
+	if Player.Parent ~= Players then
+		FinalizePlayer(Player, "DisconnectedDuringLoad")
+		return
+	end
 	CreateLeaderstats(Player, Session)
 	Player:SetAttribute("Bigger", Session.Bigger)
 	Player:SetAttribute("Destruction", Session.Destruction)
@@ -94,7 +128,7 @@ local function OnPlayerAdded(Player: Player)
 	Player:LoadCharacter()
 end
 
-local function FinalizePlayer(Player: Player, Reason: string): boolean
+FinalizePlayer = function(Player: Player, Reason: string): boolean
 	if not Sessions.Get(Player) then
 		return true
 	end
