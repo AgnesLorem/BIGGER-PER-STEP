@@ -4,17 +4,15 @@
 
 **Goal:** Persist authoritative Bigger player sessions safely with native Roblox DataStores, serialized per-player writes, atomic offline growth, and durable receipt idempotency.
 
-**Architecture:** `PlayerProfileSchema` owns pure validation and transforms; `RuntimeRegistry.Profiles` owns one FIFO worker per UserId; `SaveService` is the only DataStore caller and snapshots authoritative sessions. Monetization-specific source remains absent until real staging and Game Pass assets exist.
+**Architecture:** `PlayerProfileSchema` owns pure validation and transforms; `RuntimeRegistry.Profiles` owns one FIFO worker per UserId; `SaveService` is the only DataStore caller and snapshots authoritative sessions. Game Pass monetization is outside this milestone.
 
 **Tech Stack:** Roblox DataStoreService, UpdateAsync, typed Luau, Lune 0.10.5, Rojo 7.4.4, StyLua 2.0.2, Selene 0.27.1, Git.
 
 ## Global Constraints
 
 ```text
-PLANNING: APPROVED
-SOURCE: APPROVED WITHIN EXACT SCOPE
-MONETIZATION: BLOCKED PENDING PRIVATE STAGING PLACE,
-AUTHORIZED THUMBNAILS, AND REAL GAME PASS ASSET IDS
+MVP004_SAVE_SYSTEM: READY FOR REVIEW
+GAME_PASS_MONETIZATION: DEFERRED TO A FUTURE MVP
 ```
 
 - Work only on `feat/mvp-004-data-store`, created from verified `origin/main` after MVP-003 merge commit `5367ecd`.
@@ -23,7 +21,7 @@ AUTHORIZED THUMBNAILS, AND REAL GAME PASS ASSET IDS
 - Keep `Sessions` as the only mutable gameplay source of truth.
 - Store at most 5,000 processed IDs; admit receipts only while durable plus runtime-pending is at most 5,000.
 - Never store `PendingPurchaseIds` as a profile field.
-- Do not create monetization config or implementation with fake external values.
+- Keep forward-compatible entitlement booleans, but do not create Game Pass config or implementation with fake external values.
 - Use TDD: write and run a failing test before each production behavior.
 - Stop before editing any path outside the approved scope.
 - Push only `feat/mvp-004-data-store`; never force-push or push directly to `main`.
@@ -308,7 +306,7 @@ In Edit mode, mirror every changed local source into its original Studio object,
 
 - [ ] **Step 4: Record evidence and commit**
 
-Record exact commands, results, commits, parity evidence, Studio runs, remaining external blockers, and a non-monetization release decision.
+Record exact commands, results, commits, parity evidence, Studio runs, deferred future work, and the save-system release decision.
 
 ```powershell
 git add tests/studio/save_system.luau docs/SAVE.md docs/TASKS.md docs/CHANGELOG.md docs/examples/PlayerProfileExample.md docs/superpowers/reports/mvp-003/README.md docs/superpowers/reports/mvp-003/2026-07-17-mvp-004-audit.md
@@ -318,14 +316,14 @@ git push origin feat/mvp-004-data-store
 
 ---
 
-### Task 8: Externally Gated Game Pass Work
+### Deferred Future MVP: Game Pass Monetization
 
-Do not begin until the real private staging PlaceId, authorized thumbnail source, 2X Game Pass Asset ID, and VIP Game Pass Asset ID are recorded. No blocked file or section may be created with a temporary value.
+This is not an MVP-004 task or completion gate. A separate approved milestone may begin only after the real private staging PlaceId, authorized thumbnail source, 2X Game Pass Asset ID, and VIP Game Pass Asset ID are recorded. No file or section may be created with a temporary value.
 
 After the gate clears, use TDD for ownership true/false/error, successful-false revocation, post-prompt immediate plus `1, 2, 4` re-query, verified-only grant, 2x/4x, VIP presentation, configuration mismatches, and forced durable save. Commit as:
 
 ```text
-feat(mvp-004): persist verified game pass ownership
+feat(monetization): persist verified game pass ownership
 ```
 
 Publish and test only the private staging place. Never publish the original production place.

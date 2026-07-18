@@ -16,8 +16,9 @@ This changelog tracks gameplay-facing changes, features, balancing iterations, a
 - Passed five Studio-scope runs covering defaults, autosave, restoration, exact-once offline claims, mutation freeze, and final lease release.
 - The pre-existing `GuiController` wait for `MainHUD.LeftSidebar` still warns during Play Solo and is outside the persistence change.
 
-### Blocked
-- Private staging and Game Pass ownership remain blocked pending a real staging PlaceId, an authorized thumbnail source, and real 2X/VIP Game Pass Asset IDs. No production place was published.
+### Scope
+- MVP-004 completion is limited to the native server-authoritative save system; durable Developer Product receipt processing remains included and verified.
+- Game Pass creation, ownership reconciliation, prompting, private staging, and real-purchase QA are deferred to a future MVP. Placeholder entitlement products were removed from active runtime and shop configuration. No production place was published.
 
 ## [v0.0.3] - 2026-07-16
 

@@ -3,13 +3,13 @@
 ## Status and Boundaries
 
 ```text
-PLANNING: APPROVED
-SOURCE: APPROVED WITHIN EXACT SCOPE
-MONETIZATION: BLOCKED PENDING PRIVATE STAGING PLACE,
-AUTHORIZED THUMBNAILS, AND REAL GAME PASS ASSET IDS
+MVP004_SAVE_SYSTEM: READY FOR REVIEW
+GAME_PASS_MONETIZATION: DEFERRED TO A FUTURE MVP
 ```
 
 MVP-004 uses Roblox native `DataStoreService` and `UpdateAsync`. It adds no dependency, HTTP capability, remote, client authority, or production publication. Server sessions remain the sole mutable gameplay source of truth.
+
+MVP-004 completion scope is limited to the native server-authoritative DataStore save system. Game Pass creation, ownership reconciliation, purchase prompting, private-staging setup, and real Game Pass purchase QA are deferred to a separate future approved milestone. Developer Product receipt durability remains part of MVP-004 and has been implemented and verified.
 
 MVP-003 was merged through PR #1 as merge commit `5367ecd`. Future merge gates accept normal ancestry or equivalent squash/rebase evidence proven through PR history, changed paths, tests, documentation, and audit records.
 
@@ -22,7 +22,7 @@ MVP-003 was merged through PR #1 as merge commit `5367ecd`. Future merge gates a
 - `SessionService`: coordinates load failure, session creation, PlayerRemoving freeze/release, and removal after final handling.
 - `ReceiptProcessingService`: validates receipts, controls pending/durable admission, dispatches each new reward once, and returns `PurchaseGranted` only after durability.
 - Existing mutation services: reject changes after freeze.
-- Game Pass config, prompting, ownership queries, and staging QA remain externally blocked and receive no placeholder implementation.
+- Game Pass config, prompting, ownership queries, and staging QA belong to a separate future MVP and receive no placeholder implementation here.
 
 ## Data Identity and Schema
 
@@ -117,12 +117,12 @@ After success, only included IDs are promoted and all included waiting receipt c
 
 Stored validation permits at most 5,000 `ProcessedPurchaseIds`. Runtime admission separately permits at most 5,000 durable plus pending IDs. A receipt at capacity is not dispatched and returns `NotProcessedYet`, while a durable duplicate still returns success.
 
-## Monetization Boundary
+## Deferred Monetization Boundary
 
-The current entitlement prototypes remain unchanged until external prerequisites exist. Non-monetization persistence may store and restore existing boolean entitlement values, but no Game Pass ID, staging mapping, purchase prompt, ownership query, or Game Pass configuration is added prematurely.
+MVP-004 stores and restores `HasDoubleMultiplier` and `HasVip` as normalized forward-compatible booleans defaulting to `false`. Active placeholder entitlement products and shop entries are removed; no Game Pass ID, staging mapping, purchase prompt, ownership query, or Game Pass configuration is part of this save-system milestone.
 
-When the gate clears, the approved design converts DoubleMultiplier and VIP to Game Passes, verifies ownership on join, treats verified false as revocation and lookup failure as preserve-stored, re-queries after a successful prompt immediately and after `1, 2, 4` seconds, and grants only verified ownership. Both entitlements stack to 4x.
+A separate future approved milestone may design and verify DoubleMultiplier and VIP Game Pass behavior using real assets and private staging. Those requirements do not gate MVP-004 completion.
 
 ## Verification
 
-Pure schema, environment resolution, queue behavior, leases, freeze, offline reward, receipt state, and shutdown coordination receive Lune tests. Every task passes focused tests, scoped StyLua, scoped Selene, Rojo build, and `git diff --check`. The final gate adds existing validation tests, full-tree format/lint, five Play Solo persistence runs through a parity-checked temporary `ServerStorage.MVP004Tests.SaveSystem` harness, and private staging purchase QA only after external monetization prerequisites exist.
+Pure schema, environment resolution, queue behavior, leases, freeze, offline reward, receipt state, and shutdown coordination receive Lune tests. Every task passes focused tests, scoped StyLua, scoped Selene, Rojo build, and `git diff --check`. The final gate adds existing validation tests, full-tree format/lint, and five Play Solo persistence runs through a parity-checked temporary `ServerStorage.MVP004Tests.SaveSystem` harness. Private-staging and Game Pass purchase QA belong to a future MVP.

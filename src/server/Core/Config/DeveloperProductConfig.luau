@@ -53,24 +53,6 @@ local DeveloperProductConfig: { [string]: ProductConfig } = {
 		},
 		AnalyticsKey = "Bigger_10M",
 	},
-	DoubleMultiplier = {
-		ProductId = 999991, -- Placeholder ID (user will replace with actual ID)
-		Rewards = {
-			{
-				Type = RewardType.DoubleMultiplier,
-			},
-		},
-		AnalyticsKey = "DoubleMultiplier_Product",
-	},
-	Vip = {
-		ProductId = 999992, -- Placeholder ID (user will replace with actual ID)
-		Rewards = {
-			{
-				Type = RewardType.Vip,
-			},
-		},
-		AnalyticsKey = "Vip_Product",
-	},
 }
 
 return table.freeze(DeveloperProductConfig)

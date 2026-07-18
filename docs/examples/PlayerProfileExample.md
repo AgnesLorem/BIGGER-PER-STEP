@@ -34,3 +34,5 @@ This document provides a structural representation of a loaded Player Profile as
 ```
 
 Optional `nil` fields are omitted. Runtime-only fields such as `PendingPurchaseIds` and `ProfileMutationsFrozen` are never stored in this profile.
+
+`HasDoubleMultiplier` and `HasVip` are forward-compatible normalized booleans that default to `false`. MVP-004 persists them but does not advertise or implement Game Pass ownership lookup or purchasing.

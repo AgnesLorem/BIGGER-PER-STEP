@@ -17,7 +17,7 @@ A player profile tracks the following data categories:
 - **Equipped Growth Upgrade**: The upgrade currently active and boosting size generation.
 - **Portal Progress**: Portals that have been successfully completed or unlocked.
 - **Player Settings**: Local preferences and options (e.g., sound toggles).
-- **Entitlements**: Stored 2X Multiplier and VIP ownership booleans. Live Game Pass reconciliation remains externally gated.
+- **Entitlements**: Forward-compatible 2X Multiplier and VIP booleans, normalized and persisted with defaults of `false`; MVP-004 has no Game Pass lookup or purchase flow.
 - **Receipt History**: Up to 5,000 durable Developer Product Purchase IDs.
 - **Offline Metadata**: Active, logout, and save timestamps used for atomic offline rewards.
 
@@ -33,7 +33,7 @@ A player profile tracks the following data categories:
 5. `SessionService` creates the authoritative session only after load succeeds.
 6. The server projects attributes and leaderstats, then explicitly loads the character.
 
-The store is `BiggerPlayerProfiles_v1`, with key `Player_<UserId>`. Studio always uses the isolated `Studio` scope. The production PlaceId uses `Production`; unknown live PlaceIds fail boot. The private `Staging` mapping remains blocked until a real staging PlaceId exists.
+The store is `BiggerPlayerProfiles_v1`, with key `Player_<UserId>`. Studio always uses the isolated `Studio` scope. The production PlaceId uses `Production`; unknown live PlaceIds fail boot. A future approved milestone may add a private `Staging` mapping using a real PlaceId.
 
 ### 2. Gameplay Phase (In-Memory Access)
 - `RuntimeRegistry.Sessions` is the sole mutable gameplay source of truth.
@@ -67,7 +67,7 @@ Player Rejoins Server
         ↓
 Server calculates 'OfflineDuration' (CurrentTime - LastLogoutTime)
         ↓
-Server applies the capped time reward using verified stored entitlement multipliers
+Server applies the capped time reward using stored entitlement booleans
         ↓
 Server applies the offline size reward directly to the player's profile in memory
 ```
@@ -85,6 +85,6 @@ New and timestamp-less legacy profiles receive zero. The claim timestamp, reward
 
 Durable Purchase IDs live in `Session.PurchaseHistory`; dispatched but unconfirmed IDs live only in `Profiles.PendingPurchaseIds`. Pending retries never redispatch rewards. `PurchaseGranted` is returned only after the Purchase ID and complete authoritative snapshot are durable. At the 5,000-ID combined ceiling, existing duplicates still succeed and new receipts fail closed without dispatch.
 
-## External Monetization Gate
+## Deferred Game Pass Monetization
 
-Private staging and verified Game Pass ownership remain blocked pending a real staging PlaceId, an authorized thumbnail source, and real 2X/VIP Game Pass Asset IDs. No placeholder configuration may replace those values.
+MVP-004 completion scope is the native server-authoritative DataStore save system, including durable Developer Product receipts. Game Pass creation, ownership reconciliation, purchase prompting, private-staging setup, and real purchase QA are deferred to a separate future approved milestone. Placeholder entitlement IDs are not active release configuration.

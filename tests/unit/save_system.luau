@@ -1373,4 +1373,14 @@ assert(string.find(RewardServiceSource, "RewardDispatcher.Dispatch", 1, true) ~=
 assert(string.find(RewardServiceSource, "CommitTransaction", 1, true) == nil)
 assert(string.find(RewardServiceSource, "PurchaseHistory[transactionId] = true", 1, true) == nil)
 
+local DeveloperProductConfigSource = fs.readFile("src/server/Core/Config/DeveloperProductConfig.luau")
+local ShopUIConfigSource = fs.readFile("src/shared/Core/Config/ShopUIConfig.luau")
+for _, Source in { DeveloperProductConfigSource, ShopUIConfigSource } do
+	assert(string.find(Source, "999991", 1, true) == nil)
+	assert(string.find(Source, "999992", 1, true) == nil)
+	assert(string.find(Source, "88087258", 1, true) ~= nil)
+	assert(string.find(Source, "88201938", 1, true) ~= nil)
+	assert(string.find(Source, "88201939", 1, true) ~= nil)
+end
+
 print("save_system: PASS")
