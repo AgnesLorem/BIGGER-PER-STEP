@@ -327,3 +327,240 @@ feat(monetization): persist verified game pass ownership
 ```
 
 Publish and test only the private staging place. Never publish the original production place.
+
+---
+
+## 2026-07-18 Review Fix Addendum
+
+**Goal:** Close the actionable PR #2 review findings without expanding MVP-004 beyond the native save system.
+
+**Architecture:** Startup validation enforces one reward per Developer Product, so receipt processing never needs multi-reward rollback. Existing `Profiles` entry identity is the load-generation boundary; `SaveService` verifies its exact entry/token and `SessionService` adds one tokenized in-flight join guard before installing a session or spawning.
+
+**Tech Stack:** Typed Luau, Lune, Roblox native services, StyLua, Selene, Rojo, GitHub review threads.
+
+### Global Constraints
+
+- Preserve the three public `SaveService` signatures.
+- Do not add multi-reward transaction orchestration, Game Pass work, dependencies, remotes, or production publication.
+- Use the existing `Profiles.Remove(UserId, ExpectedEntry)` identity guard for cleanup.
+- Write and observe focused failing tests before production edits.
+- Keep all changes within the existing MVP-004 exact path list.
+
+### Task 8: Enforce One Reward Per Developer Product
+
+**Files:**
+- Modify: `tests/unit/save_system.luau`
+- Modify: `src/server/Core/Services/ConfigValidationService.luau`
+- Modify: `src/server/Core/Services/GrowthService.luau`
+- Modify: `src/server/Core/Utilities/RewardDispatcher.luau`
+
+**Interfaces:**
+- `ConfigValidationService:Init()` accepts only `#serverConfig.Rewards == 1`.
+- `GrowthService:AddBiggerAbsolute(Player, Amount): boolean` reports whether the persistent value was applied, even if later presentation work raises.
+- `RewardDispatcher.Dispatch(Player, Rewards)` relies on one validated reward and never reports failure after that reward's persistent mutation succeeds.
+
+- [ ] **Step 1: Add failing configuration tests**
+
+Add a `loadConfigValidationService(Rewards)` Lune harness with injected `DeveloperProductConfig`, matching `ShopUIConfig`, `RewardType`, and a no-op logger. Assert:
+
+```luau
+assert(pcall(function()
+	loadConfigValidationService({ { Type = "Bigger", Amount = 10 } }):Init()
+end) == true)
+
+expectError(function()
+	loadConfigValidationService({}):Init()
+end)
+expectError(function()
+	loadConfigValidationService({
+		{ Type = "Bigger", Amount = 10 },
+		{ Type = "Bigger", Amount = 20 },
+	}):Init()
+end)
+```
+
+Model boot fail-closed by incrementing a receipt-registration counter only after `ConfigValidationService:Init()` returns; assert the counter remains zero for zero and two rewards. Also assert `CoreBootstrap` orders `ConfigValidationService` before `ReceiptProcessingService`.
+
+- [ ] **Step 2: Verify RED**
+
+Run: `lune run tests/unit/save_system.luau`
+
+Expected: FAIL because two rewards currently pass configuration validation.
+
+- [ ] **Step 3: Enforce exact cardinality**
+
+Replace the non-empty check with:
+
+```luau
+local rewards = serverConfig.Rewards
+if typeof(rewards) ~= "table" or #rewards ~= 1 then
+	error(
+		"ConfigValidation: ProductKey "
+			.. productKey
+			.. " must contain exactly one reward. Got: "
+			.. tostring(if typeof(rewards) == "table" then #rewards else nil)
+	)
+end
+```
+
+- [ ] **Step 4: Add the post-mutation failure regression**
+
+Load `RewardDispatcher` with a fake GrowthService whose `AddBiggerAbsolute` changes `Session.Bigger` and then raises during presentation. Assert dispatch succeeds once after observing the changed authoritative value. Keep entitlement presentation calls inside non-failing `pcall` blocks after `Sessions.Mutate` succeeds.
+
+- [ ] **Step 5: Make the single Bigger handler truthful**
+
+Change `GrowthService:AddBiggerAbsolute` to return `true` when `SetBigger` returns true or the target Bigger value is already present after a presentation error; otherwise return false. The dispatcher must resolve GrowthService before mutation and return success once the authoritative Bigger value changed.
+
+- [ ] **Step 6: Verify GREEN**
+
+Run separately:
+
+```powershell
+lune run tests/unit/save_system.luau
+stylua --check src/server/Core/Services/ConfigValidationService.luau src/server/Core/Services/GrowthService.luau src/server/Core/Utilities/RewardDispatcher.luau tests/unit/save_system.luau
+selene src/server/Core/Services/ConfigValidationService.luau src/server/Core/Services/GrowthService.luau src/server/Core/Utilities/RewardDispatcher.luau
+git diff --check
+```
+
+Expected: save-system PASS and all quality commands exit 0.
+
+### Task 9: Bind Load Completion to the Current Entry
+
+**Files:**
+- Modify: `tests/unit/save_system.luau`
+- Modify: `src/server/Core/Services/SaveService.luau`
+- Modify: `src/server/Core/Services/SessionService.luau`
+
+**Interfaces:**
+- `Profiles.Create` remains the single admission point and rejects every existing phase.
+- `SaveService:LoadProfile(Player)` returns only when its captured entry object and captured owner token are still current.
+- `SessionService` owns a per-Player opaque in-flight token; only that token may clear the guard or install a session.
+
+- [ ] **Step 1: Add failing registry and stale-load tests**
+
+Extend the fake DataStore with `AfterUpdate`. Cover these cases:
+
+```luau
+-- Existing Loading, Active, and Releasing entries reject replacement.
+expectError(function()
+	Profiles.Create(UserId, "second-owner", Probe)
+end)
+
+-- AfterUpdate replaces the old entry before LoadProfile returns.
+Store.AfterUpdate = function()
+	Profiles.Remove(UserId, OldEntry)
+	Replacement = Profiles.Create(UserId, "replacement-owner", Probe)
+end
+assert(pcall(SaveService.LoadProfile, SaveService, Player) == false)
+assert(Profiles.Get(UserId) == Replacement)
+```
+
+Add a failure variant where the stale request errors after replacement and assert identity-checked cleanup leaves `Replacement` registered. Add an owner-token mutation variant and assert the load cannot complete.
+
+- [ ] **Step 2: Add failing concurrent SessionService tests**
+
+Block the fake first `LoadProfile`, invoke the same PlayerAdded callback twice, and assert the second returns without a second load. Release the first and assert one Session and one `LoadCharacter()` call. Repeat with the player disconnected before release; assert the acquired current profile is finalized, no session-created event is published, and `LoadCharacter()` is never called.
+
+- [ ] **Step 3: Verify RED**
+
+Run: `lune run tests/unit/save_system.luau`
+
+Expected: FAIL because stale success is accepted and duplicate callbacks reach `LoadProfile`.
+
+- [ ] **Step 4: Guard SaveService load identity**
+
+Capture `ExpectedOwnerToken = RuntimeProfile.OwnerToken`. Use one local predicate:
+
+```luau
+local function IsCurrentLoad(): boolean
+	return Profiles.Get(Player.UserId) == RuntimeProfile
+		and RuntimeProfile.OwnerToken == ExpectedOwnerToken
+end
+```
+
+Reject before each acquire transform and after `Profiles.Await` unless the predicate is true and `RuntimeProfile.Phase == "Active"`. Do not remove a mismatched current entry.
+
+- [ ] **Step 5: Guard SessionService join completion**
+
+Use `LoadingPlayers: { [Player]: {} }`. Each callback stores a fresh token, duplicate callbacks return, and cleanup clears the map only when the stored token still matches. After load, capture the current runtime entry and owner token, build the Session, then recheck entry identity, token, phase, and in-flight token immediately before `Sessions.Set`.
+
+If the current Player is no longer parented to `Players`, install only the current authoritative Session needed by the existing release path, call `FinalizePlayer`, and return before attributes, events, leaderstats, or character spawning.
+
+- [ ] **Step 6: Verify GREEN**
+
+Run separately:
+
+```powershell
+lune run tests/unit/save_system.luau
+stylua --check src/server/Core/Services/SaveService.luau src/server/Core/Services/SessionService.luau tests/unit/save_system.luau
+selene src/server/Core/Services/SaveService.luau src/server/Core/Services/SessionService.luau
+git diff --check
+```
+
+Expected: all concurrency, stale callback, owner-token, session-count, and spawn-count assertions pass.
+
+### Task 10: Close Review Documentation and Test Stability Findings
+
+**Files:**
+- Modify: `tests/unit/save_system.luau`
+- Modify: `docs/CHANGELOG.md`
+- Modify: `docs/superpowers/reports/mvp-003/2026-07-17-mvp-004-audit.md`
+- Modify: `tasks/MVP-003.md`
+
+- [ ] **Step 1: Replace fixed test sleeps**
+
+Add one bounded helper using `os.clock()` and replace the four `task.wait(0.05)` assertions identified by review:
+
+```luau
+local function waitUntil(Predicate, Message)
+	local Deadline = os.clock() + 1
+	while not Predicate() and os.clock() < Deadline do
+		task.wait()
+	end
+	assert(Predicate(), Message)
+end
+```
+
+- [ ] **Step 2: Align documentation**
+
+- Change “full-tree StyLua” to “StyLua checks for `src` and `tests`”.
+- Give the July 18 decision its own `## 2026-07-18 Scope Addendum` heading in the existing audit report.
+- Remove Game Pass ownership, GamePass source paths, private-staging QA, and blocked monetization status from the MVP-004 audit cycle in `tasks/MVP-003.md`; replace the decision with the final two-line save-system/deferred status.
+
+- [ ] **Step 3: Run the focused suite and inspect the complete diff**
+
+```powershell
+lune run tests/unit/save_system.luau
+git diff --check
+git diff 5367ecd478a3c9eaf195cc84eae2792b5ef996a7...HEAD
+git status --short
+```
+
+- [ ] **Step 4: Commit focused fixes**
+
+```powershell
+git add src/server/Core/Services/ConfigValidationService.luau src/server/Core/Services/GrowthService.luau src/server/Core/Services/SaveService.luau src/server/Core/Services/SessionService.luau src/server/Core/Utilities/RewardDispatcher.luau tests/unit/save_system.luau docs/CHANGELOG.md docs/superpowers/reports/mvp-003/2026-07-17-mvp-004-audit.md tasks/MVP-003.md
+git commit -m "fix(mvp-004): close save system review findings"
+```
+
+### Task 11: Verify, Push, Resolve, and Re-enter the Merge Gate
+
+- [ ] **Step 1: Run every pre-merge command separately**
+
+Run the exact checkout/pull, three Lune suites, StyLua, Selene, Rojo premerge build, `git diff --check`, and `git status --short` commands from the approved merge brief. Require a clean tree and unchanged reviewed head after commit.
+
+- [ ] **Step 2: Mirror changed source and smoke in Studio**
+
+In Edit mode, mirror only changed source modules, verify normalized parity, and run a Play Solo boot/config smoke. Do not add a temporary harness, run Game Pass QA, or publish production.
+
+- [ ] **Step 3: Push and update review threads**
+
+Push `feat/mvp-004-data-store`, reply with the technical resolution and verification evidence in each relevant inline thread, resolve addressed threads, and explain any rejected suggestion in its own thread.
+
+- [ ] **Step 4: Re-read the full PR and live gate state**
+
+Confirm the new head, changed files, patch, comments, reviews, unresolved threads, status checks, protection requirements, and mergeability. Stop if any actionable thread, check, approval, scope, or head mismatch remains.
+
+- [ ] **Step 5: Merge and verify main only if every gate passes**
+
+Use a normal merge commit with the verified head SHA as `expected_head_sha`. Fetch, check out `main`, fast-forward pull, verify the merge on `origin/main`, verify the reviewed head is reachable, and leave the feature branch intact.
