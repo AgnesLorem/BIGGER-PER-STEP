@@ -1162,6 +1162,18 @@ expectError(function()
 	})
 end)
 expectError(function()
+	bootProductConfig({
+		[1] = { Type = "Bigger", Amount = 10 },
+		Extra = { Type = "Bigger", Amount = 20 },
+	})
+end)
+expectError(function()
+	bootProductConfig({
+		[1] = { Type = "Bigger", Amount = 10 },
+		[3] = { Type = "Bigger", Amount = 20 },
+	})
+end)
+expectError(function()
 	bootProductConfig({ { Type = "Coins", Amount = 10 } })
 end)
 for _, InvalidAmount in { 0 / 0, math.huge, 1.5, 9007199254740992 } do
@@ -1175,7 +1187,7 @@ local ConfigValidationBootIndex = assert(string.find(BootstrapSource, '{ Name = 
 local ReceiptProcessingBootIndex = assert(string.find(BootstrapSource, '{ Name = "ReceiptProcessingService"', 1, true))
 assert(ConfigValidationBootIndex < ReceiptProcessingBootIndex)
 
-local function loadRewardDispatcher(GrowthService)
+local function loadRewardDispatcher(GrowthService, CharacterScaleService)
 	local RewardType = {
 		Bigger = "Bigger",
 		Coins = "Coins",
@@ -1198,7 +1210,12 @@ local function loadRewardDispatcher(GrowthService)
 	})
 	local ServiceRegistry = {}
 	function ServiceRegistry.Get(Name)
-		return if Name == "GrowthService" then GrowthService else nil
+		if Name == "GrowthService" then
+			return GrowthService
+		elseif Name == "CharacterScaleService" then
+			return CharacterScaleService
+		end
+		return nil
 	end
 	local CoreFolder = {
 		Registry = {
@@ -1245,6 +1262,27 @@ local PresentationFailureResult = PresentationFailureDispatcher.Dispatch(Present
 assert(PresentationFailureResult.Success == true)
 assert(PresentationFailureSession.Bigger == 11)
 Sessions.Remove(PresentationFailurePlayer)
+
+do
+	local VipPlayer = { UserId = 4011, Name = "VipPresentationPlayer" }
+	local VipSession = sessionFromProfile(VipPlayer, PlayerProfileSchema.Defaults())
+	Sessions.Set(VipPlayer, VipSession)
+	local VipTagCalls = 0
+	local Dispatcher = loadRewardDispatcher({
+		UpdateMultiplierAttribute = function()
+			error("expected multiplier presentation failure")
+		end,
+	}, {
+		UpdateVipTag = function()
+			VipTagCalls += 1
+		end,
+	})
+	local Result = Dispatcher.Dispatch(VipPlayer, { { Type = "Vip" } })
+	assert(Result.Success == true)
+	assert(VipSession.HasVip == true)
+	assert(VipTagCalls == 1)
+	Sessions.Remove(VipPlayer)
+end
 
 local FrozenPlayer = { UserId = 4001, Name = "FrozenPlayer" }
 local FrozenProfile = PlayerProfileSchema.Defaults()

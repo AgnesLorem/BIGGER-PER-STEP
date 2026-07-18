@@ -116,12 +116,21 @@ function ConfigValidationService:Init()
 
 		-- Check Rewards
 		local rewards = serverConfig.Rewards
-		if typeof(rewards) ~= "table" or #rewards ~= 1 then
+		local rewardCount = 0
+		if typeof(rewards) == "table" then
+			for rewardKey in pairs(rewards) do
+				rewardCount += 1
+				if rewardKey ~= 1 then
+					error("ConfigValidation: Developer Product reward must be the sole entry at index 1")
+				end
+			end
+		end
+		if typeof(rewards) ~= "table" or rewardCount ~= 1 or rewards[1] == nil then
 			error(
 				"ConfigValidation: ProductKey "
 					.. productKey
 					.. " must contain exactly one reward. Got: "
-					.. tostring(if typeof(rewards) == "table" then #rewards else nil)
+					.. tostring(if typeof(rewards) == "table" then rewardCount else nil)
 			)
 		end
 

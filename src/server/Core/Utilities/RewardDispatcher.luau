@@ -92,6 +92,8 @@ local Handlers = table.freeze({
 				if GrowthService then
 					GrowthService:UpdateMultiplierAttribute(Player)
 				end
+			end)
+			pcall(function()
 				local CharacterScaleService = ServiceRegistry.Get("CharacterScaleService")
 				if CharacterScaleService then
 					CharacterScaleService:UpdateVipTag(Player)
