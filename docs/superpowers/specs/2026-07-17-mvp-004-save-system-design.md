@@ -21,6 +21,7 @@ MVP-003 was merged through PR #1 as merge commit `5367ecd`. Future merge gates a
 - `SaveService`: the only DataStore caller. It converts sessions into normalized snapshots and preserves its existing public signatures.
 - `SessionService`: coordinates load failure, session creation, PlayerRemoving freeze/release, and removal after final handling.
 - `ReceiptProcessingService`: validates receipts, controls pending/durable admission, dispatches each new reward once, and returns `PurchaseGranted` only after durability.
+- `ConfigValidationService`: rejects Developer Product configuration unless every product contains exactly one valid reward.
 - Existing mutation services: reject changes after freeze.
 - Game Pass config, prompting, ownership queries, and staging QA belong to a separate future MVP and receive no placeholder implementation here.
 
@@ -71,6 +72,14 @@ Known invalid stored fields abort the transform so the record is not overwritten
 6. `SessionService` copies it into a session and exposes only presentation attributes.
 7. On load failure, terminate the worker, delete the temporary entry, remove temporary runtime state, and remove the player without creating a session.
 
+### Load Admission and Completion Identity
+
+Only one runtime profile entry may be registered for a UserId. `Profiles.Create` rejects a second attempt while the current entry is `Loading`, `Active`, or `Releasing`, and `SessionService` suppresses duplicate join callbacks while its first load is in flight.
+
+The load callback owns the exact runtime entry and captures its owner token. Before an acquire transform runs, after its request completes, and immediately before `SessionService` installs the authoritative session, the current registry entry must still be that same object with that same token. A stale success or failure cannot create, replace, mutate, or remove a newer entry. Cleanup always supplies the expected entry identity. If the player disconnects after a valid load, the current profile is finalized without publishing a session-created event or spawning a character.
+
+Only a current successful load creates one authoritative session. `LoadCharacter()` runs at most once and only after that session is installed.
+
 Every later write uses the same worker. At most one write runs per UserId. Autosaves may coalesce; receipt and release requests may not. A request captures its authoritative snapshot and exact included pending IDs immediately before its first DataStore call.
 
 Autosave occurs every 60 seconds. Lease duration is 180 seconds. Foreign-lock load delays are `1, 2, 4, 8`; write retry delays are `1, 2, 4`. An unexpired foreign lock is never stolen. Wrong ownership freezes mutations and removes the player.
@@ -116,6 +125,12 @@ Receipt processing validates player, product, writable state, PurchaseId, and co
 After success, only included IDs are promoted and all included waiting receipt calls resolve. Ambiguous DataStore errors retain the pending in-memory reward and return `NotProcessedYet`; retry does not redispatch. A new server either sees the durable ID or legitimately dispatches the uncommitted receipt once. Receipt IDs are never pruned, expired, evicted, or reused in schema v1.
 
 Stored validation permits at most 5,000 `ProcessedPurchaseIds`. Runtime admission separately permits at most 5,000 durable plus pending IDs. A receipt at capacity is not dispatched and returns `NotProcessedYet`, while a durable duplicate still returns success.
+
+### Developer Product Reward Cardinality
+
+MVP-004 supports exactly one reward per Developer Product. Zero rewards and two or more rewards are invalid configuration, and `ConfigValidationService` fails boot before receipt processing can register or dispatch. `ReceiptProcessingService` and `RewardDispatcher` rely on this validated invariant.
+
+A new receipt marks its PurchaseId pending, applies the single reward once, and then persists the complete snapshot. A persistence failure leaves the PurchaseId pending so retry performs durability only and never reapplies the reward. A durable duplicate immediately returns `PurchaseGranted`. Multi-reward products, partial rollback, compensation, and transaction orchestration are deferred to a separate future approved milestone.
 
 ## Deferred Monetization Boundary
 
