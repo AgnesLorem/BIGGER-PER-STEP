@@ -41,8 +41,17 @@ local Handlers = table.freeze({
 		if not GrowthService then
 			return false
 		end
-		GrowthService:AddBiggerAbsolute(Player, Reward.Amount or 0)
-		return true
+		local Session = Sessions.Get(Player)
+		if not Session then
+			return false
+		end
+		local ExpectedBigger = math.floor(Session.Bigger + (Reward.Amount or 0))
+		local Called, Applied = pcall(GrowthService.AddBiggerAbsolute, GrowthService, Player, Reward.Amount or 0)
+		if Called then
+			return Applied == true
+		end
+		local CurrentSession = Sessions.Get(Player)
+		return CurrentSession ~= nil and CurrentSession.Bigger == ExpectedBigger
 	end,
 
 	-- Stub handlers for other reward types (for extensibility)
@@ -60,44 +69,38 @@ local Handlers = table.freeze({
 		return true
 	end,
 	[RewardType.DoubleMultiplier] = function(Player: Player, _Reward: Reward): boolean
-		local session = Sessions.Get(Player)
-		if session then
-			session.HasDoubleMultiplier = true
-			local SaveService = ServiceRegistry.Get("SaveService")
-			if SaveService then
-				local profile = SaveService:LoadProfile(Player)
-				if profile then
-					profile.HasDoubleMultiplier = true
+		local Mutated = Sessions.Mutate(Player, function(Session)
+			Session.HasDoubleMultiplier = true
+		end)
+		if Mutated then
+			pcall(function()
+				local GrowthService = GetGrowthService()
+				if GrowthService then
+					GrowthService:UpdateMultiplierAttribute(Player)
 				end
-			end
-			local GrowthService = GetGrowthService()
-			if GrowthService then
-				GrowthService:UpdateMultiplierAttribute(Player)
-			end
+			end)
 		end
-		return true
+		return Mutated
 	end,
 	[RewardType.Vip] = function(Player: Player, _Reward: Reward): boolean
-		local session = Sessions.Get(Player)
-		if session then
-			session.HasVip = true
-			local SaveService = ServiceRegistry.Get("SaveService")
-			if SaveService then
-				local profile = SaveService:LoadProfile(Player)
-				if profile then
-					profile.HasVip = true
+		local Mutated = Sessions.Mutate(Player, function(Session)
+			Session.HasVip = true
+		end)
+		if Mutated then
+			pcall(function()
+				local GrowthService = GetGrowthService()
+				if GrowthService then
+					GrowthService:UpdateMultiplierAttribute(Player)
 				end
-			end
-			local GrowthService = GetGrowthService()
-			if GrowthService then
-				GrowthService:UpdateMultiplierAttribute(Player)
-			end
-			local CharacterScaleService = ServiceRegistry.Get("CharacterScaleService")
-			if CharacterScaleService then
-				CharacterScaleService:UpdateVipTag(Player)
-			end
+			end)
+			pcall(function()
+				local CharacterScaleService = ServiceRegistry.Get("CharacterScaleService")
+				if CharacterScaleService then
+					CharacterScaleService:UpdateVipTag(Player)
+				end
+			end)
 		end
-		return true
+		return Mutated
 	end,
 })
 

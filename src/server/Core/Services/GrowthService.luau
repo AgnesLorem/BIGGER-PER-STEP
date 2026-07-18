@@ -67,13 +67,15 @@ function GrowthService:UpdateMultiplierAttribute(Player: Player)
 end
 
 function GrowthService:SetBigger(Player: Player, Value: number): boolean
-	local Session = Sessions.Get(Player)
 	local NormalizedValue = NormalizeBigger(Value)
-	if not Session or not NormalizedValue then
+	if not NormalizedValue then
 		return false
 	end
-
-	Session.Bigger = NormalizedValue
+	if not Sessions.Mutate(Player, function(Session)
+		Session.Bigger = NormalizedValue
+	end) then
+		return false
+	end
 
 	Player:SetAttribute("Bigger", NormalizedValue)
 
@@ -90,13 +92,18 @@ function GrowthService:SetBigger(Player: Player, Value: number): boolean
 	return true
 end
 
-function GrowthService:AddBiggerAbsolute(Player: Player, Amount: number)
+function GrowthService:AddBiggerAbsolute(Player: Player, Amount: number): boolean
 	local Session = Sessions.Get(Player)
 	if not Session then
-		return
+		return false
 	end
 	local NewValue = Session.Bigger + Amount
-	self:SetBigger(Player, NewValue)
+	local Success, Applied = pcall(self.SetBigger, self, Player, NewValue)
+	if Success then
+		return Applied == true
+	end
+	local CurrentSession = Sessions.Get(Player)
+	return CurrentSession ~= nil and CurrentSession.Bigger == math.floor(NewValue)
 end
 
 function GrowthService:AddBigger(Player: Player, Context: GrowthContext)

@@ -26,8 +26,8 @@ local GameBootstrap = require(script.Parent.Parent.Parent.Game.GameBootstrap)
 local Booted = false
 
 local BootOrder = {
-	{ Name = "SessionService", Service = SessionService },
 	{ Name = "SaveService", Service = SaveService },
+	{ Name = "SessionService", Service = SessionService },
 	{ Name = "GrowthService", Service = GrowthService },
 	{ Name = "CharacterScaleService", Service = CharacterScaleService },
 	{ Name = "ConfigValidationService", Service = ConfigValidationService },

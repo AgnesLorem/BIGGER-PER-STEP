@@ -17,6 +17,12 @@ local RewardType = require(
 )
 
 local ConfigValidationService = {}
+local MaximumSafeInteger = 9007199254740991
+local SupportedDeveloperProductRewards = table.freeze({
+	[RewardType.Bigger] = true,
+	[RewardType.DoubleMultiplier] = true,
+	[RewardType.Vip] = true,
+})
 
 function ConfigValidationService:Init()
 	Logger.Info("ConfigValidation", "Starting configuration consistency checks...")
@@ -110,8 +116,22 @@ function ConfigValidationService:Init()
 
 		-- Check Rewards
 		local rewards = serverConfig.Rewards
-		if not rewards or typeof(rewards) ~= "table" or #rewards == 0 then
-			error("ConfigValidation: Empty or missing Rewards list for ProductKey: " .. productKey)
+		local rewardCount = 0
+		if typeof(rewards) == "table" then
+			for rewardKey in pairs(rewards) do
+				rewardCount += 1
+				if rewardKey ~= 1 then
+					error("ConfigValidation: Developer Product reward must be the sole entry at index 1")
+				end
+			end
+		end
+		if typeof(rewards) ~= "table" or rewardCount ~= 1 or rewards[1] == nil then
+			error(
+				"ConfigValidation: ProductKey "
+					.. productKey
+					.. " must contain exactly one reward. Got: "
+					.. tostring(if typeof(rewards) == "table" then rewardCount else nil)
+			)
 		end
 
 		for i, reward in ipairs(rewards) do
@@ -124,17 +144,26 @@ function ConfigValidationService:Init()
 						.. productKey
 				)
 			end
+			if not SupportedDeveloperProductRewards[rType] then
+				error("ConfigValidation: Unsupported Developer Product RewardType: " .. rType)
+			end
 
-			-- Check specific reward configurations (e.g. Bigger needs Amount)
-			if rType == RewardType.Bigger or rType == RewardType.Coins then
+			if rType == RewardType.Bigger then
 				local amount = reward.Amount
-				if not amount or typeof(amount) ~= "number" or amount <= 0 then
+				if
+					type(amount) ~= "number"
+					or amount ~= amount
+					or amount <= 0
+					or amount >= math.huge
+					or amount % 1 ~= 0
+					or amount > MaximumSafeInteger
+				then
 					error(
 						"ConfigValidation: Reward index "
 							.. i
 							.. " for ProductKey "
 							.. productKey
-							.. " must have an Amount > 0. Got: "
+							.. " must have a positive safe integer Amount. Got: "
 							.. tostring(amount)
 					)
 				end

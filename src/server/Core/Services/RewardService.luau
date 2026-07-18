@@ -4,7 +4,6 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Logger = require(script.Parent.Parent.Utilities.Logger)
-local ServiceRegistry = require(script.Parent.Parent.Registry.ServiceRegistry)
 local Sessions = require(script.Parent.Parent.Registry.RuntimeRegistry.Sessions)
 
 local RewardError = require(
@@ -49,7 +48,7 @@ function RewardService:Grant(Player: Player, Options: GrantOptions): GrantResult
 	end
 
 	local session = Sessions.Get(Player)
-	if not session then
+	if not session or session.ProfileMutationsFrozen then
 		return { Success = false, ErrorCode = RewardError.InvalidPayload }
 	end
 
@@ -73,51 +72,25 @@ function RewardService:Grant(Player: Player, Options: GrantOptions): GrantResult
 			transactionId,
 			Player.Name
 		)
-	else
-		-- 2. Dispatch rewards in memory (mutates memory stats)
-		local dispatchResult = RewardDispatcher.Dispatch(Player, rewards)
-		if not dispatchResult.Success then
-			Logger.Warn(
-				"Reward",
-				"Failed to dispatch rewards for %s: %s",
-				Player.Name,
-				tostring(dispatchResult.ErrorCode)
-			)
-			return {
-				Success = false,
-				ErrorCode = dispatchResult.ErrorCode,
-				FailedReward = dispatchResult.FailedReward,
-			}
-		end
-
-		-- 3. Update runtime session cache IMMEDIATELY after dispatching
-		session.PurchaseHistory[transactionId] = true
-		Logger.Info(
-			"Reward",
-			"Successfully dispatched rewards in memory for %s (Transaction: %s)",
-			Player.Name,
-			transactionId
-		)
+		return { Success = true, AppliedRewards = rewards }
 	end
 
-	-- 4. Persistently save profile data via SaveService
-	local SaveService = ServiceRegistry.Get("SaveService")
-	if not SaveService then
-		Logger.Error("Reward", "SaveService not found in ServiceRegistry, cannot commit transaction %s", transactionId)
-		return { Success = false, ErrorCode = RewardError.PersistenceFailed }
+	local dispatchResult = RewardDispatcher.Dispatch(Player, rewards)
+	if not dispatchResult.Success then
+		Logger.Warn("Reward", "Failed to dispatch rewards for %s: %s", Player.Name, tostring(dispatchResult.ErrorCode))
+		return {
+			Success = false,
+			ErrorCode = dispatchResult.ErrorCode,
+			FailedReward = dispatchResult.FailedReward,
+		}
 	end
+	Logger.Info(
+		"Reward",
+		"Successfully dispatched rewards in memory for %s (Transaction: %s)",
+		Player.Name,
+		transactionId
+	)
 
-	local persistSuccess = SaveService:CommitTransaction(Player, {
-		PurchaseId = transactionId,
-		Rewards = rewards,
-	})
-
-	if not persistSuccess then
-		Logger.Warn("Reward", "SaveService failed to commit transaction %s for %s", transactionId, Player.Name)
-		return { Success = false, ErrorCode = RewardError.PersistenceFailed }
-	end
-
-	-- 5. Write structured audit log
 	local rewardsStringList = {}
 	for _, reward in ipairs(rewards) do
 		local desc = reward.Type .. " " .. (reward.Amount and ("+" .. tostring(reward.Amount)) or "")

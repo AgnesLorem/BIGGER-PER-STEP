@@ -13,10 +13,14 @@ This document tracks the high-level milestones for the Bigger project MVP.
   - Establish directory structures for client, server, and shared directories.
   - Setup and validate the shared configuration loader.
 
-- [ ] **Data & Save System**
-  - Implement a persistent database wrapper.
-  - Build the server-authoritative player profile management service.
-  - Create timestamp-based offline progression calculations.
+- [x] **Data & Save System (MVP-004)**
+  - Implement native `DataStoreService` persistence with per-UserId FIFO workers and leases.
+  - Build the server-authoritative player profile lifecycle, autosave, final save, and bounded shutdown.
+  - Add atomic timestamp-based offline progression and durable Developer Product receipts.
+
+- [ ] **Game Pass Monetization (Future MVP)**
+  - Create approved 2X Multiplier and VIP passes and private staging resources.
+  - Add ownership reconciliation, purchase prompting, and real-purchase QA.
 
 - [ ] **Size & Growth Mechanics**
   - Implement walk-based and movement-based size accumulation.
