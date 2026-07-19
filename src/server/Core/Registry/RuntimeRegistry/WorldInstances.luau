@@ -9,6 +9,7 @@ export type WorldInstance = {
 	ObjectiveActive: boolean,
 	ObjectiveCompleted: boolean,
 	ObjectiveId: string,
+	RewardState: string,
 	Connections: { RBXScriptConnection },
 }
 

@@ -174,28 +174,19 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 		return
 	end
 
-	local SessionServiceFound, SessionService = pcall(function()
-		return ServiceRegistry.Get("SessionService")
-	end)
-	if not SessionServiceFound or not SessionService then
-		WorldInstanceService:RecoverPlayer(Player, "MissingSessionServiceAtCompletion", false)
-		return
-	end
-
 	WorldInstance.ObjectiveCompleted = true
 	WorldInstance.ObjectiveActive = false
 	Hitbox.CanTouch = false
-	local TransitionCalled, Transitioned = pcall(function()
-		return SessionService:TransitionState(Player, "InWorld", "Returning")
+	local RewardServiceFound, RewardPortalService = pcall(function()
+		return ServiceRegistry.Get("RewardPortalService")
 	end)
-	if not TransitionCalled or not Transitioned then
-		WorldInstanceService:RecoverPlayer(Player, "ObjectiveTransitionFailed", false)
-		return
-	end
-
-	local Rewarded = self:GrantDestruction(Player, World1Config.Objective.DestructionReward)
-	if not Rewarded then
-		WorldInstanceService:RecoverPlayer(Player, "ProfileMutationsFrozen", false)
+	local Activated, ActivationSuccess = pcall(function()
+		return RewardServiceFound
+			and RewardPortalService
+			and RewardPortalService:ActivateChoices(WorldInstance, WorldInstanceService)
+	end)
+	if not Activated or not ActivationSuccess then
+		WorldInstanceService:RecoverPlayer(Player, "RewardChoiceActivationFailed", false)
 		return
 	end
 
@@ -210,30 +201,6 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 			WorldInstance.WorldInstanceId
 		)
 	end
-
-	local Debounced = pcall(function()
-		local PortalService = ServiceRegistry.Get("PortalService")
-		PortalService:HoldDebounce(Player, World1Config.ReturnPortalDebounceSeconds)
-	end)
-	if not Debounced then
-		Logger.Warn("Destruction", "Return portal debounce failed for PlayerUserId=%d", Player.UserId)
-	end
-
-	local ReturnCalled, ReturnSuccess = pcall(function()
-		return WorldInstanceService:ReturnPlayerToLobby(Player)
-	end)
-	if not ReturnCalled or not ReturnSuccess then
-		Logger.Warn(
-			"Destruction",
-			"Return teleport failed for PlayerUserId=%d WorldInstanceId=%s",
-			Player.UserId,
-			WorldInstance.WorldInstanceId
-		)
-		WorldInstanceService:RecoverPlayer(Player, "ReturnSpawnUnavailableAtCompletion", true)
-		return
-	end
-
-	WorldInstanceService:RecoverPlayer(Player, "ObjectiveCompleted", false)
 end
 
 return DestructionService

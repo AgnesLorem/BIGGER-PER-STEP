@@ -721,6 +721,13 @@ local function loadRewardPortalService()
 	function Hit:FindFirstAncestorOfClass(Name)
 		return if Name == "Model" then Character else nil
 	end
+	local OtherPlayer = fakePlayer(6252)
+	local OtherCharacter = {}
+	OtherPlayer.Character = OtherCharacter
+	local OtherHit = {}
+	function OtherHit:FindFirstAncestorOfClass(Name)
+		return if Name == "Model" then OtherCharacter else nil
+	end
 
 	local WorldModel = fakeInstance("TEST_REWARD_WORLD_1", "Model")
 	local FreePortal = WorldModel:AddChild(rewardPortalModel("FreeRewardPortal"))
@@ -739,7 +746,12 @@ local function loadRewardPortalService()
 
 	local Players = {}
 	function Players:GetPlayerFromCharacter(TargetCharacter)
-		return if TargetCharacter == Character then Player else nil
+		if TargetCharacter == Character then
+			return Player
+		elseif TargetCharacter == OtherCharacter then
+			return OtherPlayer
+		end
+		return nil
 	end
 	local MarketplaceService = {
 		PromptProductPurchaseFinished = signal(),
@@ -811,6 +823,7 @@ local function loadRewardPortalService()
 		RewardPortals = {
 			FreeName = "FreeRewardPortal",
 			PaidName = "PaidRewardPortal",
+			FreeDestruction = 1,
 			FreeLabel = "FREE " .. BULLET .. " 1 DESTRUCTION",
 			PaidLabel = "3 DESTRUCTION " .. BULLET .. " 29 R$",
 		},
@@ -868,6 +881,7 @@ local function loadRewardPortalService()
 		FreePortal = FreePortal,
 		Hit = Hit,
 		MarketplaceService = MarketplaceService,
+		OtherHit = OtherHit,
 		PaidPortal = PaidPortal,
 		Player = Player,
 		Service = Service,
@@ -890,6 +904,21 @@ check("free reward settles once and never invokes the paid prompt", function()
 	assert(Harness.Coordinator.ReturnCalls == 1)
 	Harness.FreePortal.Children.Trigger.Touched:Fire(Harness.Hit)
 	assert(#Harness.DestructionService.Calls == 1)
+	Sessions.Remove(Harness.Player)
+end)
+
+check("free reward rejects wrong-player and wrong-world touches", function()
+	local Harness = loadRewardPortalService()
+	assert(Harness.Service:BindWorld(Harness.WorldInstance, Harness.Coordinator) == true)
+	assert(Harness.Service:ActivateChoices(Harness.WorldInstance, Harness.Coordinator) == true)
+	Harness.FreePortal.Children.Trigger.Touched:Fire(Harness.OtherHit)
+	assert(Harness.WorldInstance.RewardState == "Choosing")
+	assert(#Harness.DestructionService.Calls == 0 and Harness.Coordinator.ReturnCalls == 0)
+
+	Harness.Session.CurrentWorldInstanceId = "OTHER_WORLD"
+	Harness.FreePortal.Children.Trigger.Touched:Fire(Harness.Hit)
+	assert(Harness.WorldInstance.RewardState == "Choosing")
+	assert(#Harness.DestructionService.Calls == 0 and Harness.Coordinator.ReturnCalls == 0)
 	Sessions.Remove(Harness.Player)
 end)
 

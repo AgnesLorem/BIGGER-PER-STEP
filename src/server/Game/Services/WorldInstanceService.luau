@@ -281,6 +281,7 @@ function WorldInstanceService:CreateWorldForPlayer(Player: Player): WorldInstanc
 		ObjectiveActive = true,
 		ObjectiveCompleted = false,
 		ObjectiveId = World1Config.Objective.ObjectiveId,
+		RewardState = "Inactive",
 		Connections = {},
 	}
 
@@ -325,6 +326,17 @@ function WorldInstanceService:CreateWorldForPlayer(Player: Player): WorldInstanc
 	end)
 	if not Called or not Bound then
 		self:RecoverPlayer(Player, "ObjectiveBindingFailed", false)
+		return nil
+	end
+
+	local RewardServiceFound, RewardPortalService = pcall(function()
+		return ServiceRegistry.Get("RewardPortalService")
+	end)
+	local RewardCalled, RewardBound = pcall(function()
+		return RewardServiceFound and RewardPortalService and RewardPortalService:BindWorld(WorldInstance, self)
+	end)
+	if not RewardCalled or not RewardBound then
+		self:RecoverPlayer(Player, "RewardPortalBindingFailed", false)
 		return nil
 	end
 
