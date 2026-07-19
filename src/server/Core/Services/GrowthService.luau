@@ -127,8 +127,12 @@ function GrowthService:AddBigger(Player: Player, Context: GrowthContext)
 		return
 	end
 
-	local NewValue = Session.Bigger + Gain
-	self:SetBigger(Player, NewValue)
+	local TotalGain = Gain + (Session.GrowthRemainder or 0)
+	local WholeGain = math.floor(TotalGain)
+	local NewValue = Session.Bigger + WholeGain
+	if self:SetBigger(Player, NewValue) then
+		Session.GrowthRemainder = TotalGain - WholeGain
+	end
 end
 
 return GrowthService

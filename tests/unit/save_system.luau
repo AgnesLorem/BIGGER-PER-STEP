@@ -743,6 +743,7 @@ local function loadSessionService()
 
 	local SaveService = {
 		FailLoad = false,
+		HasPremiumZonePass = false,
 		LoadBlocked = false,
 		LoadCalls = 0,
 		ReleaseSawSession = false,
@@ -759,7 +760,9 @@ local function loadSessionService()
 			if self.FailLoad then
 				error("expected controlled load failure")
 			end
-			return PlayerProfileSchema.Defaults()
+			local Profile = PlayerProfileSchema.Defaults()
+			Profile.HasPremiumZonePass = self.HasPremiumZonePass
+			return Profile
 		end)
 		local Success, Result = Profiles.Await(Request)
 		if not Success then
@@ -876,6 +879,7 @@ assert(SessionLifecycle.Player.Kicked ~= nil)
 assert(SessionLifecycle.Player.LoadCharacterCalls == 0)
 
 SessionLifecycle.SaveService.FailLoad = false
+SessionLifecycle.SaveService.HasPremiumZonePass = true
 SessionLifecycle.Player.Kicked = nil
 FailedJoinCallback(SessionLifecycle.Player)
 local AuthoritativeSession = Sessions.Get(SessionLifecycle.Player)
@@ -883,6 +887,12 @@ assert(AuthoritativeSession ~= nil)
 assert(AuthoritativeSession.ProfileMutationsFrozen == false)
 assert(AuthoritativeSession.UnlockedGrowthUpgrades ~= nil)
 assert(AuthoritativeSession.Settings ~= nil)
+assert(AuthoritativeSession.HasPremiumZonePass == true, "saved Premium Zone ownership was not restored")
+assert(AuthoritativeSession.GrowthRemainder == 0, "growth remainder did not start at zero")
+assert(AuthoritativeSession.CurrentAFKZone == nil, "current AFK zone did not start empty")
+assert(AuthoritativeSession.PremiumZonePromptedThisEntry == false, "Premium Zone prompt state was not reset")
+assert(AuthoritativeSession.GamePassQueryGenerations.Vip == 0)
+assert(AuthoritativeSession.GamePassQueryGenerations.PremiumZone == 0)
 assert(SessionLifecycle.Player.LoadCharacterCalls == 1)
 
 SessionLifecycle.RemovingCallbacks[1](SessionLifecycle.Player)

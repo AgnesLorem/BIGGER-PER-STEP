@@ -11,7 +11,15 @@ local Logger = require(script.Parent.Parent.Parent.Core.Utilities.Logger)
 local World1Config = require(script.Parent.Parent.Config.World1Config)
 local StompValidation = require(game:GetService("ReplicatedStorage").BiggerShared.Core.Utilities.StompValidation)
 
+--// Variables \\--
+
+local MAX_SAFE_INTEGER = 9007199254740991
+
 --// Helpers \\--
+
+local function IsSafeInteger(Value: number, Minimum: number): boolean
+	return Value == Value and Value >= Minimum and Value <= MAX_SAFE_INTEGER and Value % 1 == 0
+end
 
 local function GetPlayerFromHit(Hit: BasePart): Player?
 	local Character = Hit:FindFirstAncestorOfClass("Model")
@@ -94,6 +102,27 @@ function DestructionService:Init() end
 
 function DestructionService:Start() end
 
+function DestructionService:GrantDestruction(Player: Player, Amount: number): boolean
+	if type(Amount) ~= "number" or not IsSafeInteger(Amount, 1) then
+		return false
+	end
+
+	local NewValue: number? = nil
+	local Mutated = Sessions.Mutate(Player, function(Session)
+		local Current = Session.Destruction
+		if not IsSafeInteger(Current, 0) or Current > MAX_SAFE_INTEGER - Amount then
+			return
+		end
+		NewValue = Current + Amount
+		Session.Destruction = NewValue
+	end)
+	if not Mutated or not NewValue then
+		return false
+	end
+
+	return pcall(SyncDestruction, Player, NewValue)
+end
+
 function DestructionService:BindWorld(WorldInstance, WorldInstanceService)
 	local Hitbox = GetHitbox(WorldInstance.Model)
 	if not Hitbox then
@@ -155,18 +184,9 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 		return
 	end
 
-	local Rewarded = Sessions.Mutate(Player, function(CurrentSession)
-		CurrentSession.Destruction += World1Config.Objective.DestructionReward
-	end)
+	local Rewarded = self:GrantDestruction(Player, World1Config.Objective.DestructionReward)
 	if not Rewarded then
 		WorldInstanceService:RecoverPlayer(Player, "ProfileMutationsFrozen", false)
-		return
-	end
-	local Synced = pcall(function()
-		SyncDestruction(Player, Session.Destruction)
-	end)
-	if not Synced then
-		WorldInstanceService:RecoverPlayer(Player, "DestructionPresentationFailed", false)
 		return
 	end
 

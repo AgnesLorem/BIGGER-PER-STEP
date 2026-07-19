@@ -18,6 +18,7 @@ export type Profile = {
 	Settings: Settings,
 	HasDoubleMultiplier: boolean,
 	HasVip: boolean,
+	HasPremiumZonePass: boolean,
 	ProcessedPurchaseIds: StringSet,
 	LastActiveTimestamp: number,
 	LastLogoutTimestamp: number,
@@ -130,6 +131,7 @@ function PlayerProfileSchema.Defaults(): Profile
 		},
 		HasDoubleMultiplier = false,
 		HasVip = false,
+		HasPremiumZonePass = false,
 		ProcessedPurchaseIds = {},
 		LastActiveTimestamp = 0,
 		LastLogoutTimestamp = 0,
@@ -185,6 +187,9 @@ function PlayerProfileSchema.Normalize(Stored: any): Profile
 	end
 	if Stored.HasVip ~= nil then
 		Profile.HasVip = RequireBoolean(Stored.HasVip, "HasVip")
+	end
+	if Stored.HasPremiumZonePass ~= nil then
+		Profile.HasPremiumZonePass = RequireBoolean(Stored.HasPremiumZonePass, "HasPremiumZonePass")
 	end
 	if Stored.ProcessedPurchaseIds ~= nil then
 		Profile.ProcessedPurchaseIds = CopySet(
