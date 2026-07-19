@@ -13,6 +13,7 @@
 - One paid product only: `World1TripleReward`, 29 Robux, exactly 3 Destruction, `PortalOnly`.
 - No VIP-discount Developer Product, no dynamic paid-portal price, no fake IDs.
 - Game Passes are exactly `Vip` and `PremiumZone`; no 2X Game Pass.
+- Custom monetization thumbnails are user-approved for deferral to a future visual-polish milestone. MVP-005 uses Roblox default asset imagery; missing custom thumbnails do not block implementation, verification, review, or completion.
 - Server memory is authoritative; presentation attributes are write-only projections.
 - New source objects must exist and match in Studio before local implementation is written.
 - No push, merge, production publish, or real-purchase claim without explicit user approval.
@@ -24,7 +25,6 @@
 **Files:** task, ADR, design, plan, audit, and approved core docs listed in Exact Scope.
 
 - [ ] Record the exact repository and Studio scope before source edits.
-- [ ] Generate three 512×512 final thumbnails and obtain user approval before upload.
 - [ ] Create the two Game Passes and one Developer Product with final prices/settings.
 - [ ] Record their real IDs; reject zero, duplicate, temporary, or placeholder values.
 - [ ] Update frozen gameplay/runtime docs under ADR-005 authority.

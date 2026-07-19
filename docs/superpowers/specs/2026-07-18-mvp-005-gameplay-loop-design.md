@@ -27,11 +27,14 @@ receipt durability, save serialization, world cleanup, and session transitions.
 
 ## Monetization and Authority
 
-Preflight creates three user-approved thumbnails and three real products: VIP
-Game Pass at 199 Robux, Premium AFK Zone Game Pass at 99 Robux, and
-`World1TripleReward` at 29 Robux. No VIP-discount product or dynamic price exists.
-The Developer Product is unlisted, repeatable, has managed pricing disabled, and
-uses `Surface = "PortalOnly"`; normal Bigger products use `Surface = "Shop"`.
+Custom monetization thumbnails are user-approved for deferral to a future
+visual-polish milestone. MVP-005 uses Roblox default asset imagery temporarily;
+missing custom thumbnails do not block implementation, Studio verification, code
+review, or completion. Preflight creates three real products: VIP Game Pass at
+199 Robux, Premium AFK Zone Game Pass at 99 Robux, and `World1TripleReward` at
+29 Robux. No VIP-discount product or dynamic price exists. The Developer Product
+is unlisted, repeatable, has managed pricing disabled, and uses
+`Surface = "PortalOnly"`; normal Bigger products use `Surface = "Shop"`.
 
 Paid authority is strictly `ProcessReceipt → RewardService → RewardDispatcher →
 DestructionService:GrantDestruction → SaveService:CommitTransaction →
