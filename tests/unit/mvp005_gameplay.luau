@@ -143,8 +143,10 @@ local function loadGamePassService(QueryPlans)
 			task.wait()
 		end
 		if Plan.Error then
+			Plan.Completed = true
 			error(Plan.Error)
 		end
+		Plan.Completed = true
 		return Plan.Result
 	end
 	function MarketplaceService:PromptGamePassPurchase(PromptPlayer, AssetId)
@@ -352,6 +354,36 @@ check("prompt-finished re-queries instead of trusting wasPurchased", function()
 	assert(Harness.Service:Prompt(Harness.Player, "Vip") == true)
 	assert(Harness.MarketplaceService.Prompts[1][2] == TEST_SYNTHETIC_VIP_PASS_ASSET_ID)
 	assert(Harness.Service:Prompt(Harness.Player, "Unknown") == false)
+	Sessions.Remove(Harness.Player)
+end)
+
+check("GamePass prompts reject frozen sessions", function()
+	local Harness = loadGamePassService({
+		[TEST_SYNTHETIC_VIP_PASS_ASSET_ID] = { { Result = false } },
+		[TEST_SYNTHETIC_PREMIUM_ZONE_PASS_ASSET_ID] = { { Result = false } },
+	})
+	Harness.Session.ProfileMutationsFrozen = true
+	assert(Harness.Service:Prompt(Harness.Player, "Vip") == false)
+	assert(#Harness.MarketplaceService.Prompts == 0)
+	Sessions.Remove(Harness.Player)
+end)
+
+check("stale GamePass batches never save a replacement session", function()
+	local PremiumZoneQuery = { Result = false, Blocked = true }
+	local Harness = loadGamePassService({
+		[TEST_SYNTHETIC_VIP_PASS_ASSET_ID] = { { Result = true } },
+		[TEST_SYNTHETIC_PREMIUM_ZONE_PASS_ASSET_ID] = { PremiumZoneQuery },
+	})
+	Harness.EventBus.Publish("PlayerSessionCreated", Harness.Player, Harness.Session)
+	waitUntil(function()
+		return Harness.Session.HasVip == true
+	end, "first synthetic Game Pass result did not apply")
+	Sessions.Set(Harness.Player, fakeSession(Harness.Player))
+	PremiumZoneQuery.Blocked = false
+	waitUntil(function()
+		return PremiumZoneQuery.Completed == true
+	end, "second synthetic Game Pass query did not complete")
+	assert(Harness.SaveService.SaveCalls == 0, "stale batch saved the replacement session")
 	Sessions.Remove(Harness.Player)
 end)
 
