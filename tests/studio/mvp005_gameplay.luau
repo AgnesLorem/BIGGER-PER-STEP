@@ -111,6 +111,32 @@ local function RunPromptCorrelation()
 	EventBus.Publish("DeveloperProductCommitted", Player, "World1TripleReward", "TEST_SYNTHETIC_MISMATCHED_PURCHASE")
 	assert(WorldInstance.RewardState == "AwaitingReceipt", "mismatched receipt settled the world")
 	assert(Session.State == "InWorld", "mismatched receipt returned the player")
+
+	local CurrentPromptToken = "TEST_SYNTHETIC_CURRENT_PROMPT_TOKEN"
+	WorldInstance.PromptToken = CurrentPromptToken
+	WorldInstance.RewardPromptToken = CurrentPromptToken
+	WorldInstance.PendingRewardPrompt = {
+		WorldInstanceId = WorldInstance.WorldInstanceId,
+		ProductKey = "World1TripleReward",
+		ProductId = World1Product().ProductId,
+		PromptToken = "TEST_SYNTHETIC_STALE_PROMPT_TOKEN",
+		State = "AwaitingReceipt",
+	}
+	EventBus.Publish("DeveloperProductCommitted", Player, "World1TripleReward", "TEST_SYNTHETIC_STALE_TOKEN_PURCHASE")
+	assert(WorldInstance.RewardState == "AwaitingReceipt", "stale prompt token settled the world")
+	assert(Session.State == "InWorld", "stale prompt token returned the player")
+
+	WorldInstance.PendingRewardPrompt.PromptToken = CurrentPromptToken
+	Session.CurrentWorldInstanceId = "TEST_SYNTHETIC_NEWER_WORLD"
+	EventBus.Publish("DeveloperProductCommitted", Player, "World1TripleReward", "TEST_SYNTHETIC_OLDER_WORLD_PURCHASE")
+	assert(WorldInstance.RewardState == "AwaitingReceipt", "older receipt settled a newer world")
+	assert(Session.State == "InWorld", "older receipt returned the newer world")
+
+	Session.CurrentWorldInstanceId = WorldInstance.WorldInstanceId
+	EventBus.Publish("DeveloperProductCommitted", Player, "World1TripleReward", "TEST_SYNTHETIC_MATCHING_PURCHASE")
+	assert(WorldInstance.RewardState == "Settled", "matching committed receipt did not settle")
+	assert(Session.State == "InLobby", "matching committed receipt did not return to Lobby")
+	assert(WorldInstances.Get(Player) == nil, "matching committed receipt left the old world registered")
 end
 
 local function RunSyntheticReceipts()
@@ -119,6 +145,10 @@ local function RunSyntheticReceipts()
 	local ProcessReceipt = MarketplaceService.ProcessReceipt
 	assert(type(ProcessReceipt) == "function", "ProcessReceipt was not registered")
 	assert(ReceiptProcessingService, "ReceiptProcessingService missing")
+	local ActiveWorld = WorldInstances.Get(Player)
+	assert(ActiveWorld, "enter WORLD1 before running synthetic receipt stage")
+	ActiveWorld.RewardState = "Choosing"
+	ActiveWorld.PendingRewardPrompt = nil
 
 	local PurchaseId = "MVP005_SYNTHETIC_NORMAL_" .. HttpService:GenerateGUID(false)
 	local Before = Session.Destruction
@@ -151,6 +181,30 @@ local function RunSyntheticReceipts()
 		)
 	)
 	assert(DisconnectedDecision == Enum.ProductPurchaseDecision.NotProcessedYet, "disconnected receipt was granted")
+	assert(Session.Destruction == Before + 3, "disconnected receipt mutated Destruction")
+
+	local DelayedPurchaseId = "MVP005_SYNTHETIC_DELAYED_" .. HttpService:GenerateGUID(false)
+	local DelayedDecision = ProcessReceipt(SyntheticReceipt(Player.UserId, ProductConfig.ProductId, DelayedPurchaseId))
+	assert(DelayedDecision == Enum.ProductPurchaseDecision.PurchaseGranted, "synthetic delayed receipt was not granted")
+	assert(Session.Destruction == Before + 6, "synthetic delayed receipt did not grant exactly once")
+	assert(WorldInstances.Get(Player) == ActiveWorld, "synthetic delayed receipt cleaned the active world")
+	assert(ActiveWorld.RewardState == "Choosing", "synthetic delayed receipt settled an uncorrelated world")
+	assert(Session.State == "InWorld", "synthetic delayed receipt returned an uncorrelated world")
+
+	local WorldInstanceService = ServiceRegistry.Get("WorldInstanceService")
+	WorldInstanceService:ClearPlayerRuntime(Player)
+	assert(WorldInstances.Get(Player) == nil, "synthetic post-cleanup setup left a world registered")
+	assert(Session.State == "InLobby", "synthetic post-cleanup setup did not recover Lobby state")
+	local PostCleanupPurchaseId = "MVP005_SYNTHETIC_POST_CLEANUP_" .. HttpService:GenerateGUID(false)
+	local PostCleanupDecision =
+		ProcessReceipt(SyntheticReceipt(Player.UserId, ProductConfig.ProductId, PostCleanupPurchaseId))
+	assert(
+		PostCleanupDecision == Enum.ProductPurchaseDecision.PurchaseGranted,
+		"synthetic post-cleanup receipt was not granted"
+	)
+	assert(Session.Destruction == Before + 9, "synthetic post-cleanup receipt did not grant exactly once")
+	assert(WorldInstances.Get(Player) == nil, "synthetic post-cleanup receipt recreated or settled a world")
+	assert(Session.State == "InLobby", "synthetic post-cleanup receipt changed Lobby state")
 end
 
 function MVP005Gameplay.Run(Stage: number)

@@ -269,6 +269,68 @@ check("stale GamePass results cannot overwrite a newer generation", function()
 	Sessions.Remove(Harness.Player)
 end)
 
+check("GamePass generations are independent per PassKey", function()
+	local OldVipQuery = { Result = false, Blocked = true }
+	local OldPremiumZoneQuery = { Result = true, Blocked = true }
+	local Harness = loadGamePassService({
+		[TEST_SYNTHETIC_VIP_PASS_ASSET_ID] = { OldVipQuery, { Result = true } },
+		[TEST_SYNTHETIC_PREMIUM_ZONE_PASS_ASSET_ID] = { OldPremiumZoneQuery, { Result = false } },
+	})
+	Harness.EventBus.Publish("PlayerSessionCreated", Harness.Player, Harness.Session)
+	waitUntil(function()
+		return Harness.MarketplaceService.Queries[TEST_SYNTHETIC_VIP_PASS_ASSET_ID] == 1
+			and Harness.MarketplaceService.Queries[TEST_SYNTHETIC_PREMIUM_ZONE_PASS_ASSET_ID] == 1
+	end, "overlapping synthetic Game Pass queries did not start")
+
+	Harness.MarketplaceService.PromptGamePassPurchaseFinished:Fire(
+		Harness.Player,
+		TEST_SYNTHETIC_VIP_PASS_ASSET_ID,
+		true
+	)
+	waitUntil(function()
+		return Harness.Session.HasVip == true
+	end, "newer synthetic VIP generation did not apply")
+	OldPremiumZoneQuery.Blocked = false
+	waitUntil(function()
+		return Harness.Session.HasPremiumZonePass == true
+	end, "VIP generation incorrectly invalidated PremiumZone generation")
+	OldVipQuery.Blocked = false
+	task.wait()
+	assert(Harness.Session.HasVip == true, "stale VIP generation overwrote the newer VIP result")
+
+	Harness.MarketplaceService.PromptGamePassPurchaseFinished:Fire(
+		Harness.Player,
+		TEST_SYNTHETIC_PREMIUM_ZONE_PASS_ASSET_ID,
+		true
+	)
+	waitUntil(function()
+		return Harness.Session.HasPremiumZonePass == false
+	end, "newer synthetic PremiumZone generation did not apply")
+	assert(Harness.Session.HasVip == true, "PremiumZone generation changed VIP ownership")
+	Sessions.Remove(Harness.Player)
+end)
+
+check("GamePass query errors preserve saved true and false values", function()
+	local Harness = loadGamePassService({
+		[TEST_SYNTHETIC_VIP_PASS_ASSET_ID] = { { Error = "TEST_SYNTHETIC_VIP_QUERY_FAILURE" } },
+		[TEST_SYNTHETIC_PREMIUM_ZONE_PASS_ASSET_ID] = {
+			{ Error = "TEST_SYNTHETIC_PREMIUM_ZONE_QUERY_FAILURE" },
+		},
+	})
+	Harness.Session.HasVip = true
+	Harness.Session.HasPremiumZonePass = false
+	Harness.EventBus.Publish("PlayerSessionCreated", Harness.Player, Harness.Session)
+	waitUntil(function()
+		return Harness.MarketplaceService.Queries[TEST_SYNTHETIC_VIP_PASS_ASSET_ID] == 1
+			and Harness.MarketplaceService.Queries[TEST_SYNTHETIC_PREMIUM_ZONE_PASS_ASSET_ID] == 1
+	end, "synthetic failing Game Pass queries did not run")
+	task.wait()
+	assert(Harness.Session.HasVip == true, "failed VIP query cleared saved true ownership")
+	assert(Harness.Session.HasPremiumZonePass == false, "failed PremiumZone query overwrote saved false ownership")
+	assert(Harness.SaveService.SaveCalls == 0, "failed Game Pass queries queued a save")
+	Sessions.Remove(Harness.Player)
+end)
+
 check("prompt-finished re-queries instead of trusting wasPurchased", function()
 	local Harness = loadGamePassService({
 		[TEST_SYNTHETIC_VIP_PASS_ASSET_ID] = { { Result = false }, { Result = false } },
@@ -323,6 +385,21 @@ check("Developer Product config exposes one portal-only 29 Robux triple reward",
 	end
 	local Product = PortalProducts.World1TripleReward
 	assert(Product ~= nil and PortalProductCount == 1)
+	for ProductKey in Products do
+		local LowerProductKey = string.lower(ProductKey)
+		assert(
+			not (
+					string.find(LowerProductKey, "world1", 1, true)
+					and (
+						string.find(LowerProductKey, "vip", 1, true)
+						or string.find(LowerProductKey, "discount", 1, true)
+					)
+				),
+			"forbidden VIP-discount WORLD1 Developer Product key is present: " .. ProductKey
+		)
+	end
+	assert(Products.World1TripleRewardVip == nil, "forbidden World1TripleRewardVip product is present")
+	assert(Products.World1TripleRewardVipDiscount == nil, "forbidden World1TripleRewardVipDiscount product is present")
 	assert(Product.Price == 29)
 	assert(type(Product.ProductId) == "number" and Product.ProductId > 0 and Product.ProductId % 1 == 0)
 	assert(Product.ProductId ~= TEST_SYNTHETIC_WORLD1_TRIPLE_REWARD_PRODUCT_ID)
