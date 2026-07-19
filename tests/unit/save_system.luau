@@ -6,6 +6,8 @@ local SaveConfig = require("../../src/server/Core/Config/SaveConfig")
 local Profiles = require("../../src/server/Core/Registry/RuntimeRegistry/Profiles")
 local Sessions = require("../../src/server/Core/Registry/RuntimeRegistry/Sessions")
 
+local TEST_SYNTHETIC_PORTAL_PRODUCT_ID = 987654
+
 local function expectError(Callback)
 	local Success = pcall(Callback)
 	assert(Success == false)
@@ -43,6 +45,7 @@ assert(Defaults.Settings.SoundEnabled == true)
 assert(Defaults.Settings.MusicEnabled == true)
 assert(Defaults.HasDoubleMultiplier == false)
 assert(Defaults.HasVip == false)
+assert(Defaults.HasPremiumZonePass == false, "MVP-005 profile default HasPremiumZonePass is missing")
 assert(next(Defaults.ProcessedPurchaseIds) == nil)
 assert(Defaults.LastActiveTimestamp == 0)
 assert(Defaults.LastLogoutTimestamp == 0)
@@ -76,6 +79,11 @@ end)
 expectError(function()
 	PlayerProfileSchema.Normalize({ Settings = { SoundEnabled = true, Unknown = false } })
 end)
+expectError(function()
+	PlayerProfileSchema.Normalize({ HasPremiumZonePass = "yes" })
+end)
+local PremiumZoneEntitlement = PlayerProfileSchema.Normalize({ HasPremiumZonePass = true })
+assert(PremiumZoneEntitlement.HasPremiumZonePass == true)
 
 local AtUpgradeLimit = PlayerProfileSchema.Normalize({
 	UnlockedGrowthUpgrades = dictionary("Upgrade_", 64),
@@ -579,6 +587,7 @@ local function sessionFromProfile(Player, Profile)
 		Settings = Profile.Settings,
 		HasDoubleMultiplier = Profile.HasDoubleMultiplier,
 		HasVip = Profile.HasVip,
+		HasPremiumZonePass = Profile.HasPremiumZonePass,
 		PurchaseHistory = Profile.ProcessedPurchaseIds,
 		LastActiveTimestamp = Profile.LastActiveTimestamp,
 		LastLogoutTimestamp = Profile.LastLogoutTimestamp,
@@ -604,6 +613,10 @@ assert(Lifecycle.Store.UpdateCalls == BeforeSaveCalls + 1)
 assert(Lifecycle.Store.Data.Player_2001.Bigger == 25)
 assert(Lifecycle.Store.Data.Player_2001.LeaseOwner == "job-test")
 assert(Lifecycle.Store.Data.Player_2001.LastLogoutTimestamp == 0)
+
+LifecycleSession.HasPremiumZonePass = true
+LifecycleSaveService:SaveProfile(Lifecycle.Player)
+assert(Lifecycle.Store.Data.Player_2001.HasPremiumZonePass == true)
 
 Lifecycle.Store.FailWrites = 2
 table.clear(Lifecycle.FakeTask.Delays)
@@ -1090,9 +1103,11 @@ local function childContainer(Children)
 	return Children
 end
 
-local function loadConfigValidationService(Rewards)
+local function loadConfigValidationService(Rewards, Options)
+	Options = Options or {}
 	local RewardType = {
 		Bigger = "Bigger",
+		Destruction = "Destruction",
 		Coins = "Coins",
 		Aura = "Aura",
 		Boost = "Boost",
@@ -1100,16 +1115,18 @@ local function loadConfigValidationService(Rewards)
 		DoubleMultiplier = "DoubleMultiplier",
 		Vip = "Vip",
 	}
-	local ShopUIConfig = {
+	local ShopUIConfig = Options.ShopUIConfig or {
 		TestProduct = { ProductId = 1234 },
 	}
-	local DeveloperProductConfig = {
-		TestProduct = {
-			ProductId = 1234,
-			Rewards = Rewards,
-			AnalyticsKey = "Test_Product",
-		},
-	}
+	local DeveloperProductConfig = Options.DeveloperProductConfig
+		or {
+			TestProduct = {
+				ProductId = 1234,
+				Rewards = Rewards,
+				AnalyticsKey = "Test_Product",
+				Surface = Options.Surface or "Shop",
+			},
+		}
 	local ReplicatedStorage = childContainer({
 		BiggerShared = childContainer({
 			Core = childContainer({
@@ -1152,6 +1169,28 @@ end
 
 bootProductConfig({ { Type = "Bigger", Amount = 10 } })
 assert(ReceiptRegistrationCount == 1)
+loadConfigValidationService({ { Type = "Bigger", Amount = 10 } }, { Surface = "Shop" }):Init()
+loadConfigValidationService({ { Type = "Destruction", Amount = 3 } }, {
+	ShopUIConfig = {},
+	DeveloperProductConfig = {
+		World1TripleReward = {
+			ProductId = TEST_SYNTHETIC_PORTAL_PRODUCT_ID,
+			Rewards = { { Type = "Destruction", Amount = 3 } },
+			AnalyticsKey = "World1_Triple_Reward",
+			Surface = "PortalOnly",
+			Price = 29,
+		},
+	},
+}):Init()
+expectError(function()
+	loadConfigValidationService({ { Type = "Bigger", Amount = 10 } }, { Surface = "Unknown" }):Init()
+end)
+expectError(function()
+	loadConfigValidationService({ { Type = "Bigger", Amount = 10 } }, {
+		ShopUIConfig = {},
+		Surface = "Shop",
+	}):Init()
+end)
 expectError(function()
 	bootProductConfig({})
 end)
@@ -1302,6 +1341,7 @@ local function persistentSnapshot(Session)
 		Settings = Session.Settings,
 		HasDoubleMultiplier = Session.HasDoubleMultiplier,
 		HasVip = Session.HasVip,
+		HasPremiumZonePass = Session.HasPremiumZonePass,
 		ProcessedPurchaseIds = Session.PurchaseHistory,
 		LastActiveTimestamp = Session.LastActiveTimestamp,
 		LastLogoutTimestamp = Session.LastLogoutTimestamp,
@@ -1357,6 +1397,9 @@ local FrozenMutations = {
 	end,
 	function(Session)
 		Session.HasVip = true
+	end,
+	function(Session)
+		Session.HasPremiumZonePass = true
 	end,
 	function(Session)
 		Session.PurchaseHistory["Purchase:Frozen"] = true
@@ -1611,6 +1654,10 @@ local function loadReceiptProcessingService(UserId, PurchaseHistory, PendingPurc
 	function ServiceRegistry.Get(Name)
 		return if Name == "RewardService" then RewardService else SaveService
 	end
+	local EventBus = { Published = {} }
+	function EventBus.Publish(Name, ...)
+		table.insert(EventBus.Published, { Name, ... })
+	end
 
 	local DeveloperProductConfig = {
 		BiggerPack = {
@@ -1622,6 +1669,7 @@ local function loadReceiptProcessingService(UserId, PurchaseHistory, PendingPurc
 	local ServicesFolder = {}
 	local CoreFolder = {
 		Config = { DeveloperProductConfig = DeveloperProductConfig },
+		Events = { EventBus = EventBus },
 		Registry = {
 			ServiceRegistry = ServiceRegistry,
 			RuntimeRegistry = { Profiles = Profiles, Sessions = Sessions },
@@ -1667,6 +1715,7 @@ local function loadReceiptProcessingService(UserId, PurchaseHistory, PendingPurc
 	Service:Init()
 	return {
 		Entry = Entry,
+		EventBus = EventBus,
 		Logger = Logger,
 		MarketplaceService = MarketplaceService,
 		Player = Player,
@@ -1690,6 +1739,7 @@ local DurableDuplicate = loadReceiptProcessingService(3001, DurableHistory, {}, 
 assert(DurableDuplicate.MarketplaceService.ProcessReceipt(receiptInfo(3001, "Purchase:Duplicate")) == "PurchaseGranted")
 assert(DurableDuplicate.RewardService.GrantCalls == 0)
 assert(DurableDuplicate.SaveService.CommitCalls == 0)
+assert(#DurableDuplicate.EventBus.Published == 0)
 
 local AtCapacity = loadReceiptProcessingService(3002, dictionary("Durable:", 5000), {}, { Success = true }, true)
 assert(AtCapacity.MarketplaceService.ProcessReceipt(receiptInfo(3002, "Purchase:New")) == "NotProcessedYet")
@@ -1706,12 +1756,24 @@ local PendingDuplicate = loadReceiptProcessingService(
 assert(PendingDuplicate.MarketplaceService.ProcessReceipt(receiptInfo(3003, "Purchase:Pending")) == "PurchaseGranted")
 assert(PendingDuplicate.RewardService.GrantCalls == 0)
 assert(PendingDuplicate.SaveService.CommitCalls == 1)
+assert(#PendingDuplicate.EventBus.Published == 1)
+assert(PendingDuplicate.EventBus.Published[1][1] == "DeveloperProductCommitted")
+assert(PendingDuplicate.EventBus.Published[1][2] == PendingDuplicate.Player)
+assert(PendingDuplicate.EventBus.Published[1][3] == "BiggerPack")
+assert(PendingDuplicate.EventBus.Published[1][4] == "Purchase:Pending")
 
 local NewReceipt = loadReceiptProcessingService(3004, {}, {}, { Success = true }, true)
 assert(NewReceipt.MarketplaceService.ProcessReceipt(receiptInfo(3004, "Purchase:New")) == "PurchaseGranted")
 assert(NewReceipt.RewardService.GrantCalls == 1)
 assert(NewReceipt.RewardService.PendingSeenDuringGrant == true)
 assert(NewReceipt.SaveService.CommitCalls == 1)
+assert(#NewReceipt.EventBus.Published == 1)
+assert(NewReceipt.EventBus.Published[1][1] == "DeveloperProductCommitted")
+assert(NewReceipt.EventBus.Published[1][2] == NewReceipt.Player)
+assert(NewReceipt.EventBus.Published[1][3] == "BiggerPack")
+assert(NewReceipt.EventBus.Published[1][4] == "Purchase:New")
+assert(NewReceipt.MarketplaceService.ProcessReceipt(receiptInfo(3004, "Purchase:New")) == "PurchaseGranted")
+assert(#NewReceipt.EventBus.Published == 1)
 assert(NewReceipt.MarketplaceService.ProcessReceipt(receiptInfo(3004, "bad/id")) == "NotProcessedYet")
 assert(NewReceipt.RewardService.GrantCalls == 1)
 
@@ -1719,6 +1781,7 @@ local FailedDispatch = loadReceiptProcessingService(3005, {}, {}, { Success = fa
 assert(FailedDispatch.MarketplaceService.ProcessReceipt(receiptInfo(3005, "Purchase:Failed")) == "NotProcessedYet")
 assert(FailedDispatch.Entry.PendingPurchaseIds["Purchase:Failed"] == nil)
 assert(FailedDispatch.SaveService.CommitCalls == 0)
+assert(#FailedDispatch.EventBus.Published == 0)
 
 local FailedCommit = loadReceiptProcessingService(3006, {}, {}, { Success = true }, false)
 assert(FailedCommit.MarketplaceService.ProcessReceipt(receiptInfo(3006, "Purchase:Retry")) == "NotProcessedYet")
@@ -1726,6 +1789,7 @@ assert(FailedCommit.Entry.PendingPurchaseIds["Purchase:Retry"] == true)
 assert(FailedCommit.MarketplaceService.ProcessReceipt(receiptInfo(3006, "Purchase:Retry")) == "NotProcessedYet")
 assert(FailedCommit.RewardService.GrantCalls == 1)
 assert(FailedCommit.SaveService.CommitCalls == 2)
+assert(#FailedCommit.EventBus.Published == 0)
 
 for _, Case in { DurableDuplicate, AtCapacity, PendingDuplicate, NewReceipt, FailedDispatch, FailedCommit } do
 	Profiles.Remove(Case.Player.UserId, Case.Entry)
