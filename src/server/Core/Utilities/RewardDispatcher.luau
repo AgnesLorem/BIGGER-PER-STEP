@@ -1,7 +1,6 @@
 --!strict
 -- RewardDispatcher.luau
--- Two-phase reward executor: validates ALL rewards first, then applies atomically.
--- Prevents partial bundle application on validation failure.
+-- Helper utility responsible strictly for executing valid rewards (SRP).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServiceRegistry = require(script.Parent.Parent.Registry.ServiceRegistry)
@@ -17,8 +16,6 @@ local RewardError = require(
 )
 local Sessions = require(script.Parent.Parent.Registry.RuntimeRegistry.Sessions)
 
---// Types \\--
-
 export type Reward = {
 	Type: string,
 	Amount: number?,
@@ -32,143 +29,115 @@ export type DispatchResult = {
 	FailedReward: Reward?,
 }
 
---// Helpers \\--
-
+-- Registry lookup helpers
 local function GetGrowthService()
 	return ServiceRegistry.Get("GrowthService")
 end
 
--- Validation-only checks (no side effects)
-local Validators = table.freeze({
-	[RewardType.Bigger] = function(Player: Player, Reward: Reward): (boolean, string?)
-		if not GetGrowthService() then return false, "GrowthService unavailable" end
-		if not Reward.Amount or Reward.Amount <= 0 then return false, "Invalid Bigger amount" end
-		return true, nil
+-- Frozen mapping table of reward executors
+local Handlers = table.freeze({
+	[RewardType.Bigger] = function(Player: Player, Reward: Reward): boolean
+		local GrowthService = GetGrowthService()
+		if not GrowthService then
+			return false
+		end
+		local Session = Sessions.Get(Player)
+		if not Session then
+			return false
+		end
+		local ExpectedBigger = math.floor(Session.Bigger + (Reward.Amount or 0))
+		local Called, Applied = pcall(GrowthService.AddBiggerAbsolute, GrowthService, Player, Reward.Amount or 0)
+		if Called then
+			return Applied == true
+		end
+		local CurrentSession = Sessions.Get(Player)
+		return CurrentSession ~= nil and CurrentSession.Bigger == ExpectedBigger
 	end,
-	[RewardType.Coins] = function(_Player: Player, _Reward: Reward): (boolean, string?)
-		return true, nil
-	end,
-	[RewardType.Aura] = function(_Player: Player, _Reward: Reward): (boolean, string?)
-		return true, nil
-	end,
-	[RewardType.Boost] = function(_Player: Player, _Reward: Reward): (boolean, string?)
-		return true, nil
-	end,
-	[RewardType.Item] = function(_Player: Player, _Reward: Reward): (boolean, string?)
-		return true, nil
-	end,
-	[RewardType.DoubleMultiplier] = function(Player: Player, _Reward: Reward): (boolean, string?)
-		local session = Sessions.Get(Player)
-		if not session then return false, "No session" end
-		return true, nil
-	end,
-	[RewardType.Vip] = function(Player: Player, _Reward: Reward): (boolean, string?)
-		local session = Sessions.Get(Player)
-		if not session then return false, "No session" end
-		return true, nil
-	end,
-})
 
--- Apply-only handlers (mutate state; called only after full validation passes)
-local Appliers = table.freeze({
-	[RewardType.Bigger] = function(Player: Player, Reward: Reward)
-		local GrowthService = GetGrowthService()
-		GrowthService:AddBiggerAbsolute(Player, Reward.Amount or 0)
+	-- Stub handlers for other reward types (for extensibility)
+	[RewardType.Coins] = function(_Player: Player, _Reward: Reward): boolean
+		-- CurrencyService or similar would be called here
+		return true
 	end,
-	[RewardType.Coins] = function(_Player: Player, _Reward: Reward)
-		-- CurrencyService stub
+	[RewardType.Aura] = function(_Player: Player, _Reward: Reward): boolean
+		return true
 	end,
-	[RewardType.Aura] = function(_Player: Player, _Reward: Reward)
+	[RewardType.Boost] = function(_Player: Player, _Reward: Reward): boolean
+		return true
 	end,
-	[RewardType.Boost] = function(_Player: Player, _Reward: Reward)
+	[RewardType.Item] = function(_Player: Player, _Reward: Reward): boolean
+		return true
 	end,
-	[RewardType.Item] = function(_Player: Player, _Reward: Reward)
-	end,
-	[RewardType.DoubleMultiplier] = function(Player: Player, _Reward: Reward)
-		local session = Sessions.Get(Player)
-		if not session then return end
-		session.HasDoubleMultiplier = true
-		local SaveService = ServiceRegistry.Get("SaveService")
-		if SaveService then
-			local profile = SaveService:LoadProfile(Player)
-			if profile then
-				profile.HasDoubleMultiplier = true
-			end
-		end
-		local GrowthService = GetGrowthService()
-		if GrowthService then
-			GrowthService:UpdateMultiplierAttribute(Player)
-		end
-	end,
-	[RewardType.Vip] = function(Player: Player, _Reward: Reward)
-		local session = Sessions.Get(Player)
-		if not session then return end
-		session.HasVip = true
-		local SaveService = ServiceRegistry.Get("SaveService")
-		if SaveService then
-			local profile = SaveService:LoadProfile(Player)
-			if profile then
-				profile.HasVip = true
-			end
-		end
-		local GrowthService = GetGrowthService()
-		if GrowthService then
-			GrowthService:UpdateMultiplierAttribute(Player)
-		end
-		local CharacterScaleService = ServiceRegistry.Get("CharacterScaleService")
-		if CharacterScaleService then
-			task.spawn(function()
-				CharacterScaleService:UpdateVipTag(Player)
+	[RewardType.DoubleMultiplier] = function(Player: Player, _Reward: Reward): boolean
+		local Mutated = Sessions.Mutate(Player, function(Session)
+			Session.HasDoubleMultiplier = true
+		end)
+		if Mutated then
+			pcall(function()
+				local GrowthService = GetGrowthService()
+				if GrowthService then
+					GrowthService:UpdateMultiplierAttribute(Player)
+				end
 			end)
 		end
+		return Mutated
+	end,
+	[RewardType.Vip] = function(Player: Player, _Reward: Reward): boolean
+		local Mutated = Sessions.Mutate(Player, function(Session)
+			Session.HasVip = true
+		end)
+		if Mutated then
+			pcall(function()
+				local GrowthService = GetGrowthService()
+				if GrowthService then
+					GrowthService:UpdateMultiplierAttribute(Player)
+				end
+			end)
+			pcall(function()
+				local CharacterScaleService = ServiceRegistry.Get("CharacterScaleService")
+				if CharacterScaleService then
+					CharacterScaleService:UpdateVipTag(Player)
+				end
+			end)
+		end
+		return Mutated
 	end,
 })
-
---// Service \\--
 
 local RewardDispatcher = {}
 
-function RewardDispatcher.Validate(Player: Player, Rewards: {Reward}): (boolean, string?, Reward?)
+function RewardDispatcher.Dispatch(Player: Player, Rewards: { Reward }): DispatchResult
+	local appliedRewards = {}
+
 	for _, reward in ipairs(Rewards) do
-		local validator = Validators[reward.Type]
-		if not validator then
-			return false, RewardError.UnknownReward, reward
+		local handler = Handlers[reward.Type]
+		if not handler then
+			return {
+				Success = false,
+				ErrorCode = RewardError.UnknownReward,
+				FailedReward = reward,
+			}
 		end
-		local pcallOk, valid, validErr = pcall(validator, Player, reward)
-		if not pcallOk then
-			return false, RewardError.DispatcherFailed, reward
-		end
-		if not valid then
-			return false, validErr or RewardError.DispatcherFailed, reward
-		end
-	end
-	return true, nil, nil
-end
 
-function RewardDispatcher.Apply(Player: Player, Rewards: {Reward})
-	for _, reward in ipairs(Rewards) do
-		local applier = Appliers[reward.Type]
-		if applier then
-			applier(Player, reward)
+		local success = false
+		local ok = pcall(function()
+			success = handler(Player, reward)
+		end)
+
+		if not ok or not success then
+			return {
+				Success = false,
+				ErrorCode = RewardError.DispatcherFailed,
+				FailedReward = reward,
+			}
 		end
-	end
-end
 
-function RewardDispatcher.Dispatch(Player: Player, Rewards: {Reward}): DispatchResult
-	local valid, err, failedReward = RewardDispatcher.Validate(Player, Rewards)
-	if not valid then
-		return {
-			Success = false,
-			ErrorCode = err,
-			FailedReward = failedReward,
-		}
+		table.insert(appliedRewards, reward)
 	end
-
-	RewardDispatcher.Apply(Player, Rewards)
 
 	return {
 		Success = true,
-		AppliedRewards = Rewards,
+		AppliedRewards = appliedRewards,
 	}
 end
 

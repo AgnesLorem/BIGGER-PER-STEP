@@ -4,26 +4,35 @@ This document provides a structural representation of a loaded Player Profile as
 
 ```json
 {
-  "playerUserId": 12345678,
-  "profileData": {
-    "size": 120.5,
-    "destruction": 3,
-    "rebirths": 1,
-    "unlockedUpgrades": [
-      "upgrade_growth_01",
-      "upgrade_growth_02"
-    ],
-    "equippedUpgrade": "upgrade_growth_02",
-    "completedPortals": [
-      "portal_city_01"
-    ],
-    "settings": {
-      "soundEnabled": true,
-      "musicEnabled": false
-    },
-    "metadata": {
-      "lastLogoutTimestamp": 1783940292
-    }
-  }
+  "SchemaVersion": 1,
+  "Bigger": 120,
+  "Destruction": 3,
+  "Rebirth": 1,
+  "UnlockedGrowthUpgrades": {
+    "Upgrade_1": true,
+    "Upgrade_2": true
+  },
+  "EquippedGrowthUpgrade": "Upgrade_2",
+  "CompletedPortals": {
+    "Portal_City_1": true
+  },
+  "Settings": {
+    "SoundEnabled": true,
+    "MusicEnabled": false
+  },
+  "HasDoubleMultiplier": false,
+  "HasVip": false,
+  "ProcessedPurchaseIds": {
+    "Purchase:example-123": true
+  },
+  "LastActiveTimestamp": 1783940292,
+  "LastLogoutTimestamp": 1783940200,
+  "LastSaveTimestamp": 1783940292,
+  "LeaseOwner": "server-job-id",
+  "LeaseExpiresAt": 1783940472
 }
 ```
+
+Optional `nil` fields are omitted. Runtime-only fields such as `PendingPurchaseIds` and `ProfileMutationsFrozen` are never stored in this profile.
+
+`HasDoubleMultiplier` and `HasVip` are forward-compatible normalized booleans that default to `false`. MVP-004 persists them but does not advertise or implement Game Pass ownership lookup or purchasing.

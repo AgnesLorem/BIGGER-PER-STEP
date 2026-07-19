@@ -123,7 +123,7 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 	end
 
 	local Session = Sessions.Get(Player)
-	if not Session or Session.State ~= "InWorld" then
+	if not Session or Session.ProfileMutationsFrozen or Session.State ~= "InWorld" then
 		return
 	end
 	if Session.CurrentWorldInstanceId ~= WorldInstance.WorldInstanceId then
@@ -155,7 +155,13 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 		return
 	end
 
-	Session.Destruction = Session.Destruction + World1Config.Objective.DestructionReward
+	local Rewarded = Sessions.Mutate(Player, function(CurrentSession)
+		CurrentSession.Destruction += World1Config.Objective.DestructionReward
+	end)
+	if not Rewarded then
+		WorldInstanceService:RecoverPlayer(Player, "ProfileMutationsFrozen", false)
+		return
+	end
 	local Synced = pcall(function()
 		SyncDestruction(Player, Session.Destruction)
 	end)
