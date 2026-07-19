@@ -368,6 +368,18 @@ check("GamePass prompts reject frozen sessions", function()
 	Sessions.Remove(Harness.Player)
 end)
 
+check("GamePass prompts reject missing sessions", function()
+	local Harness = loadGamePassService({
+		[TEST_SYNTHETIC_VIP_PASS_ASSET_ID] = { { Result = false } },
+		[TEST_SYNTHETIC_PREMIUM_ZONE_PASS_ASSET_ID] = { { Result = false } },
+	})
+	local PromptCount = #Harness.MarketplaceService.Prompts
+	Sessions.Remove(Harness.Player)
+	assert(Harness.Service:Prompt(Harness.Player, "Vip") == false)
+	assert(#Harness.MarketplaceService.Prompts == PromptCount)
+	Sessions.Remove(Harness.Player)
+end)
+
 check("stale GamePass batches never save a replacement session", function()
 	local PremiumZoneQuery = { Result = false, Blocked = true }
 	local Harness = loadGamePassService({
