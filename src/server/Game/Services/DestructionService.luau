@@ -120,7 +120,16 @@ function DestructionService:GrantDestruction(Player: Player, Amount: number): bo
 		return false
 	end
 
-	return pcall(SyncDestruction, Player, NewValue)
+	local Synced, SyncError = pcall(SyncDestruction, Player, NewValue)
+	if not Synced then
+		Logger.Warn(
+			"Destruction",
+			"Presentation sync failed for PlayerUserId=%d: %s",
+			Player.UserId,
+			tostring(SyncError)
+		)
+	end
+	return true
 end
 
 function DestructionService:BindWorld(WorldInstance, WorldInstanceService)

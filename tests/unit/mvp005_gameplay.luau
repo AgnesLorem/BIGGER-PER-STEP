@@ -475,12 +475,16 @@ local function loadDestructionService()
 		return if Name == "Players" then Players else ReplicatedStorage
 	end
 	local ServicesFolder = {}
+	local Logger = { Warnings = {} }
+	function Logger.Warn(Category, Message, ...)
+		table.insert(Logger.Warnings, Category .. ": " .. string.format(Message, ...))
+	end
 	local GameFolder = {
 		Config = { World1Config = World1Config },
 		Parent = {
 			Core = {
 				Registry = { RuntimeRegistry = { Sessions = Sessions }, ServiceRegistry = ServiceRegistry },
-				Utilities = { Logger = { Warn = function() end } },
+				Utilities = { Logger = Logger },
 			},
 		},
 	}
@@ -499,6 +503,7 @@ local function loadDestructionService()
 	})
 	return {
 		DestructionStat = DestructionStat,
+		Logger = Logger,
 		Player = Player,
 		RewardPortalService = RewardPortalService,
 		Service = Service,
@@ -521,6 +526,31 @@ check("GrantDestruction validates safe integers and synchronizes presentation", 
 	Harness.Session.ProfileMutationsFrozen = true
 	assert(Harness.Service:GrantDestruction(Harness.Player, 1) == false)
 	Sessions.Remove(Harness.Player)
+end)
+
+check("GrantDestruction keeps committed success when presentation sync fails", function()
+	local Harness = loadDestructionService()
+	function Harness.Player:SetAttribute(Key, Value)
+		if Key == "Destruction" then
+			error("expected synthetic presentation failure")
+		end
+		self.Attributes[Key] = Value
+	end
+
+	local Attempts = 0
+	local Granted = false
+	repeat
+		Attempts += 1
+		Granted = Harness.Service:GrantDestruction(Harness.Player, 3)
+	until Granted or Attempts == 2
+	local Destruction = Harness.Session.Destruction
+	local WarningCount = #Harness.Logger.Warnings
+	Sessions.Remove(Harness.Player)
+
+	assert(Granted == true, "committed Destruction was reported as failed")
+	assert(Attempts == 1, "false-after-commit caused a retry")
+	assert(Destruction == 3, "presentation failure rolled back or double-granted Destruction")
+	assert(WarningCount == 1, "presentation failure was not logged exactly once")
 end)
 
 check("valid stomp activates choices without granting or returning", function()
