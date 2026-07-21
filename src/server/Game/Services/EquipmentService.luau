@@ -68,6 +68,32 @@ local function BuildEquipmentState(Session: Sessions.Session): EquipmentState
 	}
 end
 
+local function QueueImmediateSave(Player: Player, ActionName: string, UpgradeId: string)
+	local SaveServiceOk, SaveService = pcall(function()
+		return ServiceRegistry.Get("SaveService")
+	end)
+	if SaveServiceOk and SaveService then
+		local SaveQueued = SaveService:QueueProfileSave(Player)
+		if not SaveQueued then
+			Logger.Warn(
+				"Equipment",
+				"Immediate save queue failed for %s during %s %s",
+				Player.Name,
+				ActionName,
+				UpgradeId
+			)
+		end
+	else
+		Logger.Warn(
+			"Equipment",
+			"SaveService unavailable to queue save for %s during %s %s",
+			Player.Name,
+			ActionName,
+			UpgradeId
+		)
+	end
+end
+
 function EquipmentService:Init()
 	local EventsFolder = ReplicatedStorage:FindFirstChild("BiggerEvents") :: Folder?
 	if not EventsFolder then
@@ -132,19 +158,36 @@ function EquipmentService:Start()
 	EventBus.Subscribe("PlayerSessionDestroyed", function(Player: Player)
 		self:OnSessionDestroyed(Player)
 	end)
+
+	Players.PlayerRemoving:Connect(function(Player: Player)
+		self:OnSessionDestroyed(Player)
+	end)
 end
 
 function EquipmentService:OnSessionCreated(Player: Player, Session: Sessions.Session)
 	-- Validate equipped upgrade against unlocked map on load
 	if Session.EquippedGrowthUpgrade ~= nil then
 		if not UpgradesConfig.CanEquip(Session.UnlockedGrowthUpgrades, Session.EquippedGrowthUpgrade) then
-			Logger.Warn(
-				"Equipment",
-				"Invalid or locked equipped upgrade %s for %s, resetting to None",
-				tostring(Session.EquippedGrowthUpgrade),
-				Player.Name
-			)
-			Session.EquippedGrowthUpgrade = nil
+			local InvalidUpgrade = tostring(Session.EquippedGrowthUpgrade)
+			local Mutated = Sessions.Mutate(Player, function(S)
+				S.EquippedGrowthUpgrade = nil
+			end)
+			if Mutated then
+				Logger.Warn(
+					"Equipment",
+					"Repaired invalid equipped upgrade %s for %s, reset to None",
+					InvalidUpgrade,
+					Player.Name
+				)
+				QueueImmediateSave(Player, "SessionLoadRepair", InvalidUpgrade)
+			else
+				Logger.Warn(
+					"Equipment",
+					"Failed to mutate session for invalid equipped upgrade %s for %s",
+					InvalidUpgrade,
+					Player.Name
+				)
+			end
 		end
 	end
 
@@ -284,13 +327,7 @@ function EquipmentService:UnlockUpgrade(Player: Player, UpgradeId: string): (boo
 		StateChangedRemote:FireClient(Player, BuildEquipmentState(Session))
 	end
 
-	-- Queue immediate non-blocking save
-	local SaveServiceOk, SaveService = pcall(function()
-		return ServiceRegistry.Get("SaveService")
-	end)
-	if SaveServiceOk and SaveService then
-		SaveService:QueueProfileSave(Player)
-	end
+	QueueImmediateSave(Player, "UnlockUpgrade", UpgradeId)
 
 	Logger.Info("Equipment", "Player %s unlocked upgrade %s", Player.Name, UpgradeId)
 	return true, ResultCodes.Success
@@ -343,13 +380,7 @@ function EquipmentService:EquipUpgrade(Player: Player, UpgradeId: string?): (boo
 		StateChangedRemote:FireClient(Player, BuildEquipmentState(Session))
 	end
 
-	-- Queue immediate non-blocking save
-	local SaveServiceOk, SaveService = pcall(function()
-		return ServiceRegistry.Get("SaveService")
-	end)
-	if SaveServiceOk and SaveService then
-		SaveService:QueueProfileSave(Player)
-	end
+	QueueImmediateSave(Player, "EquipUpgrade", TargetId)
 
 	Logger.Info("Equipment", "Player %s equipped upgrade %s", Player.Name, TargetId)
 	return true, ResultCodes.Success

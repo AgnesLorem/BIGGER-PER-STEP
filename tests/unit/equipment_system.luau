@@ -362,7 +362,7 @@ assert(frozenEquipOk == false and frozenEquipCode == "Frozen", "Equip on frozen 
 session.ProfileMutationsFrozen = false
 Sessions.Remove(mockPlayer)
 
--- Initial session creation lifecycle sync test
+-- Initial session creation lifecycle sync & repair test
 local loadedSession: Sessions.Session = {
 	Player = mockPlayer,
 	Bigger = 1,
@@ -385,11 +385,13 @@ local loadedSession: Sessions.Session = {
 	ProfileMutationFreezeReason = nil,
 }
 
+Sessions.Set(mockPlayer, loadedSession)
 EquipmentServiceModule:OnSessionCreated(mockPlayer, loadedSession)
 assert(
 	loadedSession.EquippedGrowthUpgrade == nil,
-	"Invalid persisted equipped upgrade must fail safe to nil on session load"
+	"Invalid persisted equipped upgrade must fail safe to nil via session mutation repair on session load"
 )
 assert(mockPlayer:GetAttribute("EquippedGrowthUpgrade") == "None", "Attribute must reset to None")
+Sessions.Remove(mockPlayer)
 
 print("equipment_system service tests: PASS")
