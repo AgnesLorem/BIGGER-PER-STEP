@@ -1,6 +1,6 @@
 --!strict
 -- tests/unit/equipment_system.luau
--- Comprehensive unit tests for Equipment System (UpgradesConfig, GrowthFormula, EquipmentService, Persistence).
+-- Comprehensive unit tests for Equipment System (UpgradesConfig, GrowthFormula, EquipmentService, EquipmentController, Persistence).
 
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
@@ -32,8 +32,7 @@ end
 local PlayersMock = { Name = "Players" }
 
 local function createContainer(tableObj: any): any
-	tableObj.WaitForChild = function(self: any, childName: string)
-		assert(self[childName], "Missing mock child: " .. tostring(childName))
+	tableObj.WaitForChild = function(self: any, childName: string, timeout: number?)
 		return self[childName]
 	end
 	tableObj.FindFirstChild = function(self: any, childName: string)
@@ -135,6 +134,10 @@ local EquipmentServiceModule = loadModule("src/server/Game/Services/EquipmentSer
 			}),
 		}),
 	}),
+})
+
+local EquipmentControllerModule = loadModule("src/client/controllers/EquipmentController.luau", "EquipmentController", {
+	game = MockGame,
 })
 
 -- 1. Configuration tests
@@ -395,3 +398,38 @@ assert(mockPlayer:GetAttribute("EquippedGrowthUpgrade") == "None", "Attribute mu
 Sessions.Remove(mockPlayer)
 
 print("equipment_system service tests: PASS")
+
+-- 4. EquipmentController client tests
+EquipmentControllerModule.Init()
+
+local stateCopy1 = EquipmentControllerModule.GetState()
+assert(stateCopy1.EquippedUpgradeId == "None", "Default client state equipped upgrade must be None")
+assert(#stateCopy1.UnlockedUpgradeIds == 0, "Default client state unlocked list must be empty")
+
+-- Verify defensive copy isolation
+table.insert(stateCopy1.UnlockedUpgradeIds, "SpoofedItem")
+local stateCopy2 = EquipmentControllerModule.GetState()
+assert(#stateCopy2.UnlockedUpgradeIds == 0, "Mutating returned GetState table must not mutate internal client state")
+
+-- Verify callback registration and unsubscribe
+local callbackFired = false
+local unsubscribe = EquipmentControllerModule.OnStateChanged(function(state)
+	callbackFired = true
+end)
+assert(callbackFired == true, "OnStateChanged must fire immediately upon subscription with current state")
+unsubscribe()
+
+-- Verify request methods without remotes handle errors cleanly without crashing
+local reqOk, reqMsg = EquipmentControllerModule.RequestUnlock("Protein")
+assert(
+	reqOk == false and reqMsg == "RemoteNotReady",
+	"RequestUnlock must return RemoteNotReady when remotes not initialized"
+)
+
+local equipReqOk, equipReqMsg = EquipmentControllerModule.RequestEquip("Protein")
+assert(
+	equipReqOk == false and equipReqMsg == "RemoteNotReady",
+	"RequestEquip must return RemoteNotReady when remotes not initialized"
+)
+
+print("equipment_system controller tests: PASS")
