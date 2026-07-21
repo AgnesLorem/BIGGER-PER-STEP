@@ -273,6 +273,14 @@ function SaveService:SaveProfile(Player: Player)
 	end
 end
 
+function SaveService:QueueProfileSave(Player: Player): boolean
+	if not self:IsProfileWritable(Player) then
+		return false
+	end
+	local Request = QueueSave(Player, "Autosave")
+	return Request ~= nil
+end
+
 function SaveService:CommitTransaction(
 	Player: Player,
 	TransactionData: { PurchaseId: string, Rewards: { [any]: any } }
