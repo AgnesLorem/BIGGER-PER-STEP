@@ -10,6 +10,7 @@ local WorldInstanceService = require(script.Parent.Services.WorldInstanceService
 local PortalService = require(script.Parent.Services.PortalService)
 local DestructionService = require(script.Parent.Services.DestructionService)
 local RewardPortalService = require(script.Parent.Services.RewardPortalService)
+local EquipmentService = require(script.Parent.Services.EquipmentService)
 
 --// Service \\--
 local GameBootstrap = {}
@@ -20,12 +21,14 @@ function GameBootstrap.Init()
 	ServiceRegistry.Register("PortalService", PortalService)
 	ServiceRegistry.Register("DestructionService", DestructionService)
 	ServiceRegistry.Register("RewardPortalService", RewardPortalService)
+	ServiceRegistry.Register("EquipmentService", EquipmentService)
 	MovementGrowthSystem.Init()
 	AFKZoneSystem.Init()
 	WorldInstanceService:Init()
 	DestructionService:Init()
 	RewardPortalService:Init()
 	PortalService:Init()
+	EquipmentService:Init()
 end
 
 function GameBootstrap.Start()
@@ -35,6 +38,7 @@ function GameBootstrap.Start()
 	DestructionService:Start()
 	RewardPortalService:Start()
 	PortalService:Start()
+	EquipmentService:Start()
 end
 
 return GameBootstrap
