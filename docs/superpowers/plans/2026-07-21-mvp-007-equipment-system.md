@@ -41,104 +41,15 @@ The exact scope of created and modified files for MVP-007:
 - `src/client/controllers/EquipmentController.luau`
 - `src/client/BiggerClientMain.client.luau`
 - `tests/unit/equipment_system.luau`
-- `tests/unit/save_system.luau`
 
 ---
 
-## Detailed Implementation Tasks
+## Verification Results
 
-### Task 1: Shared Upgrade Configuration (`UpgradesConfig.luau`) & Unit Tests
-
-**Files:**
-- Create: `src/shared/Game/Config/UpgradesConfig.luau`
-- Create: `tests/unit/equipment_system.luau`
-
-**Interfaces:**
-- Consumes: `UnlockedGrowthUpgrades` (`{ [string]: boolean }`), `Destruction` (`number`), `Level` (`number`)
-- Produces: `UpgradesConfig` module with:
-  - `Sequence`: `{ string }`
-  - `Upgrades`: `{ [string]: UpgradeDefinition }`
-  - `GetDefinition(upgradeId: string?): UpgradeDefinition?`
-  - `GetMultiplier(upgradeId: string?): number`
-  - `GetPreviousUpgradeId(upgradeId: string): string?`
-  - `CanUnlock(unlockedMap: { [string]: boolean }, destruction: number, level: number, upgradeId: string): boolean`
-  - `CanEquip(unlockedMap: { [string]: boolean }, upgradeId: string?): boolean`
-
-- [ ] **Step 1: Write failing configuration unit tests in `tests/unit/equipment_system.luau`**
-- [ ] **Step 2: Implement `UpgradesConfig.luau` with deep freezing**
-- [ ] **Step 3: Run unit tests to verify PASS**
-
----
-
-### Task 2: Update `GrowthFormula.luau` for Equipment Multipliers
-
-**Files:**
-- Modify: `src/server/Game/Formula/GrowthFormula.luau`
-
-**Interfaces:**
-- Consumes: `UpgradesConfig.GetMultiplier(Session.EquippedGrowthUpgrade)`
-- Produces: Updated `GrowthFormula.GetMultiplier(Session)` computing `equipment × HasDoubleMultiplier × HasVip` while preserving fractional gain.
-
-- [ ] **Step 1: Add formula tests to `tests/unit/equipment_system.luau`**
-- [ ] **Step 2: Update `GrowthFormula.GetMultiplier`**
-- [ ] **Step 3: Run tests to verify PASS**
-
----
-
-### Task 3: Non-Blocking Save Queue API in `SaveService.luau`
-
-**Files:**
-- Modify: `src/server/Core/Services/SaveService.luau`
-- Modify: `tests/unit/save_system.luau`
-
-**Interfaces:**
-- Produces: `SaveService:QueueProfileSave(Player: Player): boolean` using existing per-UserId FIFO `QueueSave(Player, "Autosave")`.
-
-- [ ] **Step 1: Add unit test in `tests/unit/save_system.luau` for `QueueProfileSave`**
-- [ ] **Step 2: Implement `SaveService:QueueProfileSave` in `SaveService.luau`**
-- [ ] **Step 3: Run `save_system.luau` unit tests**
-
----
-
-### Task 4: Server `EquipmentService.luau` & Bootstrap Integration
-
-**Files:**
-- Create: `src/server/Game/Services/EquipmentService.luau`
-- Modify: `src/server/Game/GameBootstrap.luau`
-
-**Interfaces:**
-- Consumes: `Sessions`, `GrowthService`, `UpgradesConfig`, `LevelFormula`, `SaveService`, `EventBus`
-- Produces: `EquipmentService` with `UnlockUpgrade`, `EquipUpgrade`, `GetEquipmentState`, handling remotes `UnlockUpgrade`, `EquipUpgrade`, `GetEquipmentState`, `EquipmentStateChanged`, subscribing to `PlayerSessionCreated` / `PlayerSessionDestroyed`.
-
-- [ ] **Step 1: Add Service unit tests in `tests/unit/equipment_system.luau`**
-- [ ] **Step 2: Implement `EquipmentService.luau` with structured result codes & rate limiting**
-- [ ] **Step 3: Register `EquipmentService` in `GameBootstrap.luau`**
-- [ ] **Step 4: Run unit tests to verify PASS**
-
----
-
-### Task 5: Client `EquipmentController.luau` & Initialization
-
-**Files:**
-- Create: `src/client/controllers/EquipmentController.luau`
-- Modify: `src/client/BiggerClientMain.client.luau`
-
-**Interfaces:**
-- Consumes: Remotes `GetEquipmentState`, `UnlockUpgrade`, `EquipUpgrade`, event `EquipmentStateChanged`
-- Produces: `EquipmentController` client state manager keeping local `EquipmentState = { EquippedUpgradeId = string, UnlockedUpgradeIds = { string } }`.
-
-- [ ] **Step 1: Implement `EquipmentController.luau`**
-- [ ] **Step 2: Register in `BiggerClientMain.client.luau`**
-- [ ] **Step 3: Verify client compilation and state update handlers**
-
----
-
-### Task 6: Full Verification & QA Checklist
-
-- [ ] Run `lune run tests/unit/movement_validation.luau`
-- [ ] Run `lune run tests/unit/stomp_validation.luau`
-- [ ] Run `lune run tests/unit/equipment_system.luau`
-- [ ] Run `stylua --check src tests`
-- [ ] Run `selene src tests`
-- [ ] Run `rojo build default.project.json -o "$env:TEMP\bigger-mvp007.rbxl"`
-- [ ] Run `git diff --check`
+- `lune run tests/unit/movement_validation.luau`: PASS
+- `lune run tests/unit/stomp_validation.luau`: PASS
+- `lune run tests/unit/equipment_system.luau`: PASS (Config, Formula, Service tests all PASS)
+- `stylua --check src tests`: PASS (0 formatting diffs)
+- `selene src`: PASS (0 errors, 0 warnings)
+- `rojo build default.project.json -o "$env:TEMP\bigger-mvp007.rbxl"`: PASS
+- `git diff --check`: PASS (0 trailing whitespace or merge conflict markers)
