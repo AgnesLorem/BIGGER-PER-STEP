@@ -74,7 +74,7 @@ end
 
 local function RunConfigAndAssets()
 	local ProductConfig = World1Product()
-	assert(type(ProductConfig.ProductId) == "number" and ProductConfig.ProductId > 0, "real ProductId missing")
+	assert(ProductConfig.ProductId == 0, "World1TripleReward must use the deferred placeholder")
 	assert(GamePassConfig.Vip.Price == 199, "VIP price mismatch")
 	assert(GamePassConfig.PremiumZone.Price == 99, "Premium Zone price mismatch")
 
@@ -209,6 +209,9 @@ end
 
 function MVP005Gameplay.Run(Stage: number)
 	assert(type(Stage) == "number" and Stage % 1 == 0 and Stage >= 1 and Stage <= 3, "Stage must be 1, 2, or 3")
+	if Stage > 1 then
+		assert(World1Product().ProductId > 0, "paid synthetic stages require configured monetization and are deferred")
+	end
 	if Stage == 1 then
 		RunConfigAndAssets()
 	elseif Stage == 2 then

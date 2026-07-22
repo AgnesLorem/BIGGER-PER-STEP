@@ -98,7 +98,7 @@ local function fakeSession(Player)
 	}
 end
 
-check("GamePassConfig contains exactly Vip and PremiumZone with real Asset IDs", function()
+check("GamePassConfig uses explicit deferred placeholders for Vip and PremiumZone", function()
 	assert(fs.isFile("src/server/Core/Config/GamePassConfig.luau"), "GamePassConfig production module is missing")
 	local GamePassConfig = require("../../src/server/Core/Config/GamePassConfig")
 	local Keys = {}
@@ -111,25 +111,25 @@ check("GamePassConfig contains exactly Vip and PremiumZone with real Asset IDs",
 	assert(GamePassConfig.PremiumZone.Price == 99)
 	for _, Key in Keys do
 		local AssetId = GamePassConfig[Key].AssetId or GamePassConfig[Key].GamePassId
-		assert(type(AssetId) == "number" and AssetId % 1 == 0 and AssetId > 0)
-		assert(AssetId ~= TEST_SYNTHETIC_VIP_PASS_ASSET_ID)
-		assert(AssetId ~= TEST_SYNTHETIC_PREMIUM_ZONE_PASS_ASSET_ID)
+		assert(AssetId == 0, Key .. " must use the explicit unconfigured placeholder")
 	end
 end)
 
-local function loadGamePassService(QueryPlans)
+local function loadGamePassService(QueryPlans, Options)
+	Options = Options or {}
 	local Player = fakePlayer(6101)
 	local Session = fakeSession(Player)
 	Sessions.Set(Player, Session)
 
-	local GamePassConfig = {
-		Vip = { AssetId = TEST_SYNTHETIC_VIP_PASS_ASSET_ID, Price = 199, ProfileKey = "HasVip" },
-		PremiumZone = {
-			AssetId = TEST_SYNTHETIC_PREMIUM_ZONE_PASS_ASSET_ID,
-			Price = 99,
-			ProfileKey = "HasPremiumZonePass",
-		},
-	}
+	local GamePassConfig = Options.GamePassConfig
+		or {
+			Vip = { AssetId = TEST_SYNTHETIC_VIP_PASS_ASSET_ID, Price = 199, ProfileKey = "HasVip" },
+			PremiumZone = {
+				AssetId = TEST_SYNTHETIC_PREMIUM_ZONE_PASS_ASSET_ID,
+				Price = 99,
+				ProfileKey = "HasPremiumZonePass",
+			},
+		}
 	local MarketplaceService = {
 		PromptGamePassPurchaseFinished = signal(),
 		Queries = {},
@@ -192,6 +192,11 @@ local function loadGamePassService(QueryPlans)
 	end
 
 	local ServicesFolder = {}
+	local Logger = { Warnings = {} }
+	function Logger.Info() end
+	function Logger.Warn(Category, Message, ...)
+		table.insert(Logger.Warnings, { Category, string.format(Message, ...) })
+	end
 	local CoreFolder = {
 		Config = { GamePassConfig = GamePassConfig },
 		Events = { EventBus = EventBus },
@@ -199,7 +204,7 @@ local function loadGamePassService(QueryPlans)
 			ServiceRegistry = ServiceRegistry,
 			RuntimeRegistry = { Sessions = Sessions },
 		},
-		Utilities = { Logger = { Info = function() end, Warn = function() end } },
+		Utilities = { Logger = Logger },
 	}
 	ServicesFolder.Parent = CoreFolder
 	local Game = {}
@@ -225,12 +230,37 @@ local function loadGamePassService(QueryPlans)
 		GamePassConfig = GamePassConfig,
 		GrowthService = GrowthService,
 		MarketplaceService = MarketplaceService,
+		Logger = Logger,
 		Player = Player,
 		SaveService = SaveService,
 		Service = Service,
 		Session = Session,
 	}
 end
+
+check("missing GamePass IDs disable only those entitlements and warn once", function()
+	local Harness = loadGamePassService({}, {
+		GamePassConfig = {
+			Vip = { AssetId = 0, Price = 199, ProfileKey = "HasVip" },
+			PremiumZone = { AssetId = 0, Price = 99, ProfileKey = "HasPremiumZonePass" },
+		},
+	})
+	Harness.Service:Init()
+	assert(Harness.Service:GetConfigurationStatus("Vip").ErrorCode == "MissingAssetId")
+	assert(Harness.Service:GetConfigurationStatus("PremiumZone").ErrorCode == "MissingAssetId")
+	Harness.Session.HasVip = true
+	Harness.Session.HasPremiumZonePass = true
+	assert(Harness.Service:IsOwned(Harness.Player, "Vip") == false)
+	assert(Harness.Service:IsOwned(Harness.Player, "PremiumZone") == false)
+	assert(Harness.Service:Prompt(Harness.Player, "Vip") == false)
+	Harness.EventBus.Publish("PlayerSessionCreated", Harness.Player, Harness.Session)
+	task.wait()
+	assert(next(Harness.MarketplaceService.Queries) == nil)
+	assert(#Harness.Logger.Warnings == 2)
+	assert(#Harness.EventBus.Subscribers.PlayerSessionCreated == 1)
+	assert(#Harness.MarketplaceService.PromptGamePassPurchaseFinished.Callbacks == 1)
+	Sessions.Remove(Harness.Player)
+end)
 
 check("GamePass queries coalesce changed entitlements into one save", function()
 	local Harness = loadGamePassService({
@@ -445,8 +475,7 @@ check("Developer Product config exposes one portal-only 29 Robux triple reward",
 	assert(Products.World1TripleRewardVip == nil, "forbidden World1TripleRewardVip product is present")
 	assert(Products.World1TripleRewardVipDiscount == nil, "forbidden World1TripleRewardVipDiscount product is present")
 	assert(Product.Price == 29)
-	assert(type(Product.ProductId) == "number" and Product.ProductId > 0 and Product.ProductId % 1 == 0)
-	assert(Product.ProductId ~= TEST_SYNTHETIC_WORLD1_TRIPLE_REWARD_PRODUCT_ID)
+	assert(Product.ProductId == 0, "World1TripleReward must use the explicit unconfigured placeholder")
 	assert(#Product.Rewards == 1)
 	assert(Product.Rewards[1].Type == "Destruction")
 	assert(Product.Rewards[1].Amount == 3)
@@ -709,7 +738,8 @@ local function rewardPortalModel(Name)
 	return Model
 end
 
-local function loadRewardPortalService()
+local function loadRewardPortalService(ProductId)
+	ProductId = if ProductId == nil then TEST_SYNTHETIC_WORLD1_TRIPLE_REWARD_PRODUCT_ID else ProductId
 	local Player = fakePlayer(6251)
 	local Session = fakeSession(Player)
 	Session.State = "InWorld"
@@ -749,6 +779,14 @@ local function loadRewardPortalService()
 		if TargetCharacter == Character then
 			return Player
 		elseif TargetCharacter == OtherCharacter then
+			return OtherPlayer
+		end
+		return nil
+	end
+	function Players:GetPlayerByUserId(UserId)
+		if UserId == Player.UserId then
+			return Player
+		elseif UserId == OtherPlayer.UserId then
 			return OtherPlayer
 		end
 		return nil
@@ -812,12 +850,18 @@ local function loadRewardPortalService()
 
 	local DeveloperProductConfig = {
 		World1TripleReward = {
-			ProductId = TEST_SYNTHETIC_WORLD1_TRIPLE_REWARD_PRODUCT_ID,
+			ProductId = ProductId,
 			Price = 29,
 			Surface = "PortalOnly",
 			Rewards = { { Type = "Destruction", Amount = 3 } },
 		},
 	}
+	local ConfigValidationService = {}
+	function ConfigValidationService:GetDeveloperProductStatus()
+		return if ProductId > 0
+			then { IsConfigured = true }
+			else { IsConfigured = false, ErrorCode = "MissingProductId" }
+	end
 	local World1Config = {
 		RewardProductKey = "World1TripleReward",
 		RewardPortals = {
@@ -834,6 +878,7 @@ local function loadRewardPortalService()
 		Parent = {
 			Core = {
 				Config = { DeveloperProductConfig = DeveloperProductConfig },
+				Services = { ConfigValidationService = ConfigValidationService },
 				Events = { EventBus = EventBus },
 				Registry = {
 					ServiceRegistry = ServiceRegistry,
@@ -890,6 +935,22 @@ local function loadRewardPortalService()
 	}
 end
 
+check("unconfigured paid reward stays unavailable without blocking free reward", function()
+	local Harness = loadRewardPortalService(0)
+	assert(Harness.Service:BindWorld(Harness.WorldInstance, Harness.Coordinator) == true)
+	assert(Harness.Service:ActivateChoices(Harness.WorldInstance, Harness.Coordinator) == true)
+	local Status = Harness.Service:GetPaidRewardStatus()
+	assert(Status.IsConfigured == false and Status.ErrorCode == "MissingProductId")
+	assert(Harness.FreePortal.Children.Trigger.CanTouch == true)
+	assert(Harness.PaidPortal.Children.Trigger.CanTouch == false)
+	Harness.PaidPortal.Children.Trigger.Touched:Fire(Harness.Hit)
+	assert(#Harness.MarketplaceService.Prompts == 0)
+	assert(Harness.WorldInstance.RewardState == "Choosing")
+	Harness.FreePortal.Children.Trigger.Touched:Fire(Harness.Hit)
+	assert(#Harness.DestructionService.Calls == 1)
+	Sessions.Remove(Harness.Player)
+end)
+
 check("free reward settles once and never invokes the paid prompt", function()
 	local Harness = loadRewardPortalService()
 	assert(Harness.Service:BindWorld(Harness.WorldInstance, Harness.Coordinator) == true)
@@ -936,10 +997,10 @@ check("paid reward uses prompt correlation and never grants directly", function(
 	assert(Pending.PromptToken == "TEST_SYNTHETIC_PROMPT_TOKEN")
 	assert(Pending.State == "PromptOpen")
 
-	Harness.MarketplaceService.PromptProductPurchaseFinished:Fire(Harness.Player, 999999, true)
+	Harness.MarketplaceService.PromptProductPurchaseFinished:Fire(Harness.Player.UserId, 999999, true)
 	assert(Harness.WorldInstance.RewardState == "PromptOpen")
 	Harness.MarketplaceService.PromptProductPurchaseFinished:Fire(
-		Harness.Player,
+		Harness.Player.UserId,
 		TEST_SYNTHETIC_WORLD1_TRIPLE_REWARD_PRODUCT_ID,
 		true
 	)

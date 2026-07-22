@@ -31,11 +31,17 @@ type QueryRequest = {
 	AssetId: number,
 	Generation: number,
 }
+export type ConfigurationStatus = {
+	IsConfigured: boolean,
+	ErrorCode: string?,
+}
 
 --// Variables \\--
 
 local MaximumSafeInteger = 9007199254740991
 local PassKeys: { PassKey } = table.freeze({ "Vip", "PremiumZone" })
+local ConfigurationStatuses: { [PassKey]: ConfigurationStatus } = {}
+local Initialized = false
 
 --// Helpers \\--
 
@@ -72,17 +78,28 @@ local function ValidateConfig()
 			error("GamePassService: invalid metadata for " .. Key, 2)
 		end
 		if not IsValidAssetId(Config.AssetId) then
-			error("GamePassService: missing or invalid AssetId for " .. Key, 2)
+			ConfigurationStatuses[Key] = table.freeze({
+				IsConfigured = false,
+				ErrorCode = "MissingAssetId",
+			})
+			Logger.Warn("MonetizationConfig", "%s is disabled because AssetId is not configured.", Key)
+			continue
 		end
 		local AssetId = Config.AssetId :: number
 		if AssetIds[AssetId] then
 			error("GamePassService: duplicate AssetId for " .. AssetIds[AssetId] .. " and " .. Key, 2)
 		end
 		AssetIds[AssetId] = Key
+		ConfigurationStatuses[Key] = table.freeze({ IsConfigured = true })
 	end
 	if Count ~= #PassKeys or not GamePassConfig.Vip or not GamePassConfig.PremiumZone then
 		error("GamePassService: config must contain exactly Vip and PremiumZone", 2)
 	end
+end
+
+local function IsConfigured(PassKey: PassKey): boolean
+	local Status = ConfigurationStatuses[PassKey]
+	return Status ~= nil and Status.IsConfigured
 end
 
 local function GetOwned(Session: Sessions.Session, PassKey: PassKey): boolean
@@ -168,7 +185,7 @@ local function BeginQueries(Player: Player, PassKeysToQuery: { PassKey })
 	for _, PassKey in PassKeysToQuery do
 		local Config = ConfigFor(PassKey)
 		local AssetId = Config and Config.AssetId
-		if not Config or not IsValidAssetId(AssetId) then
+		if not Config or not IsConfigured(PassKey) or not IsValidAssetId(AssetId) then
 			continue
 		end
 		local Generation = Session.GamePassQueryGenerations[PassKey] + 1
@@ -212,13 +229,13 @@ local function BeginQueries(Player: Player, PassKeysToQuery: { PassKey })
 end
 
 local function OnSessionCreated(Player: Player)
-	Player:SetAttribute("VipGamePassAssetId", GamePassConfig.Vip.AssetId)
+	Player:SetAttribute("VipGamePassAssetId", if IsConfigured("Vip") then GamePassConfig.Vip.AssetId else nil)
 	BeginQueries(Player, PassKeys)
 end
 
 local function OnPromptFinished(Player: Player, AssetId: number, _WasPurchased: boolean)
 	for _, PassKey in PassKeys do
-		if GamePassConfig[PassKey].AssetId == AssetId then
+		if IsConfigured(PassKey) and GamePassConfig[PassKey].AssetId == AssetId then
 			BeginQueries(Player, { PassKey })
 			return
 		end
@@ -230,7 +247,11 @@ end
 local GamePassService = {}
 
 function GamePassService:Init()
+	if Initialized then
+		return
+	end
 	ValidateConfig()
+	Initialized = true
 	EventBus.Subscribe("PlayerSessionCreated", OnSessionCreated)
 	MarketplaceService.PromptGamePassPurchaseFinished:Connect(OnPromptFinished)
 end
@@ -240,7 +261,7 @@ function GamePassService:Start() end
 function GamePassService:IsOwned(Player: Player, PassKey: string): boolean
 	local Config = ConfigFor(PassKey)
 	local Session = Sessions.Get(Player)
-	if not Config or not Session then
+	if not Config or not Session or not IsConfigured(PassKey :: PassKey) then
 		return false
 	end
 	return GetOwned(Session, PassKey :: PassKey)
@@ -253,6 +274,7 @@ function GamePassService:Prompt(Player: Player, PassKey: string): boolean
 	if
 		not Session
 		or not Config
+		or not IsConfigured(PassKey :: PassKey)
 		or not IsValidAssetId(AssetId)
 		or not ServiceRegistry.Get("SaveService"):IsProfileWritable(Player)
 	then
@@ -260,6 +282,15 @@ function GamePassService:Prompt(Player: Player, PassKey: string): boolean
 	end
 	MarketplaceService:PromptGamePassPurchase(Player, AssetId :: number)
 	return true
+end
+
+function GamePassService:GetConfigurationStatus(PassKey: string): ConfigurationStatus
+	local Config = ConfigFor(PassKey)
+	if not Config then
+		return table.freeze({ IsConfigured = false, ErrorCode = "UnknownPassKey" })
+	end
+	return ConfigurationStatuses[PassKey :: PassKey]
+		or table.freeze({ IsConfigured = false, ErrorCode = "MissingAssetId" })
 end
 
 return GamePassService

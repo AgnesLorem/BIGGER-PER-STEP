@@ -142,6 +142,7 @@ end
 function WorldInstanceService:RecoverPlayer(Player: Player, Reason: string, Respawn: boolean)
 	local WorldInstance = WorldInstances.Get(Player)
 	if WorldInstance then
+		WorldInstance.PendingRewardPrompt = nil
 		local Disconnected, DisconnectMessage = pcall(function()
 			DisconnectWorld(WorldInstance)
 		end)
@@ -282,6 +283,7 @@ function WorldInstanceService:CreateWorldForPlayer(Player: Player): WorldInstanc
 		ObjectiveCompleted = false,
 		ObjectiveId = World1Config.Objective.ObjectiveId,
 		RewardState = "Inactive",
+		PendingRewardPrompt = nil,
 		Connections = {},
 	}
 

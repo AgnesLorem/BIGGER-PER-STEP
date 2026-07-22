@@ -18,13 +18,23 @@ local RewardType = require(
 
 local ConfigValidationService = {}
 local MaximumSafeInteger = 9007199254740991
+export type ConfigurationStatus = {
+	IsConfigured: boolean,
+	ErrorCode: string?,
+}
+local DeveloperProductStatuses: { [string]: ConfigurationStatus } = {}
+local Initialized = false
 local SupportedDeveloperProductRewards = table.freeze({
 	[RewardType.Bigger] = true,
+	[RewardType.Destruction] = true,
 	[RewardType.DoubleMultiplier] = true,
 	[RewardType.Vip] = true,
 })
 
 function ConfigValidationService:Init()
+	if Initialized then
+		return
+	end
 	Logger.Info("ConfigValidation", "Starting configuration consistency checks...")
 
 	local shopKeys = {}
@@ -72,28 +82,53 @@ function ConfigValidationService:Init()
 		end
 		serverKeys[productKey] = true
 
+		local surface = serverConfig.Surface
+		if surface ~= "Shop" and surface ~= "PortalOnly" then
+			error("ConfigValidation: Invalid Surface for ProductKey " .. productKey .. ": " .. tostring(surface))
+		end
 		local productId = serverConfig.ProductId
-		if not productId or typeof(productId) ~= "number" or productId <= 0 then
+		local ProductIdValid = type(productId) == "number"
+			and productId == productId
+			and productId > 0
+			and productId < math.huge
+			and productId % 1 == 0
+			and productId <= MaximumSafeInteger
+		if not ProductIdValid and surface == "Shop" then
 			error(
 				"ConfigValidation: Invalid ProductId for key "
 					.. productKey
 					.. " in DeveloperProductConfig: "
 					.. tostring(productId)
 			)
+		elseif not ProductIdValid then
+			DeveloperProductStatuses[productKey] = table.freeze({
+				IsConfigured = false,
+				ErrorCode = "MissingProductId",
+			})
+			Logger.Warn("MonetizationConfig", "%s is disabled because ProductId is not configured.", productKey)
+		else
+			local ValidProductId = productId :: number
+			if serverProductIds[ValidProductId] then
+				error(
+					"ConfigValidation: Duplicate ProductId in DeveloperProductConfig: "
+						.. ValidProductId
+						.. " (keys: "
+						.. serverProductIds[ValidProductId]
+						.. ", "
+						.. productKey
+						.. ")"
+				)
+			end
+			serverProductIds[ValidProductId] = productKey
+			DeveloperProductStatuses[productKey] = table.freeze({ IsConfigured = true })
 		end
-
-		if serverProductIds[productId] then
-			error(
-				"ConfigValidation: Duplicate ProductId in DeveloperProductConfig: "
-					.. productId
-					.. " (keys: "
-					.. serverProductIds[productId]
-					.. ", "
-					.. productKey
-					.. ")"
-			)
+		local price = serverConfig.Price
+		if
+			surface == "PortalOnly"
+			and (type(price) ~= "number" or price <= 0 or price % 1 ~= 0 or price > MaximumSafeInteger)
+		then
+			error("ConfigValidation: Invalid Price for ProductKey " .. productKey .. ": " .. tostring(price))
 		end
-		serverProductIds[productId] = productKey
 
 		-- Check AnalyticsKey
 		local analyticsKey = serverConfig.AnalyticsKey
@@ -148,7 +183,7 @@ function ConfigValidationService:Init()
 				error("ConfigValidation: Unsupported Developer Product RewardType: " .. rType)
 			end
 
-			if rType == RewardType.Bigger then
+			if rType == RewardType.Bigger or rType == RewardType.Destruction then
 				local amount = reward.Amount
 				if
 					type(amount) ~= "number"
@@ -195,18 +230,28 @@ function ConfigValidationService:Init()
 	end
 
 	for productKey in pairs(serverKeys) do
-		if not shopKeys[productKey] then
+		local serverConfig = DeveloperProductConfig[productKey]
+		if serverConfig.Surface == "Shop" and not shopKeys[productKey] then
 			error(
 				"ConfigValidation: Mismatched configuration. ProductKey '"
 					.. productKey
 					.. "' exists in DeveloperProductConfig but is missing in ShopUIConfig!"
 			)
 		end
+		if serverConfig.Surface == "PortalOnly" and shopKeys[productKey] then
+			error("ConfigValidation: PortalOnly ProductKey must not exist in ShopUIConfig: " .. productKey)
+		end
 	end
 
-	Logger.Info("ConfigValidation", "All configuration checks completed successfully. Config is consistent!")
+	Initialized = true
+	Logger.Info("ConfigValidation", "All fatal configuration checks completed successfully.")
 end
 
 function ConfigValidationService:Start() end
+
+function ConfigValidationService:GetDeveloperProductStatus(ProductKey: string): ConfigurationStatus
+	return DeveloperProductStatuses[ProductKey]
+		or table.freeze({ IsConfigured = false, ErrorCode = "UnknownProductKey" })
+end
 
 return ConfigValidationService

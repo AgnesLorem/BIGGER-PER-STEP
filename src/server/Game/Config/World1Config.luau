@@ -14,6 +14,7 @@ return table.freeze({
 	ReturnMarkerName = "ReturnSpawn",
 	TeleportHeightOffset = 5,
 	ReturnPortalDebounceSeconds = 1.5,
+	RewardProductKey = "World1TripleReward",
 	RewardPortals = table.freeze({
 		FreeName = "FreeRewardPortal",
 		PaidName = "PaidRewardPortal",

@@ -2,6 +2,8 @@
 --// Raw Requirings \\--
 
 local Players = game:GetService("Players")
+local MarketplaceService = game:GetService("MarketplaceService")
+local HttpService = game:GetService("HttpService")
 
 --// Requirings \\--
 
@@ -10,6 +12,9 @@ local WorldInstances = require(script.Parent.Parent.Parent.Core.Registry.Runtime
 local ServiceRegistry = require(script.Parent.Parent.Parent.Core.Registry.ServiceRegistry)
 local Logger = require(script.Parent.Parent.Parent.Core.Utilities.Logger)
 local World1Config = require(script.Parent.Parent.Config.World1Config)
+local DeveloperProductConfig = require(script.Parent.Parent.Parent.Core.Config.DeveloperProductConfig)
+local ConfigValidationService = require(script.Parent.Parent.Parent.Core.Services.ConfigValidationService)
+local EventBus = require(script.Parent.Parent.Parent.Core.Events.EventBus)
 
 --// Types \\--
 
@@ -74,6 +79,10 @@ local function GetPortals(WorldInstance: WorldInstance): (Portal?, Portal?)
 	return GetPortal(WorldInstance.Model, PortalConfig.FreeName), GetPortal(WorldInstance.Model, PortalConfig.PaidName)
 end
 
+local function GetPaidRewardStatus()
+	return ConfigValidationService:GetDeveloperProductStatus(World1Config.RewardProductKey)
+end
+
 local function SetPortalActive(Portal: Portal, Visible: boolean, TouchEnabled: boolean)
 	Portal.Visual.Transparency = if Visible then 0 else 1
 	Portal.Trigger.Transparency = 1
@@ -87,7 +96,7 @@ local function SetPortalActive(Portal: Portal, Visible: boolean, TouchEnabled: b
 	Portal.SurfaceGui.Enabled = Visible
 end
 
-local function SetChoicesActive(WorldInstance: WorldInstance, Visible: boolean, FreeTouchEnabled: boolean): boolean
+local function SetChoicesActive(WorldInstance: WorldInstance, Visible: boolean, TouchEnabled: boolean): boolean
 	local FreePortal, PaidPortal = GetPortals(WorldInstance)
 	if not FreePortal or not PaidPortal then
 		return false
@@ -95,9 +104,10 @@ local function SetChoicesActive(WorldInstance: WorldInstance, Visible: boolean, 
 
 	local PortalConfig = World1Config.RewardPortals
 	FreePortal.TextLabel.Text = PortalConfig.FreeLabel
-	PaidPortal.TextLabel.Text = PortalConfig.PaidLabel
-	SetPortalActive(FreePortal, Visible, FreeTouchEnabled)
-	SetPortalActive(PaidPortal, Visible, false)
+	local PaidConfigured = GetPaidRewardStatus().IsConfigured
+	PaidPortal.TextLabel.Text = if PaidConfigured then PortalConfig.PaidLabel else "UNAVAILABLE"
+	SetPortalActive(FreePortal, Visible, TouchEnabled)
+	SetPortalActive(PaidPortal, Visible, TouchEnabled and PaidConfigured)
 	return true
 end
 
@@ -183,13 +193,141 @@ local function TryFreeChoice(WorldInstance: WorldInstance, Hit: BasePart, WorldI
 	end
 end
 
+local function RestoreChoices(WorldInstance: WorldInstance)
+	WorldInstance.PendingRewardPrompt = nil
+	WorldInstance.RewardState = "Choosing"
+	SetChoicesActive(WorldInstance, true, true)
+end
+
+local function TryPaidChoice(WorldInstance: WorldInstance, Hit: BasePart, WorldInstanceService: any)
+	if WorldInstance.RewardState ~= "Choosing" then
+		return
+	end
+
+	local Player = GetPlayerFromHit(Hit)
+	if not Player or not IsCurrentOwner(WorldInstance, Player) then
+		return
+	end
+
+	local ProductKey = World1Config.RewardProductKey
+	local Product = DeveloperProductConfig[ProductKey]
+	local ProductId = Product and Product.ProductId
+	local ProductStatus = GetPaidRewardStatus()
+	local SaveFound, SaveService = pcall(function()
+		return ServiceRegistry.Get("SaveService")
+	end)
+	if
+		not Product
+		or not ProductStatus.IsConfigured
+		or Product.Surface ~= "PortalOnly"
+		or type(ProductId) ~= "number"
+		or ProductId <= 0
+		or ProductId % 1 ~= 0
+		or not SaveFound
+		or not SaveService:IsProfileWritable(Player)
+	then
+		return
+	end
+
+	WorldInstance.PendingRewardPrompt = {
+		WorldInstanceId = WorldInstance.WorldInstanceId,
+		ProductKey = ProductKey,
+		ProductId = ProductId,
+		PromptToken = HttpService:GenerateGUID(false),
+		State = "PromptOpen",
+		WorldInstanceService = WorldInstanceService,
+	}
+	WorldInstance.RewardState = "PromptOpen"
+	SetChoicesActive(WorldInstance, true, false)
+
+	local Prompted = pcall(MarketplaceService.PromptProductPurchase, MarketplaceService, Player, ProductId)
+	if not Prompted then
+		RestoreChoices(WorldInstance)
+	end
+end
+
+local function OnPromptFinished(UserId: number, ProductId: number, WasPurchased: boolean)
+	local Player = Players:GetPlayerByUserId(UserId)
+	if not Player then
+		return
+	end
+
+	local WorldInstance = WorldInstances.Get(Player)
+	local Pending = WorldInstance and WorldInstance.PendingRewardPrompt
+	if
+		not WorldInstance
+		or not Pending
+		or Pending.State ~= "PromptOpen"
+		or Pending.ProductId ~= ProductId
+		or not IsCurrentOwner(WorldInstance, Player)
+	then
+		return
+	end
+
+	if not WasPurchased then
+		RestoreChoices(WorldInstance)
+		return
+	end
+
+	Pending.State = "AwaitingReceipt"
+	WorldInstance.RewardState = "AwaitingReceipt"
+end
+
+local function OnProductCommitted(Player: Player, ProductKey: string, _PurchaseId: string)
+	local WorldInstance = WorldInstances.Get(Player)
+	local Pending = WorldInstance and WorldInstance.PendingRewardPrompt
+	if
+		not WorldInstance
+		or not Pending
+		or Pending.State ~= "AwaitingReceipt"
+		or Pending.ProductKey ~= ProductKey
+		or not IsCurrentOwner(WorldInstance, Player)
+	then
+		return
+	end
+
+	local WorldInstanceService = Pending.WorldInstanceService
+	WorldInstance.PendingRewardPrompt = nil
+	WorldInstance.RewardState = "Settled"
+	SetChoicesActive(WorldInstance, false, false)
+
+	local ServicesFound, SessionService = pcall(function()
+		return ServiceRegistry.Get("SessionService")
+	end)
+	if not ServicesFound or not SessionService then
+		RecoverPlayer(WorldInstanceService, Player, "MissingPaidRewardServices", false)
+		return
+	end
+	if not SessionService:TransitionState(Player, "InWorld", "Returning") then
+		RecoverPlayer(WorldInstanceService, Player, "PaidRewardTransitionFailed", false)
+		return
+	end
+	if not WorldInstanceService:ReturnPlayerToLobby(Player) then
+		RecoverPlayer(WorldInstanceService, Player, "PaidRewardReturnFailed", true)
+		return
+	end
+	RecoverPlayer(WorldInstanceService, Player, "PaidRewardSettled", false)
+end
+
 --// Service \\--
 
 local RewardPortalService = {}
+local Initialized = false
 
-function RewardPortalService:Init() end
+function RewardPortalService:Init()
+	if Initialized then
+		return
+	end
+	Initialized = true
+	MarketplaceService.PromptProductPurchaseFinished:Connect(OnPromptFinished)
+	EventBus.Subscribe("DeveloperProductCommitted", OnProductCommitted)
+end
 
 function RewardPortalService:Start() end
+
+function RewardPortalService:GetPaidRewardStatus()
+	return GetPaidRewardStatus()
+end
 
 function RewardPortalService:BindWorld(WorldInstance: WorldInstance, WorldInstanceService: any): boolean
 	local FreePortal, PaidPortal = GetPortals(WorldInstance)
@@ -212,6 +350,12 @@ function RewardPortalService:BindWorld(WorldInstance: WorldInstance, WorldInstan
 		WorldInstance.Connections,
 		FreePortal.Trigger.Touched:Connect(function(Hit)
 			TryFreeChoice(WorldInstance, Hit, WorldInstanceService)
+		end)
+	)
+	table.insert(
+		WorldInstance.Connections,
+		PaidPortal.Trigger.Touched:Connect(function(Hit)
+			TryPaidChoice(WorldInstance, Hit, WorldInstanceService)
 		end)
 	)
 	return true

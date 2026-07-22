@@ -9,6 +9,8 @@ VIP_DISCOUNTED_PRODUCT: REMOVED
 GAMEPASS_QUERY_RACE_PROTECTION: REQUIRED
 RECEIPT_WORLD_CORRELATION: REQUIRED
 SOURCE_IMPLEMENTATION: AUTHORIZED AFTER EXACT PATH SCOPE IS RECORDED
+PLACEHOLDER_MONETIZATION_IDS: APPROVED_DEFERRED_CONFIGURATION
+LIVE_MONETIZATION_QA: DEFERRED
 ```
 
 ## Design Summary
@@ -30,11 +32,17 @@ receipt durability, save serialization, world cleanup, and session transitions.
 Custom monetization thumbnails are user-approved for deferral to a future
 visual-polish milestone. MVP-005 uses Roblox default asset imagery temporarily;
 missing custom thumbnails do not block implementation, Studio verification, code
-review, or completion. Preflight creates three real products: VIP Game Pass at
-199 Robux, Premium AFK Zone Game Pass at 99 Robux, and `World1TripleReward` at
-29 Robux. No VIP-discount product or dynamic price exists. The Developer Product
-is unlisted, repeatable, has managed pricing disabled, and uses
+review, or completion. The current MVP keeps explicit `0` placeholders for VIP,
+Premium Zone, and `World1TripleReward`; these mark their monetization features
+unavailable. No VIP-discount product or dynamic price exists. When production
+configuration is supplied, the Developer Product is unlisted, repeatable, has
+managed pricing disabled, and uses
 `Surface = "PortalOnly"`; normal Bigger products use `Surface = "Shop"`.
+
+Placeholder IDs are valid deferred configuration, not purchasable IDs. Services
+must not query ownership, prompt, simulate ownership, dispatch receipts, or grant
+rewards for ID `0`. Replacing placeholders later is config-only and requires no
+service rewrite or data migration. Live purchase QA is outside this MVP gate.
 
 Paid authority is strictly `ProcessReceipt → RewardService → RewardDispatcher →
 DestructionService:GrantDestruction → SaveService:CommitTransaction →
@@ -82,8 +90,9 @@ consumed. The remainder is not persisted.
 
 ## Failure and Verification Design
 
-Missing or invalid product/pass configuration fails boot. Missing exact portal
-children fail WORLD1 preparation and recover safely. Wrong players, wrong worlds,
+Missing placeholder product/pass IDs disable only their monetization feature and
+warn once; invalid configured metadata and integrity violations remain fatal.
+Missing exact portal children fail WORLD1 preparation and recover safely. Wrong players, wrong worlds,
 duplicate touches, stale prompts, stale pass queries, frozen profiles, overflow,
 and mismatched receipts fail closed.
 
