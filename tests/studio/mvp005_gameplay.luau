@@ -4,6 +4,7 @@ local HttpService = game:GetService("HttpService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
+local Workspace = game:GetService("Workspace")
 
 local Core = game.ServerScriptService.BiggerServer.Core
 local GameLayer = game.ServerScriptService.BiggerServer.Game
@@ -15,6 +16,7 @@ local Sessions = require(Core.Registry.RuntimeRegistry.Sessions)
 local WorldInstances = require(Core.Registry.RuntimeRegistry.WorldInstances)
 local ReceiptProcessingService = require(Core.Services.ReceiptProcessingService)
 local RewardPortalService = require(GameLayer.Services.RewardPortalService)
+local AFKZones = require(GameLayer.Config.AFKZones)
 local World1Config = require(GameLayer.Config.World1Config)
 
 local TEST_SYNTHETIC_DISCONNECTED_USER_ID = 2147480000
@@ -83,8 +85,79 @@ local function RunConfigAndAssets()
 	assert(Template, "WORLD1 template missing")
 	local FreePortal = FindPortal(Template, "FreeRewardPortal")
 	local PaidPortal = FindPortal(Template, "PaidRewardPortal")
+	local PortalCount = 0
+	for _, Child in Template:GetChildren() do
+		if Child:FindFirstChild("Visual") and Child:FindFirstChild("Trigger") and Child:FindFirstChild("LabelPart") then
+			PortalCount += 1
+		end
+	end
+	assert(PortalCount == 2, "WORLD1 must contain exactly Free and Paid reward portals")
 	assert((FreePortal:FindFirstChild("Trigger") :: BasePart).CanTouch == false, "free portal started active")
 	assert((PaidPortal:FindFirstChild("Trigger") :: BasePart).CanTouch == false, "paid portal started active")
+	assert(
+		((FreePortal:FindFirstChild("LabelPart") :: BasePart).SurfaceGui.TextLabel :: TextLabel).Text
+			== "FREE\n+1 DESTRUCTION",
+		"free portal label mismatch"
+	)
+
+	local AFKFolder = Workspace:FindFirstChild("AFKZones")
+	local Presentation = AFKFolder and AFKFolder:FindFirstChild("Presentation")
+	assert(AFKFolder and Presentation, "AFK presentation hierarchy missing")
+	assert(#Presentation:GetChildren() == 7, "AFK presentation must contain exactly seven platforms")
+	local Labels = {
+		"AFK ZONE 1\n1X GROWTH",
+		"AFK ZONE 2\n2X GROWTH",
+		"AFK ZONE 3\n2.5X GROWTH",
+		"AFK ZONE 4\n3X GROWTH",
+		"AFK ZONE 5\n3.5X GROWTH",
+		"AFK ZONE 6\n4X GROWTH",
+		"VIP AFK ZONE\n4.5X GROWTH",
+	}
+	for Index = 1, 7 do
+		local ZoneName = "AFKZone" .. Index
+		local Trigger = AFKFolder:FindFirstChild(ZoneName)
+		local Platform = Presentation:FindFirstChild(ZoneName .. "Platform")
+		assert(Trigger and Trigger:IsA("BasePart"), `{ZoneName} trigger missing`)
+		assert(Platform and Platform:IsA("BasePart"), `{ZoneName} platform missing`)
+		assert(Trigger.Anchored and Trigger.Transparency == 1, `{ZoneName} trigger presentation changed`)
+		assert(not Trigger.CanCollide and not Trigger.CanTouch and not Trigger.CanQuery, `{ZoneName} trigger enabled`)
+		assert(Platform.Anchored, `{ZoneName} platform is not anchored`)
+		assert(
+			not Platform.CanCollide and not Platform.CanTouch and not Platform.CanQuery,
+			`{ZoneName} platform is active`
+		)
+		assert(
+			math.abs((Platform.Position.Y + Platform.Size.Y / 2) - (Trigger.Position.Y - Trigger.Size.Y / 2)) < 0.001,
+			`{ZoneName} platform is not directly beneath its trigger`
+		)
+		assert(Platform:GetAttribute("AFKZone") == ZoneName, `{ZoneName} identity mapping mismatch`)
+		assert(
+			Platform:GetAttribute("ZoneMultiplier") == AFKZones[ZoneName].ZoneMultiplier,
+			`{ZoneName} multiplier mapping mismatch`
+		)
+		local Billboard = Platform:FindFirstChild("ZoneLabel")
+		local TextLabel = Billboard and Billboard:FindFirstChild("TextLabel")
+		assert(
+			TextLabel and TextLabel:IsA("TextLabel") and TextLabel.Text == Labels[Index],
+			`{ZoneName} label mismatch`
+		)
+	end
+
+	local Spider = Template:FindFirstChild(World1Config.Objective.ModelName)
+	local Hitbox = Spider and Spider:FindFirstChild(World1Config.Objective.HitboxName)
+	assert(Spider and Hitbox and Hitbox:IsA("BasePart"), "Spider hitbox missing")
+	local VisualCount = 0
+	for _, Descendant in Spider:GetDescendants() do
+		if Descendant:IsA("BasePart") and Descendant ~= Hitbox then
+			VisualCount += 1
+			assert(Descendant.Anchored, "Spider visual must start anchored")
+		end
+	end
+	assert(VisualCount == 23, "Spider visual part count mismatch")
+	assert(
+		not Hitbox.CanTouch and not Hitbox.CanCollide and not Hitbox.CanQuery,
+		"Spider hitbox template must start disabled"
+	)
 end
 
 local function RunPromptCorrelation()

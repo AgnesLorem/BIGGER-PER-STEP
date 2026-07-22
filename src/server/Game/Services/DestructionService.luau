@@ -2,6 +2,7 @@
 --// Raw Requirings \\--
 
 local Players = game:GetService("Players")
+local Debris = game:GetService("Debris")
 
 --// Requirings \\--
 
@@ -84,14 +85,36 @@ local function SyncDestruction(Player: Player, Destruction: number)
 	end
 end
 
-local function PlayPlaceholderEffect(Hitbox: BasePart)
-	local OriginalTransparency = Hitbox.Transparency
-	Hitbox.Transparency = 0.7
-	task.delay(0.25, function()
-		if Hitbox.Parent then
-			Hitbox.Transparency = OriginalTransparency
+local function BreakSpider(WorldModel: Instance, Hitbox: BasePart)
+	local Spider = WorldModel:FindFirstChild(World1Config.Objective.ModelName, true)
+	if not Spider then
+		return
+	end
+
+	local FragmentIndex = 0
+	for _, Descendant in Spider:GetDescendants() do
+		if Descendant:IsA("BasePart") and Descendant ~= Hitbox then
+			FragmentIndex += 1
+			local OffsetX = Descendant.Position.X - Hitbox.Position.X
+			local OffsetZ = Descendant.Position.Z - Hitbox.Position.Z
+			local Magnitude = math.sqrt(OffsetX * OffsetX + OffsetZ * OffsetZ)
+			if Magnitude < 0.001 then
+				local Angle = FragmentIndex * math.pi * 0.75
+				OffsetX = math.cos(Angle)
+				OffsetZ = math.sin(Angle)
+				Magnitude = 1
+			end
+
+			Descendant.CanCollide = false
+			Descendant.CanTouch = false
+			Descendant.CanQuery = false
+			Descendant.Anchored = false
+			Descendant.AssemblyLinearVelocity = Vector3.new(OffsetX / Magnitude * 10, 8, OffsetZ / Magnitude * 10)
+			Descendant.AssemblyAngularVelocity =
+				Vector3.new((FragmentIndex % 3 - 1) * 1.5, 2, (FragmentIndex % 2 * 2 - 1) * 1.5)
+			Debris:AddItem(Descendant, 2)
 		end
-	end)
+	end
 end
 
 --// Service \\--
@@ -207,7 +230,20 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 	WorldInstance.ObjectiveCompleted = true
 	WorldInstance.ObjectiveActive = false
 	Hitbox.CanTouch = false
+	Hitbox.CanCollide = false
+	Hitbox.CanQuery = false
 	Player:SetAttribute("ObjectiveActive", false)
+	local EffectSuccess = pcall(function()
+		BreakSpider(WorldInstance.Model, Hitbox)
+	end)
+	if not EffectSuccess then
+		Logger.Warn(
+			"Destruction",
+			"Destruction effect failed for PlayerUserId=%d WorldInstanceId=%s",
+			Player.UserId,
+			WorldInstance.WorldInstanceId
+		)
+	end
 	local RewardServiceFound, RewardPortalService = pcall(function()
 		return ServiceRegistry.Get("RewardPortalService")
 	end)
@@ -219,18 +255,6 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 	if not Activated or not ActivationSuccess then
 		WorldInstanceService:RecoverPlayer(Player, "RewardChoiceActivationFailed", false)
 		return
-	end
-
-	local EffectSuccess = pcall(function()
-		PlayPlaceholderEffect(Hitbox)
-	end)
-	if not EffectSuccess then
-		Logger.Warn(
-			"Destruction",
-			"Destruction effect failed for PlayerUserId=%d WorldInstanceId=%s",
-			Player.UserId,
-			WorldInstance.WorldInstanceId
-		)
 	end
 end
 

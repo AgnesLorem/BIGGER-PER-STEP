@@ -16,12 +16,10 @@ return table.freeze({
 	ReturnPortalDebounceSeconds = 1.5,
 	RewardProductKey = "World1TripleReward",
 	RewardPortals = table.freeze({
-		ExitName = "ExitGate",
 		FreeName = "FreeRewardPortal",
 		PaidName = "PaidRewardPortal",
 		FreeDestruction = 1,
-		ExitLabel = "EXIT",
-		FreeLabel = "FREE • 1 DESTRUCTION",
+		FreeLabel = "FREE\n+1 DESTRUCTION",
 		PaidLabel = "3 DESTRUCTION • 29 R$",
 	}),
 	Objective = table.freeze({

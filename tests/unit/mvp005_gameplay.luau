@@ -682,6 +682,10 @@ local function loadDestructionService()
 	function Players:GetPlayerFromCharacter(Character)
 		return if Character == Player.Character then Player else nil
 	end
+	local Debris = { Items = {} }
+	function Debris:AddItem(Item, Lifetime)
+		table.insert(self.Items, { Item = Item, Lifetime = Lifetime })
+	end
 	local RewardPortalService = { ActivationCalls = 0 }
 	function RewardPortalService:ActivateChoices(WorldInstance)
 		self.ActivationCalls += 1
@@ -727,7 +731,12 @@ local function loadDestructionService()
 	}
 	local Game = {}
 	function Game:GetService(Name)
-		return if Name == "Players" then Players else ReplicatedStorage
+		if Name == "Players" then
+			return Players
+		elseif Name == "Debris" then
+			return Debris
+		end
+		return ReplicatedStorage
 	end
 	local ServicesFolder = {}
 	local Logger = { Warnings = {} }
@@ -746,6 +755,11 @@ local function loadDestructionService()
 	ServicesFolder.Parent = GameFolder
 	local Service = loadModule("src/server/Game/Services/DestructionService.luau", "DestructionService", {
 		game = Game,
+		Vector3 = {
+			new = function(X, Y, Z)
+				return { X = X, Y = Y, Z = Z }
+			end,
+		},
 		script = { Parent = ServicesFolder },
 		require = function(Dependency)
 			return Dependency
@@ -757,6 +771,7 @@ local function loadDestructionService()
 		},
 	})
 	return {
+		Debris = Debris,
 		DestructionStat = DestructionStat,
 		Logger = Logger,
 		Player = Player,
@@ -910,6 +925,17 @@ local function fakeInstance(Name, ClassName)
 		end
 		return Children
 	end
+	function Instance:GetDescendants()
+		local Descendants = {}
+		local function Visit(Parent)
+			for _, Child in Parent.Children do
+				table.insert(Descendants, Child)
+				Visit(Child)
+			end
+		end
+		Visit(self)
+		return Descendants
+	end
 	function Instance:AddChild(Child)
 		self.Children[Child.Name] = Child
 		Child.Parent = self
@@ -936,6 +962,29 @@ check("DestructionService binds before arming the objective", function()
 	local WorldModel = fakeInstance("TEST_WORLD", "Model")
 	local Spider = WorldModel:AddChild(fakeInstance("Spider", "Model"))
 	local Hitbox = Spider:AddChild(fakeInstance("ObjectiveHitbox", "Part"))
+	local VisualA = Spider:AddChild(fakeInstance("VisualA", "Part"))
+	local VisualB = Spider:AddChild(fakeInstance("VisualB", "Part"))
+	VisualA.Anchored = true
+	VisualA.CanCollide = true
+	VisualA.CanTouch = true
+	VisualA.CanQuery = true
+	VisualA.Position = { X = -2, Y = 0, Z = 0 }
+	VisualB.Anchored = true
+	VisualB.CanCollide = true
+	VisualB.CanTouch = true
+	VisualB.CanQuery = true
+	VisualB.Position = { X = 2, Y = 0, Z = 0 }
+	Hitbox.Position = { X = 0, Y = 0, Z = 0 }
+	Hitbox.CFrame = {
+		PointToObjectSpace = function(_, Value)
+			return Value
+		end,
+	}
+	Hitbox.Size = setmetatable({ X = 2, Y = 2, Z = 2 }, {
+		__div = function(Value, Divisor)
+			return { X = Value.X / Divisor, Y = Value.Y / Divisor, Z = Value.Z / Divisor }
+		end,
+	})
 	Hitbox.CanTouch = true
 	local WorldInstance = {
 		WorldInstanceId = "TEST_WORLD",
@@ -956,6 +1005,33 @@ check("DestructionService binds before arming the objective", function()
 	assert(WorldInstance.ObjectiveInitialized == true)
 	assert(WorldInstance.ObjectiveActive == true)
 	assert(Harness.Service:ActivateWorld(WorldInstance) == false)
+	local RootPart = { Position = { X = 0, Y = 1, Z = 0 }, AssemblyLinearVelocity = { Y = -10 } }
+	function RootPart:IsA(Name)
+		return Name == "BasePart"
+	end
+	local Character = {}
+	function Character:FindFirstChild(Name)
+		return if Name == "HumanoidRootPart" then RootPart else nil
+	end
+	Harness.Player.Character = Character
+	local Hit = {}
+	function Hit:FindFirstAncestorOfClass(Name)
+		return if Name == "Model" then Character else nil
+	end
+	Hitbox.Touched:Fire(Hit)
+	assert(WorldInstance.ObjectiveCompleted == true)
+	assert(Hitbox.CanTouch == false and Hitbox.Anchored ~= false)
+	for _, Visual in { VisualA, VisualB } do
+		assert(Visual.Anchored == false)
+		assert(Visual.CanCollide == false and Visual.CanTouch == false and Visual.CanQuery == false)
+		assert(Visual.AssemblyLinearVelocity ~= nil and Visual.AssemblyAngularVelocity ~= nil)
+	end
+	assert(#Harness.Debris.Items == 2)
+	for _, Item in Harness.Debris.Items do
+		assert(Item.Item ~= Hitbox and Item.Lifetime >= 1.5 and Item.Lifetime <= 3)
+	end
+	Hitbox.Touched:Fire(Hit)
+	assert(#Harness.Debris.Items == 2, "duplicate stomp scheduled duplicate fragments")
 	Sessions.Remove(Harness.Player)
 end)
 
@@ -1079,7 +1155,6 @@ local function loadRewardPortalService(ProductId)
 	end
 
 	local WorldModel = fakeInstance("TEST_REWARD_WORLD_1", "Model")
-	local ExitPortal = WorldModel:AddChild(rewardPortalModel("ExitGate"))
 	local FreePortal = WorldModel:AddChild(rewardPortalModel("FreeRewardPortal"))
 	local PaidPortal = WorldModel:AddChild(rewardPortalModel("PaidRewardPortal"))
 	local WorldInstance = {
@@ -1188,12 +1263,10 @@ local function loadRewardPortalService(ProductId)
 	local World1Config = {
 		RewardProductKey = "World1TripleReward",
 		RewardPortals = {
-			ExitName = "ExitGate",
 			FreeName = "FreeRewardPortal",
 			PaidName = "PaidRewardPortal",
 			FreeDestruction = 1,
-			ExitLabel = "EXIT",
-			FreeLabel = "FREE " .. BULLET .. " 1 DESTRUCTION",
+			FreeLabel = "FREE\n+1 DESTRUCTION",
 			PaidLabel = "3 DESTRUCTION " .. BULLET .. " 29 R$",
 		},
 	}
@@ -1251,7 +1324,6 @@ local function loadRewardPortalService(ProductId)
 		Coordinator = Coordinator,
 		DestructionService = DestructionService,
 		EventBus = EventBus,
-		ExitPortal = ExitPortal,
 		FreePortal = FreePortal,
 		Hit = Hit,
 		MarketplaceService = MarketplaceService,
@@ -1284,62 +1356,14 @@ check("unconfigured paid reward stays unavailable without blocking free reward",
 	Sessions.Remove(Harness.Player)
 end)
 
-check("ExitGate is required and returns without granting", function()
-	local MissingHarness = loadRewardPortalService(0)
-	MissingHarness.WorldInstance.Model.Children.ExitGate = nil
-	assert(MissingHarness.Service:BindWorld(MissingHarness.WorldInstance, MissingHarness.Coordinator) == false)
-	Sessions.Remove(MissingHarness.Player)
-
+check("reward choice hierarchy is exactly Free and Paid", function()
 	local Harness = loadRewardPortalService(0)
 	assert(Harness.Service:BindWorld(Harness.WorldInstance, Harness.Coordinator) == true)
-	assert(Harness.Service:ActivateChoices(Harness.WorldInstance, Harness.Coordinator) == true)
-	assert(Harness.ExitPortal.Children.Visual.Transparency == 0)
-	assert(Harness.ExitPortal.Children.Trigger.CanTouch == true)
-	assert(Harness.ExitPortal.Children.LabelPart.Children.SurfaceGui.Children.TextLabel.Text == "EXIT")
-	Harness.ExitPortal.Children.Trigger.Touched:Fire(Harness.Hit)
-	assert(Harness.WorldInstance.RewardState == "Settled")
-	assert(Harness.Coordinator.ReturnCalls == 1)
-	assert(Harness.Coordinator.RecoverCalls == 1)
-	assert(Harness.Session.State == "InLobby")
-	assert(#Harness.DestructionService.Calls == 0)
-	Harness.ExitPortal.Children.Trigger.Touched:Fire(Harness.Hit)
-	assert(Harness.Coordinator.ReturnCalls == 1 and Harness.Coordinator.RecoverCalls == 1)
+	assert(#Harness.WorldInstance.Connections == 2)
+	assert(Harness.WorldInstance.Model.Children.FreeRewardPortal ~= nil)
+	assert(Harness.WorldInstance.Model.Children.PaidRewardPortal ~= nil)
+	assert(Harness.FreePortal.Children.LabelPart.Children.SurfaceGui.Children.TextLabel.Text == "FREE\n+1 DESTRUCTION")
 	Sessions.Remove(Harness.Player)
-end)
-
-check("ExitGate recovers when transition or return throws", function()
-	local TransitionHarness = loadRewardPortalService(0)
-	assert(TransitionHarness.Service:BindWorld(TransitionHarness.WorldInstance, TransitionHarness.Coordinator) == true)
-	assert(
-		TransitionHarness.Service:ActivateChoices(TransitionHarness.WorldInstance, TransitionHarness.Coordinator)
-			== true
-	)
-	TransitionHarness.SessionService.ThrowOnTransition = true
-	local TransitionProtected = pcall(function()
-		TransitionHarness.ExitPortal.Children.Trigger.Touched:Fire(TransitionHarness.Hit)
-	end)
-	assert(TransitionProtected == true, "transition exception escaped")
-	assert(
-		TransitionHarness.Coordinator.ReturnCalls == 0,
-		`transition return calls {TransitionHarness.Coordinator.ReturnCalls}`
-	)
-	assert(
-		TransitionHarness.Coordinator.RecoverCalls == 1,
-		`transition recover calls {TransitionHarness.Coordinator.RecoverCalls}`
-	)
-	Sessions.Remove(TransitionHarness.Player)
-
-	local ReturnHarness = loadRewardPortalService(0)
-	assert(ReturnHarness.Service:BindWorld(ReturnHarness.WorldInstance, ReturnHarness.Coordinator) == true)
-	assert(ReturnHarness.Service:ActivateChoices(ReturnHarness.WorldInstance, ReturnHarness.Coordinator) == true)
-	ReturnHarness.Coordinator.ThrowOnReturn = true
-	local ReturnProtected = pcall(function()
-		ReturnHarness.ExitPortal.Children.Trigger.Touched:Fire(ReturnHarness.Hit)
-	end)
-	assert(ReturnProtected == true, "return exception escaped")
-	assert(ReturnHarness.Coordinator.ReturnCalls == 0, `return calls {ReturnHarness.Coordinator.ReturnCalls}`)
-	assert(ReturnHarness.Coordinator.RecoverCalls == 1, `return recover calls {ReturnHarness.Coordinator.RecoverCalls}`)
-	Sessions.Remove(ReturnHarness.Player)
 end)
 
 check("free reward settles once and never invokes the paid prompt", function()

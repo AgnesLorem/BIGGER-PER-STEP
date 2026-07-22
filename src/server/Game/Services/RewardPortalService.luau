@@ -74,11 +74,9 @@ local function GetPortal(WorldModel: Instance, Name: string): Portal?
 	}
 end
 
-local function GetPortals(WorldInstance: WorldInstance): (Portal?, Portal?, Portal?)
+local function GetPortals(WorldInstance: WorldInstance): (Portal?, Portal?)
 	local PortalConfig = World1Config.RewardPortals
-	return GetPortal(WorldInstance.Model, PortalConfig.ExitName),
-		GetPortal(WorldInstance.Model, PortalConfig.FreeName),
-		GetPortal(WorldInstance.Model, PortalConfig.PaidName)
+	return GetPortal(WorldInstance.Model, PortalConfig.FreeName), GetPortal(WorldInstance.Model, PortalConfig.PaidName)
 end
 
 local function GetPaidRewardStatus()
@@ -99,17 +97,15 @@ local function SetPortalActive(Portal: Portal, Visible: boolean, TouchEnabled: b
 end
 
 local function SetChoicesActive(WorldInstance: WorldInstance, Visible: boolean, TouchEnabled: boolean): boolean
-	local ExitPortal, FreePortal, PaidPortal = GetPortals(WorldInstance)
-	if not ExitPortal or not FreePortal or not PaidPortal then
+	local FreePortal, PaidPortal = GetPortals(WorldInstance)
+	if not FreePortal or not PaidPortal then
 		return false
 	end
 
 	local PortalConfig = World1Config.RewardPortals
-	ExitPortal.TextLabel.Text = PortalConfig.ExitLabel
 	FreePortal.TextLabel.Text = PortalConfig.FreeLabel
 	local PaidConfigured = GetPaidRewardStatus().IsConfigured
 	PaidPortal.TextLabel.Text = if PaidConfigured then PortalConfig.PaidLabel else "UNAVAILABLE"
-	SetPortalActive(ExitPortal, Visible, TouchEnabled)
 	SetPortalActive(FreePortal, Visible, TouchEnabled)
 	SetPortalActive(PaidPortal, Visible, TouchEnabled and PaidConfigured)
 	return true
@@ -140,47 +136,6 @@ local function RecoverPlayer(WorldInstanceService: any, Player: Player, Reason: 
 			Reason,
 			tostring(RecoveryError)
 		)
-	end
-end
-
-local function TryExitChoice(WorldInstance: WorldInstance, Hit: BasePart, WorldInstanceService: any)
-	if WorldInstance.RewardState ~= "Choosing" then
-		return
-	end
-	local Player = GetPlayerFromHit(Hit)
-	if not Player or not IsCurrentOwner(WorldInstance, Player) then
-		return
-	end
-	WorldInstance.RewardState = "Settled"
-	SetChoicesActive(WorldInstance, false, false)
-
-	local Found, SessionService = pcall(function()
-		return ServiceRegistry.Get("SessionService")
-	end)
-	if not Found or not SessionService then
-		RecoverPlayer(WorldInstanceService, Player, "MissingExitGateServices", false)
-		return
-	end
-	local Transitioned, TransitionSuccess = pcall(function()
-		return SessionService:TransitionState(Player, "InWorld", "Returning")
-	end)
-	if not Transitioned or not TransitionSuccess then
-		RecoverPlayer(WorldInstanceService, Player, "ExitGateTransitionFailed", false)
-		return
-	end
-	local Returned, ReturnSuccess = pcall(function()
-		return WorldInstanceService:ReturnPlayerToLobby(Player)
-	end)
-	if not Returned or not ReturnSuccess then
-		RecoverPlayer(WorldInstanceService, Player, "ExitGateReturnFailed", true)
-		return
-	end
-	RecoverPlayer(WorldInstanceService, Player, "ExitGateSettled", false)
-	local Debounced = pcall(function()
-		ServiceRegistry.Get("PortalService"):HoldDebounce(Player, World1Config.ReturnPortalDebounceSeconds)
-	end)
-	if not Debounced then
-		Logger.Warn("RewardPortal", "Exit gate debounce failed for PlayerUserId=%d", Player.UserId)
 	end
 end
 
@@ -375,8 +330,8 @@ function RewardPortalService:GetPaidRewardStatus()
 end
 
 function RewardPortalService:BindWorld(WorldInstance: WorldInstance, WorldInstanceService: any): boolean
-	local ExitPortal, FreePortal, PaidPortal = GetPortals(WorldInstance)
-	if not ExitPortal or not FreePortal or not PaidPortal then
+	local FreePortal, PaidPortal = GetPortals(WorldInstance)
+	if not FreePortal or not PaidPortal then
 		Logger.Warn(
 			"RewardPortal",
 			"Portal hierarchy missing for PlayerUserId=%d WorldInstanceId=%s",
@@ -391,12 +346,6 @@ function RewardPortalService:BindWorld(WorldInstance: WorldInstance, WorldInstan
 		return false
 	end
 
-	table.insert(
-		WorldInstance.Connections,
-		ExitPortal.Trigger.Touched:Connect(function(Hit)
-			TryExitChoice(WorldInstance, Hit, WorldInstanceService)
-		end)
-	)
 	table.insert(
 		WorldInstance.Connections,
 		FreePortal.Trigger.Touched:Connect(function(Hit)
