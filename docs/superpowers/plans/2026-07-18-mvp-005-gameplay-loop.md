@@ -79,6 +79,14 @@ GamePassService:Prompt(Player: Player, PassKey: "Vip" | "PremiumZone"): boolean
 - [ ] In Edit Mode remove only the approved orphan Spawn trigger.
 - [ ] Rename the three lobby triggers by ascending Z and duplicate through AFKZone7 at +53-stud spacing.
 - [ ] Make all triggers anchored, invisible, and non-colliding/non-touching/non-querying.
+- [ ] Audit and remove `Workspace.Starter place`, `Workspace.Forest`, and
+  `Workspace.Pirate ship` only after proving they have no live references or
+  required gameplay/runtime descendants.
+- [ ] Relocate the same seven trigger parts near `Workspace.Portal_World1` in a
+  compact 3+3+1 layout using whole-instance CFrames; preserve all gameplay and
+  collision contracts and keep the portal/spawn approach clear.
+- [ ] Verify grounding, bounding-box separation, exact object counts, two Play
+  Solo runs, AFK multiplier transitions, portal behavior, and clean Output.
 - [ ] Replace AFK config with the exact seven-zone ordered data.
 - [ ] Select only the highest containing zone; locked AFKZone7 grants zero without fallback.
 - [ ] Prompt Premium Zone once per entry and apply verified ownership next tick.
@@ -91,12 +99,18 @@ GamePassService:Prompt(Player: Player, PassKey: "Vip" | "PremiumZone"): boolean
 ```luau
 RewardPortalService:BindWorld(WorldInstance, WorldInstanceService): boolean
 RewardPortalService:ActivateChoices(WorldInstance, WorldInstanceService): boolean
+WorldInstanceService:ActivateWorld(Player): boolean
 ```
 
 - [ ] Create the Studio ModuleScript mirror for `RewardPortalService`.
-- [ ] Build exact Free/Paid portal hierarchies under the WORLD1 template at approved coordinates.
+- [ ] Stabilize the existing Spider visual parts and build exact Exit/Free/Paid
+  portal hierarchies under the WORLD1 template at approved coordinates.
 - [ ] Validate exact children without recursive ambiguous lookup; bind owner-only triggers.
+- [ ] Bind stomp fail-closed, teleport the Player, transition to `InWorld`, then
+  arm objective damage through one explicit initialization gate.
 - [ ] Change Spider completion to disable stomp and activate choices without grant/return.
+- [ ] Clear Player objective presentation exactly once and allow ExitGate to
+  return without granting or blocking either reward portal.
 - [ ] Implement free `Choosing → Settled → Returning → InLobby` using `GrantDestruction(1)`.
 - [ ] Run free-flow, duplicate, wrong-player, wrong-world, and objective tests; commit locally.
 
@@ -168,6 +182,7 @@ Modify:
 - `src/server/Core/Registry/RuntimeRegistry/Sessions.luau`
 - `src/server/Core/Registry/RuntimeRegistry/WorldInstances.luau`
 - `src/server/Core/Services/ConfigValidationService.luau`
+- `src/server/Core/Services/CharacterScaleService.luau`
 - `src/server/Core/Services/GrowthService.luau`
 - `src/server/Core/Services/ReceiptProcessingService.luau`
 - `src/server/Core/Services/SaveService.luau`
@@ -179,6 +194,7 @@ Modify:
 - `src/server/Game/Formula/GrowthFormula.luau`
 - `src/server/Game/GameBootstrap.luau`
 - `src/server/Game/Services/DestructionService.luau`
+- `src/server/Game/Services/PortalService.luau`
 - `src/server/Game/Services/WorldInstanceService.luau`
 - `src/server/Game/Systems/AFKZoneSystem.luau`
 - `src/shared/Core/Config/ShopUIConfig.luau`
@@ -189,6 +205,26 @@ Modify:
 
 No additional repository path may change before it is added here and to
 `tasks/MVP-005.md` with the dependency reason reported for user review.
+
+### Targeted WORLD1 runtime stabilization
+
+**Files:** modify `CharacterScaleService`, `PortalService`,
+`WorldInstanceService`, `DestructionService`, `RewardPortalService`,
+`World1Config`, `RuntimeRegistry.WorldInstances`, and
+`tests/unit/mvp005_gameplay.luau`.
+
+- [ ] Add RED tests for actual scale application/reapplication and idempotent
+  lifecycle ownership; do not duplicate ScaleCurve math in the service.
+- [ ] Add RED tests proving stomp is disabled until the world reaches `InWorld`,
+  an immediate valid stomp completes once, and duplicate callbacks do nothing.
+- [ ] Add RED tests proving ExitGate/Free/Paid are required, ExitGate returns
+  without a grant, Free grants once, and ProductId `0` leaves Paid visible with
+  `UNAVAILABLE` while disabling only its trigger.
+- [ ] Apply the smallest service changes that satisfy those tests. Do not add a
+  Humanoid/health combat system or change Level/progression balance.
+- [ ] In Edit Mode anchor the current Spider visual geometry and create exactly
+  one ExitGate from the existing portal asset shape; verify source parity before
+  Play Solo.
 
 ### Targeted MVP-007 prerequisite: Level unification
 
@@ -254,7 +290,7 @@ lune run tests/unit/stomp_validation.luau
 lune run tests/unit/save_system.luau
 lune run tests/unit/mvp005_gameplay.luau
 stylua --check src tests
-selene src tests
+selene src
 rojo build default.project.json -o "$env:TEMP\bigger-mvp005.rbxl"
 git diff --check
 ```
