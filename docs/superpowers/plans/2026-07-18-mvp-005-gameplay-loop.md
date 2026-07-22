@@ -85,6 +85,8 @@ GamePassService:Prompt(Player: Player, PassKey: "Vip" | "PremiumZone"): boolean
 - [ ] Relocate the same seven trigger parts near `Workspace.Portal_World1` in a
   compact 3+3+1 layout using whole-instance CFrames; preserve all gameplay and
   collision contracts and keep the portal/spawn approach clear.
+- [ ] Add one presentation-only platform and readable two-line label directly
+  beneath each trigger without changing trigger geometry or AFK authority.
 - [ ] Verify grounding, bounding-box separation, exact object counts, two Play
   Solo runs, AFK multiplier transitions, portal behavior, and clean Output.
 - [ ] Replace AFK config with the exact seven-zone ordered data.
@@ -103,14 +105,14 @@ WorldInstanceService:ActivateWorld(Player): boolean
 ```
 
 - [ ] Create the Studio ModuleScript mirror for `RewardPortalService`.
-- [ ] Stabilize the existing Spider visual parts and build exact Exit/Free/Paid
+- [ ] Stabilize the existing Spider visual parts and build the exact Free/Paid
   portal hierarchies under the WORLD1 template at approved coordinates.
 - [ ] Validate exact children without recursive ambiguous lookup; bind owner-only triggers.
 - [ ] Bind stomp fail-closed, teleport the Player, transition to `InWorld`, then
   arm objective damage through one explicit initialization gate.
 - [ ] Change Spider completion to disable stomp and activate choices without grant/return.
-- [ ] Clear Player objective presentation exactly once and allow ExitGate to
-  return without granting or blocking either reward portal.
+- [ ] Clear Player objective presentation exactly once, break the harmless
+  Spider visuals once, and expose only Free and Paid choices.
 - [ ] Implement free `Choosing → Settled → Returning → InLobby` using `GrantDestruction(1)`.
 - [ ] Run free-flow, duplicate, wrong-player, wrong-world, and objective tests; commit locally.
 
@@ -217,14 +219,46 @@ No additional repository path may change before it is added here and to
   lifecycle ownership; do not duplicate ScaleCurve math in the service.
 - [ ] Add RED tests proving stomp is disabled until the world reaches `InWorld`,
   an immediate valid stomp completes once, and duplicate callbacks do nothing.
-- [ ] Add RED tests proving ExitGate/Free/Paid are required, ExitGate returns
-  without a grant, Free grants once, and ProductId `0` leaves Paid visible with
-  `UNAVAILABLE` while disabling only its trigger.
+- [ ] Add RED tests proving exactly Free/Paid are required, Free grants once,
+  Spider breakup is atomic/harmless/cleaned up, and ProductId `0` leaves Paid
+  visible with `UNAVAILABLE` while disabling only its trigger.
 - [ ] Apply the smallest service changes that satisfy those tests. Do not add a
   Humanoid/health combat system or change Level/progression balance.
-- [ ] In Edit Mode anchor the current Spider visual geometry and create exactly
-  one ExitGate from the existing portal asset shape; verify source parity before
-  Play Solo.
+- [ ] In Edit Mode anchor the current Spider visual geometry, remove the
+  temporary third portal hierarchy, and verify source parity before Play Solo.
+
+### Final AFK/WORLD1 exact-scope correction
+
+**Files:** modify `tasks/MVP-005.md`, this plan,
+`src/server/Game/Config/World1Config.luau`,
+`src/server/Game/Services/DestructionService.luau`,
+`src/server/Game/Services/RewardPortalService.luau`, and
+`tests/unit/mvp005_gameplay.luau` plus `tests/studio/mvp005_gameplay.luau`;
+modify only the approved Studio AFK
+presentation children and WORLD1 Spider/portal template.
+
+- [ ] Record RED evidence: zero AFK presentation mappings, placeholder Spider
+  effect, and obsolete third portal hierarchy.
+- [ ] Preserve all seven trigger CFrames/sizes and exact multipliers while adding
+  separate platforms/labels with identity mapping and no trigger participation.
+- [ ] After the atomic completion gate, disable the hitbox and make only Spider
+  visual parts harmless fragments with mild velocity and about two-second Debris
+  cleanup; duplicate stomps remain inert.
+- [ ] Delete every runtime/config/test/task/plan/Studio third-portal reference
+  and retain exactly Free plus Paid/Unavailable choices. Free remains
+  independent and grants/returns once; ProductId `0` never prompts, grants, or
+  returns.
+- [ ] Mirror only changed source from this worktree, prove normalized parity, run
+  all offline gates, then run AFK, Spider, and portal Play Solo rounds with clean
+  teardown and zero probes/runtime worlds.
+
+**Reason:** finish the approved player-facing AFK presentation and WORLD1
+completion behavior without expanding gameplay. **Affected callers:**
+`AFKZoneSystem`, `DestructionService`, and `RewardPortalService`.
+**Compatibility:** no multiplier, trigger, progression, economy, persistence,
+stomp-validation, free reward, or receipt-authority change. **Tests:** exact
+seven-label mapping, spatial separation, atomic fragment cleanup, exact two-
+portal hierarchy, unavailable paid fail-closed behavior, and free continuity.
 
 ### Targeted MVP-007 prerequisite: Level unification
 
