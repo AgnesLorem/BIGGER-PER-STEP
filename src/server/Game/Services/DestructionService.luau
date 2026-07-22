@@ -144,13 +144,39 @@ function DestructionService:BindWorld(WorldInstance, WorldInstanceService)
 		return false
 	end
 
-	Hitbox.CanTouch = true
+	WorldInstance.ObjectiveInitialized = false
+	WorldInstance.ObjectiveActive = false
+	Hitbox.CanTouch = false
 	table.insert(
 		WorldInstance.Connections,
 		Hitbox.Touched:Connect(function(Hit)
 			self:TryCompleteObjective(WorldInstance, Hitbox, Hit, WorldInstanceService)
 		end)
 	)
+	return true
+end
+
+function DestructionService:ActivateWorld(WorldInstance): boolean
+	if WorldInstance.ObjectiveInitialized or WorldInstance.ObjectiveCompleted then
+		return false
+	end
+	local Player = WorldInstance.OwnerPlayer
+	local Session = Sessions.Get(Player)
+	if
+		not Session
+		or Session.ProfileMutationsFrozen
+		or Session.State ~= "InWorld"
+		or Session.CurrentWorldInstanceId ~= WorldInstance.WorldInstanceId
+	then
+		return false
+	end
+	local Hitbox = GetHitbox(WorldInstance.Model)
+	if not Hitbox then
+		return false
+	end
+	WorldInstance.ObjectiveInitialized = true
+	WorldInstance.ObjectiveActive = true
+	Hitbox.CanTouch = true
 	return true
 end
 
@@ -167,7 +193,11 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 	if Session.CurrentWorldInstanceId ~= WorldInstance.WorldInstanceId then
 		return
 	end
-	if not WorldInstance.ObjectiveActive or WorldInstance.ObjectiveCompleted then
+	if
+		not WorldInstance.ObjectiveInitialized
+		or not WorldInstance.ObjectiveActive
+		or WorldInstance.ObjectiveCompleted
+	then
 		return
 	end
 	if not IsValidStomp(Player, Hitbox) then
@@ -177,6 +207,7 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 	WorldInstance.ObjectiveCompleted = true
 	WorldInstance.ObjectiveActive = false
 	Hitbox.CanTouch = false
+	Player:SetAttribute("ObjectiveActive", false)
 	local RewardServiceFound, RewardPortalService = pcall(function()
 		return ServiceRegistry.Get("RewardPortalService")
 	end)

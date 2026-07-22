@@ -6,6 +6,7 @@ export type WorldInstance = {
 	OwnerUserId: number,
 	OwnerPlayer: Player,
 	Model: Instance,
+	ObjectiveInitialized: boolean,
 	ObjectiveActive: boolean,
 	ObjectiveCompleted: boolean,
 	ObjectiveId: string,

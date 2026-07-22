@@ -169,6 +169,13 @@ function PortalService:TryEnterPortal(Hit: BasePart, SessionService: any, WorldI
 		RecoverPlayer(WorldInstanceService, Player, "PortalInWorldTransitionRejected")
 		return
 	end
+	local Activated, ActivationSuccess = pcall(function()
+		return WorldInstanceService:ActivateWorld(Player)
+	end)
+	if not Activated or not ActivationSuccess then
+		RecoverPlayer(WorldInstanceService, Player, "PortalObjectiveActivationFailed")
+		return
+	end
 	ClearDebounce(Player)
 end
 

@@ -279,7 +279,8 @@ function WorldInstanceService:CreateWorldForPlayer(Player: Player): WorldInstanc
 		OwnerUserId = Player.UserId,
 		OwnerPlayer = Player,
 		Model = RuntimeWorld,
-		ObjectiveActive = true,
+		ObjectiveInitialized = false,
+		ObjectiveActive = false,
 		ObjectiveCompleted = false,
 		ObjectiveId = World1Config.Objective.ObjectiveId,
 		RewardState = "Inactive",
@@ -352,7 +353,7 @@ function WorldInstanceService:CreateWorldForPlayer(Player: Player): WorldInstanc
 
 	local Presented = pcall(function()
 		Player:SetAttribute("CurrentWorldId", World1Config.WorldId)
-		Player:SetAttribute("ObjectiveActive", true)
+		Player:SetAttribute("ObjectiveActive", false)
 		Player:SetAttribute("ObjectiveText", World1Config.Objective.Text)
 		Player:SetAttribute("ObjectiveReward", World1Config.Objective.Reward)
 	end)
@@ -362,6 +363,33 @@ function WorldInstanceService:CreateWorldForPlayer(Player: Player): WorldInstanc
 	end
 
 	return WorldInstance
+end
+
+function WorldInstanceService:ActivateWorld(Player: Player): boolean
+	local Session = Sessions.Get(Player)
+	local WorldInstance = WorldInstances.Get(Player)
+	if
+		not Session
+		or Session.State ~= "InWorld"
+		or not WorldInstance
+		or WorldInstance.OwnerPlayer ~= Player
+		or WorldInstance.WorldInstanceId ~= Session.CurrentWorldInstanceId
+	then
+		return false
+	end
+	local Found, DestructionService = pcall(function()
+		return ServiceRegistry.Get("DestructionService")
+	end)
+	local Called, Activated = pcall(function()
+		return Found and DestructionService and DestructionService:ActivateWorld(WorldInstance)
+	end)
+	if not Called or not Activated then
+		return false
+	end
+	local Presented = pcall(function()
+		Player:SetAttribute("ObjectiveActive", true)
+	end)
+	return Presented
 end
 
 function WorldInstanceService:ReturnPlayerToLobby(Player: Player): boolean
