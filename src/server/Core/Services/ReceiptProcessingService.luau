@@ -11,6 +11,7 @@ local ServiceRegistry = require(script.Parent.Parent.Registry.ServiceRegistry)
 local Profiles = require(script.Parent.Parent.Registry.RuntimeRegistry.Profiles)
 local Sessions = require(script.Parent.Parent.Registry.RuntimeRegistry.Sessions)
 local DeveloperProductConfig = require(script.Parent.Parent.Config.DeveloperProductConfig)
+local EventBus = require(script.Parent.Parent.Events.EventBus)
 
 type ReceiptInfo = {
 	PlayerId: number,
@@ -22,6 +23,16 @@ type ReceiptInfo = {
 }
 
 local ReceiptProcessingService = {}
+local MaximumSafeInteger = 9007199254740991
+
+local function IsConfiguredProductId(ProductId: any): boolean
+	return type(ProductId) == "number"
+		and ProductId == ProductId
+		and ProductId > 0
+		and ProductId < math.huge
+		and ProductId % 1 == 0
+		and ProductId <= MaximumSafeInteger
+end
 
 local function GetRewardService()
 	return ServiceRegistry.Get("RewardService")
@@ -104,7 +115,7 @@ local function ProcessReceipt(receiptInfo: ReceiptInfo): Enum.ProductPurchaseDec
 	local targetConfig = nil
 	local productKey = nil
 	for key, config in pairs(DeveloperProductConfig) do
-		if config.ProductId == receiptInfo.ProductId then
+		if IsConfiguredProductId(config.ProductId) and config.ProductId == receiptInfo.ProductId then
 			targetConfig = config
 			productKey = key
 			break
@@ -126,9 +137,11 @@ local function ProcessReceipt(receiptInfo: ReceiptInfo): Enum.ProductPurchaseDec
 			PurchaseId = purchaseId,
 			Rewards = targetConfig.Rewards,
 		})
-		return if Success and Durable
-			then Enum.ProductPurchaseDecision.PurchaseGranted
-			else Enum.ProductPurchaseDecision.NotProcessedYet
+		if Success and Durable then
+			EventBus.Publish("DeveloperProductCommitted", player, productKey, purchaseId)
+			return Enum.ProductPurchaseDecision.PurchaseGranted
+		end
+		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
 	if
@@ -171,6 +184,7 @@ local function ProcessReceipt(receiptInfo: ReceiptInfo): Enum.ProductPurchaseDec
 		Rewards = targetConfig.Rewards,
 	})
 	if persistSuccess and Durable then
+		EventBus.Publish("DeveloperProductCommitted", player, productKey, purchaseId)
 		Logger.Info(
 			"Receipt",
 			"Developer Product purchase processed successfully for %s: %s (Product: %s, Transaction: %s)",

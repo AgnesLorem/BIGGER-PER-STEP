@@ -1145,9 +1145,14 @@ local function loadConfigValidationService(Rewards, Options)
 			}),
 		}),
 	})
+	local Logger = { Warnings = {} }
+	function Logger.Info() end
+	function Logger.Warn(Category, Message, ...)
+		table.insert(Logger.Warnings, { Category, string.format(Message, ...) })
+	end
 	local CoreFolder = {
 		Config = { DeveloperProductConfig = DeveloperProductConfig },
-		Utilities = { Logger = { Info = function() end } },
+		Utilities = { Logger = Logger },
 	}
 	local ServicesFolder = { Parent = CoreFolder }
 	local Game = {}
@@ -1168,7 +1173,7 @@ local function loadConfigValidationService(Rewards, Options)
 			end,
 		}, { __index = getfenv() })
 	)
-	return Chunk()
+	return Chunk(), Logger
 end
 
 local ReceiptRegistrationCount = 0
@@ -1192,6 +1197,27 @@ loadConfigValidationService({ { Type = "Destruction", Amount = 3 } }, {
 		},
 	},
 }):Init()
+local UnconfiguredProductValidation, UnconfiguredProductLogger = loadConfigValidationService(
+	{ { Type = "Destruction", Amount = 3 } },
+	{
+		ShopUIConfig = {},
+		DeveloperProductConfig = {
+			World1TripleReward = {
+				ProductId = 0,
+				Rewards = { { Type = "Destruction", Amount = 3 } },
+				AnalyticsKey = "World1_Triple_Reward",
+				Surface = "PortalOnly",
+				Price = 29,
+			},
+		},
+	}
+)
+UnconfiguredProductValidation:Init()
+UnconfiguredProductValidation:Init()
+local UnconfiguredProductStatus = UnconfiguredProductValidation:GetDeveloperProductStatus("World1TripleReward")
+assert(UnconfiguredProductStatus.IsConfigured == false)
+assert(UnconfiguredProductStatus.ErrorCode == "MissingProductId")
+assert(#UnconfiguredProductLogger.Warnings == 1)
 expectError(function()
 	loadConfigValidationService({ { Type = "Bigger", Amount = 10 } }, { Surface = "Unknown" }):Init()
 end)
@@ -1236,9 +1262,10 @@ local ConfigValidationBootIndex = assert(string.find(BootstrapSource, '{ Name = 
 local ReceiptProcessingBootIndex = assert(string.find(BootstrapSource, '{ Name = "ReceiptProcessingService"', 1, true))
 assert(ConfigValidationBootIndex < ReceiptProcessingBootIndex)
 
-local function loadRewardDispatcher(GrowthService, CharacterScaleService)
+local function loadRewardDispatcher(GrowthService, CharacterScaleService, DestructionService)
 	local RewardType = {
 		Bigger = "Bigger",
+		Destruction = "Destruction",
 		Coins = "Coins",
 		Aura = "Aura",
 		Boost = "Boost",
@@ -1263,6 +1290,8 @@ local function loadRewardDispatcher(GrowthService, CharacterScaleService)
 			return GrowthService
 		elseif Name == "CharacterScaleService" then
 			return CharacterScaleService
+		elseif Name == "DestructionService" then
+			return DestructionService
 		end
 		return nil
 	end
@@ -1292,6 +1321,26 @@ local function loadRewardDispatcher(GrowthService, CharacterScaleService)
 		}, { __index = getfenv() })
 	)
 	return Chunk()
+end
+
+do
+	local Player = { UserId = 4012, Name = "DestructionRewardPlayer" }
+	local Session = sessionFromProfile(Player, PlayerProfileSchema.Defaults())
+	Sessions.Set(Player, Session)
+	local GrantCalls = 0
+	local Dispatcher = loadRewardDispatcher({}, nil, {
+		GrantDestruction = function(_, TargetPlayer, Amount)
+			GrantCalls += 1
+			assert(TargetPlayer == Player and Amount == 3)
+			return Sessions.Mutate(TargetPlayer, function(CurrentSession)
+				CurrentSession.Destruction += Amount
+			end)
+		end,
+	})
+	local Result = Dispatcher.Dispatch(Player, { { Type = "Destruction", Amount = 3 } })
+	assert(Result.Success == true)
+	assert(GrantCalls == 1 and Session.Destruction == 3)
+	Sessions.Remove(Player)
 end
 
 local PresentationFailurePlayer = { UserId = 4010, Name = "PresentationFailurePlayer" }
@@ -1624,7 +1673,15 @@ assert(ReceiptThenRelease.Store.Data.Player_2001.ProcessedPurchaseIds["Purchase:
 assert(ReceiptThenRelease.Store.Data.Player_2001.LeaseOwner == nil)
 Sessions.Remove(ReceiptThenRelease.Player)
 
-local function loadReceiptProcessingService(UserId, PurchaseHistory, PendingPurchaseIds, GrantResult, CommitResult)
+local function loadReceiptProcessingService(
+	UserId,
+	PurchaseHistory,
+	PendingPurchaseIds,
+	GrantResult,
+	CommitResult,
+	Options
+)
+	Options = Options or {}
 	local Player = {
 		UserId = UserId,
 		Name = "ReceiptPlayer",
@@ -1658,6 +1715,16 @@ local function loadReceiptProcessingService(UserId, PurchaseHistory, PendingPurc
 	function SaveService:CommitTransaction(_, Transaction)
 		self.CommitCalls += 1
 		self.LastTransaction = Transaction
+		if CommitResult then
+			local Session = Sessions.Get(Player)
+			if Session then
+				Session.PurchaseHistory[Transaction.PurchaseId] = true
+			end
+			local RuntimeProfile = Profiles.Get(UserId)
+			if RuntimeProfile then
+				RuntimeProfile.PendingPurchaseIds[Transaction.PurchaseId] = nil
+			end
+		end
 		return CommitResult
 	end
 	local ServiceRegistry = {}
@@ -1669,13 +1736,14 @@ local function loadReceiptProcessingService(UserId, PurchaseHistory, PendingPurc
 		table.insert(EventBus.Published, { Name, ... })
 	end
 
-	local DeveloperProductConfig = {
-		BiggerPack = {
-			ProductId = 1234,
-			Rewards = { { Type = "Bigger", Amount = 10 } },
-			AnalyticsKey = "Bigger_Pack",
-		},
-	}
+	local DeveloperProductConfig = Options.DeveloperProductConfig
+		or {
+			BiggerPack = {
+				ProductId = 1234,
+				Rewards = { { Type = "Bigger", Amount = 10 } },
+				AnalyticsKey = "Bigger_Pack",
+			},
+		}
 	local ServicesFolder = {}
 	local CoreFolder = {
 		Config = { DeveloperProductConfig = DeveloperProductConfig },
@@ -1734,10 +1802,10 @@ local function loadReceiptProcessingService(UserId, PurchaseHistory, PendingPurc
 	}
 end
 
-local function receiptInfo(UserId, PurchaseId)
+local function receiptInfo(UserId, PurchaseId, ProductId)
 	return {
 		PlayerId = UserId,
-		ProductId = 1234,
+		ProductId = ProductId or 1234,
 		PurchaseId = PurchaseId,
 	}
 end
@@ -1801,7 +1869,34 @@ assert(FailedCommit.RewardService.GrantCalls == 1)
 assert(FailedCommit.SaveService.CommitCalls == 2)
 assert(#FailedCommit.EventBus.Published == 0)
 
-for _, Case in { DurableDuplicate, AtCapacity, PendingDuplicate, NewReceipt, FailedDispatch, FailedCommit } do
+local UnconfiguredReceipt = loadReceiptProcessingService(3007, {}, {}, { Success = true }, true, {
+	DeveloperProductConfig = {
+		World1TripleReward = {
+			ProductId = 0,
+			Rewards = { { Type = "Destruction", Amount = 3 } },
+			AnalyticsKey = "World1_Triple_Reward",
+		},
+	},
+})
+assert(
+	UnconfiguredReceipt.MarketplaceService.ProcessReceipt(receiptInfo(3007, "Purchase:Unconfigured", 0))
+		== "NotProcessedYet"
+)
+assert(UnconfiguredReceipt.RewardService.GrantCalls == 0)
+assert(UnconfiguredReceipt.SaveService.CommitCalls == 0)
+assert(#UnconfiguredReceipt.EventBus.Published == 0)
+
+for _, Case in
+	{
+		DurableDuplicate,
+		AtCapacity,
+		PendingDuplicate,
+		NewReceipt,
+		FailedDispatch,
+		FailedCommit,
+		UnconfiguredReceipt,
+	}
+do
 	Profiles.Remove(Case.Player.UserId, Case.Entry)
 	Sessions.Remove(Case.Player)
 end

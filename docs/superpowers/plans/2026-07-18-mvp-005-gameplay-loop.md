@@ -11,7 +11,8 @@
 ## Global Constraints
 
 - One paid product only: `World1TripleReward`, 29 Robux, exactly 3 Destruction, `PortalOnly`.
-- No VIP-discount Developer Product, no dynamic paid-portal price, no fake IDs.
+- No VIP-discount Developer Product or dynamic paid-portal price. Explicit `0`
+  placeholders are accepted as unconfigured; fake positive IDs are prohibited.
 - Game Passes are exactly `Vip` and `PremiumZone`; no 2X Game Pass.
 - Custom monetization thumbnails are user-approved for deferral to a future visual-polish milestone. MVP-005 uses Roblox default asset imagery; missing custom thumbnails do not block implementation, verification, review, or completion.
 - Server memory is authoritative; presentation attributes are write-only projections.
@@ -25,8 +26,9 @@
 **Files:** task, ADR, design, plan, audit, and approved core docs listed in Exact Scope.
 
 - [ ] Record the exact repository and Studio scope before source edits.
-- [ ] Create the two Game Passes and one Developer Product with final prices/settings.
-- [ ] Record their real IDs; reject zero, duplicate, temporary, or placeholder values.
+- [ ] Record the two Game Pass and one Developer Product contracts with final
+  prices/settings while keeping explicit `0` placeholders until production configuration.
+- [ ] Reject fake positive and duplicate configured IDs; treat `0` as unavailable.
 - [ ] Update frozen gameplay/runtime docs under ADR-005 authority.
 - [ ] Commit the verified planning/preflight unit locally.
 
@@ -125,8 +127,9 @@ RewardPortalService:ActivateChoices(WorldInstance, WorldInstanceService): boolea
 - [ ] Finish with exactly:
 
 ```text
-MVP005_GAMEPLAY: READY_FOR_REVIEW
-REAL_MONETIZATION_QA: DEFERRED
+MVP005: READY
+PRODUCTION_MONETIZATION_CONFIGURATION: DEFERRED
+LIVE_MONETIZATION_QA: DEFERRED
 PRODUCTION_PUBLICATION: NOT_PERFORMED
 ```
 
@@ -139,6 +142,9 @@ Create:
 - `docs/superpowers/specs/2026-07-18-mvp-005-gameplay-loop-design.md`
 - `docs/superpowers/plans/2026-07-18-mvp-005-gameplay-loop.md`
 - `docs/superpowers/reports/mvp-003/2026-07-18-mvp-005-audit.md`
+- `docs/superpowers/reports/mvp-003/2026-07-22-mvp-005-audit.md`
+- `docs/superpowers/reports/mvp-003/2026-07-22-mvp-005-runtime-unblock-audit.md`
+- `docs/superpowers/reports/mvp-003/2026-07-22-mvp-005-placeholder-policy-audit.md`
 - `src/server/Core/Config/GamePassConfig.luau`
 - `src/server/Core/Services/GamePassService.luau`
 - `src/server/Game/Services/RewardPortalService.luau`
@@ -177,10 +183,68 @@ Modify:
 - `src/server/Game/Systems/AFKZoneSystem.luau`
 - `src/shared/Core/Config/ShopUIConfig.luau`
 - `src/shared/Core/Enums/RewardType.luau`
+- `src/shared/Core/Utilities/ScaleCurve.luau`
+- `src/shared/Game/Progression/LevelFormula.luau`
 - `tests/unit/save_system.luau`
 
 No additional repository path may change before it is added here and to
 `tasks/MVP-005.md` with the dependency reason reported for user review.
+
+### Targeted MVP-007 prerequisite: Level unification
+
+- **Reason:** align MVP-005 Player Level, HUD progress, and avatar scaling with
+  MVP-007's server-authoritative unlock validation.
+- **Affected callers:** `SessionService`, `GrowthService`, `GuiController`,
+  `ScaleCurve`, `EquipmentService`, and Level-gated portals.
+- **Compatibility impact:** preserve the existing player-visible fourth-root
+  curve; remove the conflicting linear calculation without changing `Bigger`,
+  fractional growth, or other economy rules.
+- **Tests required:** canonical boundaries and actual consumer behavior at
+  `requirement - 1`, `requirement`, and `requirement + 1` for Levels 5, 10, 25,
+  50, 100, 200, and 500.
+- **Persistence and scope:** no migration is required; `Bigger` remains
+  authoritative. This is a targeted MVP-007 prerequisite, not an economy
+  redesign.
+- **Audit evidence:** add the immutable dated 2026-07-22 MVP-005 audit cycle;
+  retain the existing 2026-07-18 report unchanged.
+
+### Runtime unblock: optional monetization and HUD lifecycle
+
+**Files:** modify `GamePassService`, `ConfigValidationService`,
+`ReceiptProcessingService`, `RewardPortalService`, `GuiController`,
+`ObjectiveController`, and `tests/unit/mvp005_gameplay.luau`; create the
+runtime-unblock audit listed in Exact Scope.
+
+- [ ] Add RED tests proving zero Game Pass/Product IDs return structured
+  `MissingAssetId`/`MissingProductId` status, warn once, reject ownership,
+  prompts, paid portal, and receipts, and do not abort Core/Game bootstrap.
+- [ ] Keep metadata, reward shape/type, duplicate registration, and persistence
+  invariants fatal. Do not wrap the whole bootstrap in `pcall`.
+- [ ] Implement the minimum per-feature status in the existing services. Valid
+  configured IDs retain current query, prompt, and receipt behavior.
+- [ ] Add RED controller tests for bounded missing-HUD resolution, late bind,
+  removal/rebind, and duplicate connection prevention.
+- [ ] Resolve `PlayerGui` with a bounded wait, find the canonical
+  `PlayerGui.MainHUD` only, and expose `HUDUnavailable` without creating or
+  duplicating the Studio-authored asset.
+- [ ] Run `lune run tests/unit/mvp005_gameplay.luau` after each RED/GREEN
+  group, then run the complete offline and Studio gates.
+
+### Placeholder monetization policy adjustment
+
+**Files:** modify `tasks/MVP-005.md`, the MVP-005 design and this plan,
+`tests/unit/mvp005_gameplay.luau`, and the report index; create the immutable
+placeholder-policy audit listed in Exact Scope.
+
+- [ ] Replace only the two obsolete positive-production-ID assertions with
+  explicit `0` placeholder assertions; retain all configured-ID behavior tests.
+- [ ] Verify `MissingAssetId`/`MissingProductId`, warning-once, no ownership
+  query/prompt, placeholder/unknown receipt rejection, paid portal unavailable,
+  free portal continuity, and unrelated bootstrap continuity.
+- [ ] Record production IDs and live purchase QA as deferred configuration, not
+  as implementation blockers or production-verified evidence.
+- [ ] Run the complete offline gate. Set MVP-005 to `READY` only when every
+  current-scope command exits `0`; leave both MVP-007 decisions unchanged.
 
 ## Verification
 
@@ -195,5 +259,6 @@ rojo build default.project.json -o "$env:TEMP\bigger-mvp005.rbxl"
 git diff --check
 ```
 
-Synthetic Studio receipt evidence is not real purchase evidence. No production
-publication or remote push occurs in this plan.
+Receipt and purchase flow for the current placeholder state is code verified,
+unit verified, and placeholder fail-closed verified. It is not production
+purchase verified. No production publication or remote push occurs in this plan.

@@ -34,6 +34,10 @@ local function GetGrowthService()
 	return ServiceRegistry.Get("GrowthService")
 end
 
+local function GetDestructionService()
+	return ServiceRegistry.Get("DestructionService")
+end
+
 -- Frozen mapping table of reward executors
 local Handlers = table.freeze({
 	[RewardType.Bigger] = function(Player: Player, Reward: Reward): boolean
@@ -52,6 +56,10 @@ local Handlers = table.freeze({
 		end
 		local CurrentSession = Sessions.Get(Player)
 		return CurrentSession ~= nil and CurrentSession.Bigger == ExpectedBigger
+	end,
+	[RewardType.Destruction] = function(Player: Player, Reward: Reward): boolean
+		local DestructionService = GetDestructionService()
+		return DestructionService ~= nil and DestructionService:GrantDestruction(Player, Reward.Amount or 0) == true
 	end,
 
 	-- Stub handlers for other reward types (for extensibility)
