@@ -20,6 +20,8 @@ export type ProductConfig = {
 	ProductId: number,
 	Rewards: { Reward },
 	AnalyticsKey: string,
+	Surface: "Shop" | "PortalOnly",
+	Price: number?,
 }
 
 local DeveloperProductConfig: { [string]: ProductConfig } = {
@@ -32,6 +34,7 @@ local DeveloperProductConfig: { [string]: ProductConfig } = {
 			},
 		},
 		AnalyticsKey = "Bigger_150K",
+		Surface = "Shop",
 	},
 	Bigger1M = {
 		ProductId = 88201938,
@@ -42,6 +45,7 @@ local DeveloperProductConfig: { [string]: ProductConfig } = {
 			},
 		},
 		AnalyticsKey = "Bigger_1M",
+		Surface = "Shop",
 	},
 	Bigger10M = {
 		ProductId = 88201939,
@@ -52,6 +56,19 @@ local DeveloperProductConfig: { [string]: ProductConfig } = {
 			},
 		},
 		AnalyticsKey = "Bigger_10M",
+		Surface = "Shop",
+	},
+	World1TripleReward = {
+		ProductId = 0,
+		Rewards = {
+			{
+				Type = RewardType.Destruction,
+				Amount = 3,
+			},
+		},
+		AnalyticsKey = "World1_Triple_Reward",
+		Surface = "PortalOnly",
+		Price = 29,
 	},
 }
 

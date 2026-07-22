@@ -17,7 +17,7 @@ A player profile tracks the following data categories:
 - **Equipped Growth Upgrade**: The upgrade currently active and boosting size generation.
 - **Portal Progress**: Portals that have been successfully completed or unlocked.
 - **Player Settings**: Local preferences and options (e.g., sound toggles).
-- **Entitlements**: Forward-compatible 2X Multiplier and VIP booleans, normalized and persisted with defaults of `false`; MVP-004 has no Game Pass lookup or purchase flow.
+- **Entitlements**: 2X Multiplier, VIP, and Premium AFK Zone booleans normalized and persisted with defaults of `false`. MVP-005 actively reconciles VIP and Premium AFK Zone ownership; 2X remains forward-compatible and inactive.
 - **Receipt History**: Up to 5,000 durable Developer Product Purchase IDs.
 - **Offline Metadata**: Active, logout, and save timestamps used for atomic offline rewards.
 
@@ -88,3 +88,11 @@ Durable Purchase IDs live in `Session.PurchaseHistory`; dispatched but unconfirm
 ## Deferred Game Pass Monetization
 
 MVP-004 completion scope is the native server-authoritative DataStore save system, including durable Developer Product receipts. Game Pass creation, ownership reconciliation, purchase prompting, private-staging setup, and real purchase QA are deferred to a separate future approved milestone. Placeholder entitlement IDs are not active release configuration.
+
+## MVP-005 Entitlement Extension
+
+MVP-005 adds `HasPremiumZonePass` as a backward-compatible schema-v1 boolean with
+a default of `false`. VIP and Premium Zone ownership are reconciled against
+MarketplaceService with stale-query protection. Successful true or false results
+replace the saved entitlement and queue a save; API errors retain the last saved
+value. Real private-staging purchase QA remains deferred.

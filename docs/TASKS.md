@@ -18,6 +18,13 @@ This document tracks the high-level milestones for the Bigger project MVP.
   - Build the server-authoritative player profile lifecycle, autosave, final save, and bounded shutdown.
   - Add atomic timestamp-based offline progression and durable Developer Product receipts.
 
+- [ ] **WORLD1 Rewards & AFK Zones (MVP-005)**
+  - Add the three-second objective popup and post-stomp free/paid reward portals.
+  - Deliver the single 29 Robux triple reward only through durable receipts.
+  - Reconcile VIP and Premium AFK Zone Game Pass ownership with stale-query protection.
+  - Expand to seven deterministic AFK zones with exact fractional growth.
+  - Final gate is `READY_FOR_REVIEW`; real monetization QA and production publication remain deferred.
+
 - [ ] **Game Pass Monetization (Future MVP)**
   - Create approved 2X Multiplier and VIP passes and private staging resources.
   - Add ownership reconciliation, purchase prompting, and real-purchase QA.

@@ -13,6 +13,7 @@ local Scheduler = require(script.Parent.Parent.Scheduler.Scheduler)
 
 local SessionService = require(script.Parent.Parent.Services.SessionService)
 local SaveService = require(script.Parent.Parent.Services.SaveService)
+local GamePassService = require(script.Parent.Parent.Services.GamePassService)
 local GrowthService = require(script.Parent.Parent.Services.GrowthService)
 local CharacterScaleService = require(script.Parent.Parent.Services.CharacterScaleService)
 local ConfigValidationService = require(script.Parent.Parent.Services.ConfigValidationService)
@@ -27,6 +28,7 @@ local Booted = false
 
 local BootOrder = {
 	{ Name = "SaveService", Service = SaveService },
+	{ Name = "GamePassService", Service = GamePassService },
 	{ Name = "SessionService", Service = SessionService },
 	{ Name = "GrowthService", Service = GrowthService },
 	{ Name = "CharacterScaleService", Service = CharacterScaleService },

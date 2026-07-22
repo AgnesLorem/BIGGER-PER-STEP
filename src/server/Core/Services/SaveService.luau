@@ -82,6 +82,7 @@ local function Snapshot(
 		Settings = Session.Settings,
 		HasDoubleMultiplier = Session.HasDoubleMultiplier,
 		HasVip = Session.HasVip,
+		HasPremiumZonePass = Session.HasPremiumZonePass == true,
 		ProcessedPurchaseIds = ProcessedPurchaseIds,
 		LastActiveTimestamp = Session.LastActiveTimestamp,
 		LastLogoutTimestamp = Session.LastLogoutTimestamp,

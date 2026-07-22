@@ -257,6 +257,8 @@ end
 function GuiController.Init()
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 	ScreenGui = playerGui:WaitForChild("MainHUD") :: ScreenGui
+	local safeAreaRoot = ScreenGui:WaitForChild("SafeAreaRoot")
+	local persistentHUD = safeAreaRoot:WaitForChild("PersistentHUD")
 
 	-- Create SelectionOutline highlight
 	SelectionOutline = Instance.new("Frame")
@@ -272,10 +274,6 @@ function GuiController.Init()
 	corner.CornerRadius = UDim.new(0, 8)
 	corner.Parent = SelectionOutline
 	SelectionOutline.Parent = ScreenGui
-
-	-- Reference LeftSidebar, BottomHUD, and RightSidebar under SafeAreaRoot and PersistentHUD wrapper
-	local safeAreaRoot = ScreenGui:WaitForChild("SafeAreaRoot")
-	local persistentHUD = safeAreaRoot:WaitForChild("PersistentHUD")
 
 	LeftSidebar = persistentHUD:WaitForChild("LeftSidebar") :: Frame
 	for _, child in ipairs(LeftSidebar:GetChildren()) do
@@ -348,6 +346,15 @@ function GuiController.Init()
 					end)
 				end
 			end
+		end
+		local vipButton = rightSidebar:FindFirstChild("Vip")
+		if vipButton and vipButton:IsA("ImageButton") then
+			vipButton.MouseButton1Click:Connect(function()
+				local assetId = LocalPlayer:GetAttribute("VipGamePassAssetId")
+				if type(assetId) == "number" and assetId > 0 and assetId % 1 == 0 then
+					MarketplaceService:PromptGamePassPurchase(LocalPlayer, assetId)
+				end
+			end)
 		end
 	end
 

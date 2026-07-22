@@ -36,7 +36,7 @@ function GrowthFormula.Calculate(Session: Session, Context: GrowthContext): numb
 	local ZoneMultiplier = Context.ZoneMultiplier or 1
 	local FinalGain = BaseGain * ZoneMultiplier * Multiplier
 
-	return math.floor(FinalGain)
+	return FinalGain
 end
 
 return table.freeze(GrowthFormula)
