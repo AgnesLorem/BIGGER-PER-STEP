@@ -22,6 +22,7 @@ This document provides a structural representation of a loaded Player Profile as
   },
   "HasDoubleMultiplier": false,
   "HasVip": false,
+  "HasPremiumZonePass": false,
   "ProcessedPurchaseIds": {
     "Purchase:example-123": true
   },
@@ -35,4 +36,4 @@ This document provides a structural representation of a loaded Player Profile as
 
 Optional `nil` fields are omitted. Runtime-only fields such as `PendingPurchaseIds` and `ProfileMutationsFrozen` are never stored in this profile.
 
-`HasDoubleMultiplier` and `HasVip` are forward-compatible normalized booleans that default to `false`. MVP-004 persists them but does not advertise or implement Game Pass ownership lookup or purchasing.
+`HasDoubleMultiplier`, `HasVip`, and `HasPremiumZonePass` are normalized schema-v1 booleans that default to `false`. MVP-005 reconciles VIP and Premium Zone ownership; 2X remains an inactive forward-compatible field.

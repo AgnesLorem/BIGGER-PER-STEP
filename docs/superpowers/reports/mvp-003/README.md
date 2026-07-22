@@ -8,5 +8,6 @@ MVP-003 is the permanent whole-project quality, security, resilience, validation
 | --- | --- | --- |
 | Initial whole-project audit | [2026-07-15-initial-audit.md](2026-07-15-initial-audit.md) | READY: offline, Studio, manual multiplayer, and Studio-owned security gates passed; monetization persistence remains deferred to MVP-004 |
 | MVP-004 native DataStore save system | [2026-07-17-mvp-004-audit.md](2026-07-17-mvp-004-audit.md) | MVP004_SAVE_SYSTEM: READY; Game Pass monetization deferred to a future MVP |
+| MVP-005 WORLD1 rewards and AFK zones | [2026-07-18-mvp-005-audit.md](2026-07-18-mvp-005-audit.md) | Planning approved; implementation authorized after exact scope and monetization preflight |
 
 Future MVP audit cycles must create a new dated report in this directory and add one index row. They must not rewrite an earlier cycle's evidence or release decision.

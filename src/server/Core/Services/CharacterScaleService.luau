@@ -8,6 +8,9 @@ local Logger = require(script.Parent.Parent.Utilities.Logger)
 local ScaleCurve = require(ReplicatedStorage.BiggerShared.Core.Utilities.ScaleCurve)
 local ScaleConfig = require(ReplicatedStorage.BiggerShared.Core.Config.ScaleConfig)
 
+local PlayerConnections: { [Player]: { RBXScriptConnection } } = {}
+local Initialized = false
+
 local function ApplyScale(Player: Player, Character: Model, Bigger: number)
 	local Humanoid = Character:FindFirstChildOfClass("Humanoid")
 	if not Humanoid then
@@ -42,6 +45,17 @@ local function OnBiggerChanged(Player: Player, NewValue: number)
 	if Character then
 		ApplyScale(Player, Character, NewValue)
 	end
+end
+
+local function DisconnectPlayer(Player: Player)
+	local Connections = PlayerConnections[Player]
+	if not Connections then
+		return
+	end
+	for _, Connection in Connections do
+		Connection:Disconnect()
+	end
+	PlayerConnections[Player] = nil
 end
 
 local function CreateVipTag(Player: Player, Character: Model)
@@ -103,10 +117,25 @@ local function OnCharacterAdded(Player: Player, Character: Model)
 	CreateVipTag(Player, Character)
 end
 
+local function OnCharacterAppearanceLoaded(Player: Player, Character: Model)
+	if Player.Character ~= Character then
+		return
+	end
+	OnCharacterAdded(Player, Character)
+end
+
 local function OnPlayerAdded(Player: Player)
-	Player.CharacterAdded:Connect(function(Character)
-		OnCharacterAdded(Player, Character)
-	end)
+	if PlayerConnections[Player] then
+		return
+	end
+	PlayerConnections[Player] = {
+		Player.CharacterAdded:Connect(function(Character)
+			OnCharacterAdded(Player, Character)
+		end),
+		Player.CharacterAppearanceLoaded:Connect(function(Character)
+			OnCharacterAppearanceLoaded(Player, Character)
+		end),
+	}
 	if Player.Character then
 		task.spawn(OnCharacterAdded, Player, Player.Character)
 	end
@@ -123,8 +152,13 @@ function CharacterScaleService:UpdateVipTag(Player: Player)
 end
 
 function CharacterScaleService:Init()
+	if Initialized then
+		return
+	end
+	Initialized = true
 	EventBus.Subscribe("BiggerChanged", OnBiggerChanged)
 	Players.PlayerAdded:Connect(OnPlayerAdded)
+	Players.PlayerRemoving:Connect(DisconnectPlayer)
 end
 
 function CharacterScaleService:Start()

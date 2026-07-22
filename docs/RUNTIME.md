@@ -109,7 +109,7 @@ stateDiagram-v2
     Loading --> Ready : Profile Loaded
     Ready --> InLobby : Spawn Lobby
     InLobby --> InWorld : Portal Trigger / Acquire World
-    InWorld --> Returning : Complete Objective / Return Request
+    InWorld --> Returning : Reward Choice Settled / Return Request
     Returning --> InLobby : Despawn World / Teleport Lobby
     InLobby --> Saving : Leave
     Saving --> Closed : Write Complete
@@ -120,6 +120,7 @@ stateDiagram-v2
 - **Ready**: Data loaded; session memory initialized.
 - **InLobby**: Player is in the shared social lobby area.
 - **InWorld**: Player is inside their private `WorldInstance`.
+- **InWorld after Objective Completion**: The objective is disabled and reward portals are active; the player remains in the same authoritative state until one reward choice settles.
 - **Returning**: Objective completed; cleaning up world state and preparing lobby teleport.
 - **Saving**: Writing the final session state back to the persistent database.
 - **Closed**: Memory cleared; session discarded.
@@ -133,7 +134,7 @@ stateDiagram-v2
     Created --> Initializing : Set Up Physics & Assets
     Initializing --> WaitingForPlayer : Ready for Teleport
     WaitingForPlayer --> Active : Player Enters
-    Active --> Completed : Objective Destroyed / Timeout
+    Active --> Completed : Reward Choice Settled / Timeout
     Completed --> Cleaning : Return Player & Reset Map State
     Cleaning --> Pooled : Clear Ownership & Return to Pool
     Pooled --> Initializing : Re-acquired
@@ -143,8 +144,8 @@ stateDiagram-v2
 - **Created**: World instantiated or duplicated from blueprint template.
 - **Initializing**: Instantiating destroyable objects, resetting physics, loading initial configurations.
 - **WaitingForPlayer**: Map is ready; server awaits player teleportation.
-- **Active**: Player is active in the world; game logic running.
-- **Completed**: Player has successfully destroyed the main objective or left the world.
+- **Active**: Player is active in the world; this includes the post-objective reward-choice substate.
+- **Completed**: The player's reward choice has settled or the player has left the world.
 - **Cleaning**: Returning player to the lobby, clearing temporary assets, resetting objects.
 - **Pooled**: Resting in memory pool, ready to be assigned to another session.
 
@@ -446,4 +447,3 @@ When implementing new gameplay features, developers and AI agents must adhere to
 ```
 
 - **Extension-First Rule**: Core modifications are treated as a last resort. If a feature forces a Core modification, the primary task is to improve the extensibility of the core framework first, rather than patching in a narrow gameplay feature.
-

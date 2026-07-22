@@ -2,6 +2,7 @@
 --// Raw Requirings \\--
 
 local Players = game:GetService("Players")
+local Debris = game:GetService("Debris")
 
 --// Requirings \\--
 
@@ -11,7 +12,15 @@ local Logger = require(script.Parent.Parent.Parent.Core.Utilities.Logger)
 local World1Config = require(script.Parent.Parent.Config.World1Config)
 local StompValidation = require(game:GetService("ReplicatedStorage").BiggerShared.Core.Utilities.StompValidation)
 
+--// Variables \\--
+
+local MAX_SAFE_INTEGER = 9007199254740991
+
 --// Helpers \\--
+
+local function IsSafeInteger(Value: number, Minimum: number): boolean
+	return Value == Value and Value >= Minimum and Value <= MAX_SAFE_INTEGER and Value % 1 == 0
+end
 
 local function GetPlayerFromHit(Hit: BasePart): Player?
 	local Character = Hit:FindFirstAncestorOfClass("Model")
@@ -76,14 +85,36 @@ local function SyncDestruction(Player: Player, Destruction: number)
 	end
 end
 
-local function PlayPlaceholderEffect(Hitbox: BasePart)
-	local OriginalTransparency = Hitbox.Transparency
-	Hitbox.Transparency = 0.7
-	task.delay(0.25, function()
-		if Hitbox.Parent then
-			Hitbox.Transparency = OriginalTransparency
+local function BreakSpider(WorldModel: Instance, Hitbox: BasePart)
+	local Spider = WorldModel:FindFirstChild(World1Config.Objective.ModelName, true)
+	if not Spider then
+		return
+	end
+
+	local FragmentIndex = 0
+	for _, Descendant in Spider:GetDescendants() do
+		if Descendant:IsA("BasePart") and Descendant ~= Hitbox then
+			FragmentIndex += 1
+			local OffsetX = Descendant.Position.X - Hitbox.Position.X
+			local OffsetZ = Descendant.Position.Z - Hitbox.Position.Z
+			local Magnitude = math.sqrt(OffsetX * OffsetX + OffsetZ * OffsetZ)
+			if Magnitude < 0.001 then
+				local Angle = FragmentIndex * math.pi * 0.75
+				OffsetX = math.cos(Angle)
+				OffsetZ = math.sin(Angle)
+				Magnitude = 1
+			end
+
+			Descendant.CanCollide = false
+			Descendant.CanTouch = false
+			Descendant.CanQuery = false
+			Descendant.Anchored = false
+			Descendant.AssemblyLinearVelocity = Vector3.new(OffsetX / Magnitude * 10, 8, OffsetZ / Magnitude * 10)
+			Descendant.AssemblyAngularVelocity =
+				Vector3.new((FragmentIndex % 3 - 1) * 1.5, 2, (FragmentIndex % 2 * 2 - 1) * 1.5)
+			Debris:AddItem(Descendant, 2)
 		end
-	end)
+	end
 end
 
 --// Service \\--
@@ -93,6 +124,36 @@ local DestructionService = {}
 function DestructionService:Init() end
 
 function DestructionService:Start() end
+
+function DestructionService:GrantDestruction(Player: Player, Amount: number): boolean
+	if type(Amount) ~= "number" or not IsSafeInteger(Amount, 1) then
+		return false
+	end
+
+	local NewValue: number? = nil
+	local Mutated = Sessions.Mutate(Player, function(Session)
+		local Current = Session.Destruction
+		if not IsSafeInteger(Current, 0) or Current > MAX_SAFE_INTEGER - Amount then
+			return
+		end
+		NewValue = Current + Amount
+		Session.Destruction = NewValue
+	end)
+	if not Mutated or not NewValue then
+		return false
+	end
+
+	local Synced, SyncError = pcall(SyncDestruction, Player, NewValue)
+	if not Synced then
+		Logger.Warn(
+			"Destruction",
+			"Presentation sync failed for PlayerUserId=%d: %s",
+			Player.UserId,
+			tostring(SyncError)
+		)
+	end
+	return true
+end
 
 function DestructionService:BindWorld(WorldInstance, WorldInstanceService)
 	local Hitbox = GetHitbox(WorldInstance.Model)
@@ -106,13 +167,39 @@ function DestructionService:BindWorld(WorldInstance, WorldInstanceService)
 		return false
 	end
 
-	Hitbox.CanTouch = true
+	WorldInstance.ObjectiveInitialized = false
+	WorldInstance.ObjectiveActive = false
+	Hitbox.CanTouch = false
 	table.insert(
 		WorldInstance.Connections,
 		Hitbox.Touched:Connect(function(Hit)
 			self:TryCompleteObjective(WorldInstance, Hitbox, Hit, WorldInstanceService)
 		end)
 	)
+	return true
+end
+
+function DestructionService:ActivateWorld(WorldInstance): boolean
+	if WorldInstance.ObjectiveInitialized or WorldInstance.ObjectiveCompleted then
+		return false
+	end
+	local Player = WorldInstance.OwnerPlayer
+	local Session = Sessions.Get(Player)
+	if
+		not Session
+		or Session.ProfileMutationsFrozen
+		or Session.State ~= "InWorld"
+		or Session.CurrentWorldInstanceId ~= WorldInstance.WorldInstanceId
+	then
+		return false
+	end
+	local Hitbox = GetHitbox(WorldInstance.Model)
+	if not Hitbox then
+		return false
+	end
+	WorldInstance.ObjectiveInitialized = true
+	WorldInstance.ObjectiveActive = true
+	Hitbox.CanTouch = true
 	return true
 end
 
@@ -129,49 +216,25 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 	if Session.CurrentWorldInstanceId ~= WorldInstance.WorldInstanceId then
 		return
 	end
-	if not WorldInstance.ObjectiveActive or WorldInstance.ObjectiveCompleted then
+	if
+		not WorldInstance.ObjectiveInitialized
+		or not WorldInstance.ObjectiveActive
+		or WorldInstance.ObjectiveCompleted
+	then
 		return
 	end
 	if not IsValidStomp(Player, Hitbox) then
 		return
 	end
 
-	local SessionServiceFound, SessionService = pcall(function()
-		return ServiceRegistry.Get("SessionService")
-	end)
-	if not SessionServiceFound or not SessionService then
-		WorldInstanceService:RecoverPlayer(Player, "MissingSessionServiceAtCompletion", false)
-		return
-	end
-
 	WorldInstance.ObjectiveCompleted = true
 	WorldInstance.ObjectiveActive = false
 	Hitbox.CanTouch = false
-	local TransitionCalled, Transitioned = pcall(function()
-		return SessionService:TransitionState(Player, "InWorld", "Returning")
-	end)
-	if not TransitionCalled or not Transitioned then
-		WorldInstanceService:RecoverPlayer(Player, "ObjectiveTransitionFailed", false)
-		return
-	end
-
-	local Rewarded = Sessions.Mutate(Player, function(CurrentSession)
-		CurrentSession.Destruction += World1Config.Objective.DestructionReward
-	end)
-	if not Rewarded then
-		WorldInstanceService:RecoverPlayer(Player, "ProfileMutationsFrozen", false)
-		return
-	end
-	local Synced = pcall(function()
-		SyncDestruction(Player, Session.Destruction)
-	end)
-	if not Synced then
-		WorldInstanceService:RecoverPlayer(Player, "DestructionPresentationFailed", false)
-		return
-	end
-
+	Hitbox.CanCollide = false
+	Hitbox.CanQuery = false
+	Player:SetAttribute("ObjectiveActive", false)
 	local EffectSuccess = pcall(function()
-		PlayPlaceholderEffect(Hitbox)
+		BreakSpider(WorldInstance.Model, Hitbox)
 	end)
 	if not EffectSuccess then
 		Logger.Warn(
@@ -181,30 +244,18 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 			WorldInstance.WorldInstanceId
 		)
 	end
-
-	local Debounced = pcall(function()
-		local PortalService = ServiceRegistry.Get("PortalService")
-		PortalService:HoldDebounce(Player, World1Config.ReturnPortalDebounceSeconds)
+	local RewardServiceFound, RewardPortalService = pcall(function()
+		return ServiceRegistry.Get("RewardPortalService")
 	end)
-	if not Debounced then
-		Logger.Warn("Destruction", "Return portal debounce failed for PlayerUserId=%d", Player.UserId)
-	end
-
-	local ReturnCalled, ReturnSuccess = pcall(function()
-		return WorldInstanceService:ReturnPlayerToLobby(Player)
+	local Activated, ActivationSuccess = pcall(function()
+		return RewardServiceFound
+			and RewardPortalService
+			and RewardPortalService:ActivateChoices(WorldInstance, WorldInstanceService)
 	end)
-	if not ReturnCalled or not ReturnSuccess then
-		Logger.Warn(
-			"Destruction",
-			"Return teleport failed for PlayerUserId=%d WorldInstanceId=%s",
-			Player.UserId,
-			WorldInstance.WorldInstanceId
-		)
-		WorldInstanceService:RecoverPlayer(Player, "ReturnSpawnUnavailableAtCompletion", true)
+	if not Activated or not ActivationSuccess then
+		WorldInstanceService:RecoverPlayer(Player, "RewardChoiceActivationFailed", false)
 		return
 	end
-
-	WorldInstanceService:RecoverPlayer(Player, "ObjectiveCompleted", false)
 end
 
 return DestructionService

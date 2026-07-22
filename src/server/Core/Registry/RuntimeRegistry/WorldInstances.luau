@@ -6,9 +6,19 @@ export type WorldInstance = {
 	OwnerUserId: number,
 	OwnerPlayer: Player,
 	Model: Instance,
+	ObjectiveInitialized: boolean,
 	ObjectiveActive: boolean,
 	ObjectiveCompleted: boolean,
 	ObjectiveId: string,
+	RewardState: string,
+	PendingRewardPrompt: {
+		WorldInstanceId: string,
+		ProductKey: string,
+		ProductId: number,
+		PromptToken: string,
+		State: string,
+		WorldInstanceService: any,
+	}?,
 	Connections: { RBXScriptConnection },
 }
 

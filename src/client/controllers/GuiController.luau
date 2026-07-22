@@ -102,9 +102,11 @@ end
 function GuiController.Init()
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 	ScreenGui = playerGui:WaitForChild("MainHUD") :: ScreenGui
+	local safeAreaRoot = ScreenGui:WaitForChild("SafeAreaRoot")
+	local persistentHUD = safeAreaRoot:WaitForChild("PersistentHUD")
 
 	-- Reference LeftSidebar
-	local leftSidebar = ScreenGui:WaitForChild("LeftSidebar") :: Frame
+	local leftSidebar = persistentHUD:WaitForChild("LeftSidebar") :: Frame
 	for _, child in ipairs(leftSidebar:GetChildren()) do
 		if child:IsA("ImageButton") then
 			ApplyHoverAnimation(child)
@@ -115,7 +117,7 @@ function GuiController.Init()
 	end
 
 	-- Reference BottomHUD
-	local bottomHUD = ScreenGui:WaitForChild("BottomHUD") :: Frame
+	local bottomHUD = persistentHUD:WaitForChild("BottomHUD") :: Frame
 
 	-- Reference Progress Bar components
 	local progressBarFrame = bottomHUD:WaitForChild("ProgressBarFrame") :: Frame
@@ -148,7 +150,7 @@ function GuiController.Init()
 	end
 
 	-- Reference RightSidebar (VIP and Double Multiplier)
-	local rightSidebar = ScreenGui:WaitForChild("RightSidebar", 5) :: Frame?
+	local rightSidebar = persistentHUD:WaitForChild("RightSidebar", 5) :: Frame?
 	if rightSidebar then
 		for _, child in ipairs(rightSidebar:GetChildren()) do
 			if child:IsA("ImageButton") then
@@ -167,6 +169,15 @@ function GuiController.Init()
 					end)
 				end
 			end
+		end
+		local vipButton = rightSidebar:FindFirstChild("Vip")
+		if vipButton and vipButton:IsA("ImageButton") then
+			vipButton.MouseButton1Click:Connect(function()
+				local assetId = LocalPlayer:GetAttribute("VipGamePassAssetId")
+				if type(assetId) == "number" and assetId > 0 and assetId % 1 == 0 then
+					MarketplaceService:PromptGamePassPurchase(LocalPlayer, assetId)
+				end
+			end)
 		end
 	end
 end
