@@ -70,6 +70,15 @@ local DeveloperProductConfig: { [string]: ProductConfig } = {
 		Surface = "PortalOnly",
 		Price = 29,
 	},
+	SkipRebirth = {
+		ProductId = 0,
+		Rewards = {
+			{
+				Type = RewardType.SkipRebirth,
+			},
+		},
+		AnalyticsKey = "Skip_Rebirth",
+	},
 }
 
 return table.freeze(DeveloperProductConfig)

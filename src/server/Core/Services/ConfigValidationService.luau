@@ -16,10 +16,16 @@ local RewardType = require(
 	ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType")
 )
 local BalanceConfig = require(
-	ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Game"):WaitForChild("Progression"):WaitForChild("BalanceConfig")
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("BalanceConfig")
 )
 local LevelFormula = require(
-	ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Game"):WaitForChild("Progression"):WaitForChild("LevelFormula")
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("LevelFormula")
 )
 
 local ConfigValidationService = {}
@@ -35,6 +41,7 @@ local SupportedDeveloperProductRewards = table.freeze({
 	[RewardType.Destruction] = true,
 	[RewardType.DoubleMultiplier] = true,
 	[RewardType.Vip] = true,
+	[RewardType.SkipRebirth] = true,
 })
 
 function ConfigValidationService:Init()
@@ -265,7 +272,9 @@ function ConfigValidationService:Init()
 		if i > 1 then
 			local prevStage = stages[i - 1]
 			if stage.MinLevel ~= prevStage.MaxLevel + 1 then
-				error("ConfigValidation: Level gap between stages '" .. prevStage.Name .. "' and '" .. stage.Name .. "'")
+				error(
+					"ConfigValidation: Level gap between stages '" .. prevStage.Name .. "' and '" .. stage.Name .. "'"
+				)
 			end
 		end
 	end

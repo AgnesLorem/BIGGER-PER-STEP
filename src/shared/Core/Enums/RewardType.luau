@@ -10,4 +10,5 @@ return table.freeze({
 	Item = "Item",
 	DoubleMultiplier = "DoubleMultiplier",
 	Vip = "Vip",
+	SkipRebirth = "SkipRebirth",
 })

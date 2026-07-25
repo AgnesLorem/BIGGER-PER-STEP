@@ -36,7 +36,7 @@ export type ViewportProfile = {
 	Width: number,
 	Height: number,
 	Aspect: number,
-	DisplaySize: Enum.ViewportDisplaySize,
+	DisplaySize: Enum.DisplaySize,
 	SafeArea: Rect,
 	Platform: Enum.UserInputType,
 	Orientation: "Portrait" | "Landscape",
@@ -177,7 +177,7 @@ local function UpdateProfile()
 	local viewport = camera.ViewportSize
 	if viewport.X <= 1 or viewport.Y <= 1 then return end
 
-	local displaySize = Enum.ViewportDisplaySize.Large
+	local displaySize = Enum.DisplaySize.Large
 	pcall(function()
 		displaySize = GuiService.ViewportDisplaySize
 	end)
@@ -375,7 +375,7 @@ function ResponsiveController:GetProfile(): ViewportProfile
 			Width = 1920,
 			Height = 1080,
 			Aspect = 1920 / 1080,
-			DisplaySize = Enum.ViewportDisplaySize.Large,
+			DisplaySize = Enum.DisplaySize.Large,
 			SafeArea = Rect.new(0, 0, 1920, 1080),
 			Platform = Enum.UserInputType.None,
 			Orientation = "Landscape",

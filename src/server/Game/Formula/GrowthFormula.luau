@@ -26,6 +26,7 @@ function GrowthFormula.GetMultiplier(Session: Session): number
 	if Session.HasVip then
 		Multiplier *= 2
 	end
+	Multiplier *= math.max(1, Session.Rebirth)
 
 	return Multiplier
 end

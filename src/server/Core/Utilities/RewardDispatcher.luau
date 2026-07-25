@@ -110,6 +110,15 @@ local Handlers = table.freeze({
 		end
 		return Mutated
 	end,
+
+	[RewardType.SkipRebirth] = function(Player: Player, _Reward: Reward): boolean
+		local RebirthService = ServiceRegistry.Get("RebirthService")
+		if not RebirthService then
+			return false
+		end
+		local Ok, Result = pcall(RebirthService.ApplySkipRebirth, RebirthService, Player)
+		return Ok and Result == true
+	end,
 })
 
 local RewardDispatcher = {}

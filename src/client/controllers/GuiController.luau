@@ -45,6 +45,7 @@ local ScreenGui: ScreenGui
 local LevelLabel: TextLabel
 local ProgressFill: ImageLabel
 local ProgressTextLabel: TextLabel
+local ProgressStatsLabel: TextLabel
 
 local LeftSidebar: Frame
 local BottomHUD: Frame
@@ -54,18 +55,23 @@ local RightSidebar: Frame?
 local SelectionOutline: Frame
 
 --// Helpers \\--
-local function CalculateLevelProgress(bigger: number, _level: number): (number, number, number)
-	return LevelFormula.GetProgress(bigger)
+local function CalculateLevelProgress(bigger: number): (number, number)
+	local derivedLevel = LevelFormula.GetLevel(bigger)
+	local ratio = LevelFormula.GetProgress(bigger)
+	local _, nextLevelReq = LevelFormula.GetCurrentRange(derivedLevel)
+	return ratio, nextLevelReq
 end
 
 local function UpdateHUD()
 	local bigger = LocalPlayer:GetAttribute("Bigger") or 1
-	local level = LocalPlayer:GetAttribute("Level") or 1
 	local multiplier = LocalPlayer:GetAttribute("Multiplier") or 1
 
 	LevelLabel.Text = FormatNumber(bigger) .. " BIGGER"
 
-	local ratio = CalculateLevelProgress(bigger, level)
+	local ratio, nextLevelReq = CalculateLevelProgress(bigger)
+	if ProgressStatsLabel then
+		ProgressStatsLabel.Text = FormatNumber(bigger) .. " / " .. FormatNumber(nextLevelReq)
+	end
 
 	-- Hide progress fill if player has no size points yet (starting state)
 	if bigger <= 1 then
@@ -296,6 +302,7 @@ function GuiController.Init()
 	local barContainer = progressBG:WaitForChild("BarContainer") :: Frame
 	ProgressFill = barContainer:WaitForChild("ProgressFill") :: ImageLabel
 	ProgressTextLabel = progressBG:WaitForChild("ProgressTextLabel") :: TextLabel
+	ProgressStatsLabel = progressBG:WaitForChild("ProgressStatsLabel") :: TextLabel
 
 	-- Reference Bottom Buttons (Developer Products)
 	ButtonsContainer = BottomHUD:WaitForChild("ButtonsContainer") :: Frame
