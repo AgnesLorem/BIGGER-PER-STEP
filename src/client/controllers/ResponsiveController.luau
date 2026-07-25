@@ -138,7 +138,7 @@ local function Classify(viewport: Vector2, displaySize: Enum.ViewportDisplaySize
 			end
 		else
 			-- Between 900 and 1200
-			if displaySize == Enum.ViewportDisplaySize.Large then
+			if displaySize == Enum.DisplaySize.Large then
 				return "Desktop"
 			elseif UserInputService.TouchEnabled then
 				return "Tablet"
