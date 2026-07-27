@@ -48,6 +48,7 @@ EquipmentService.ResultCodes = ResultCodes
 
 local InFlightRequests: { [Player]: boolean } = {}
 local LastRequestTimestamp: { [Player]: number } = {}
+local MAX_UPGRADE_ID_LENGTH = 64
 
 local EquipmentFolder: Folder
 local UnlockRemote: RemoteFunction
@@ -73,8 +74,8 @@ local function QueueImmediateSave(Player: Player, ActionName: string, UpgradeId:
 		return ServiceRegistry.Get("SaveService")
 	end)
 	if SaveServiceOk and SaveService then
-		local SaveQueued = SaveService:QueueProfileSave(Player)
-		if not SaveQueued then
+		local QueueOk, SaveQueued = pcall(SaveService.QueueProfileSave, SaveService, Player)
+		if not QueueOk or not SaveQueued then
 			Logger.Warn(
 				"Equipment",
 				"Immediate save queue failed for %s during %s %s",
@@ -91,6 +92,33 @@ local function QueueImmediateSave(Player: Player, ActionName: string, UpgradeId:
 			ActionName,
 			UpgradeId
 		)
+	end
+end
+
+local function SetEquippedAttribute(Player: Player, UpgradeId: string)
+	local Success = pcall(Player.SetAttribute, Player, "EquippedGrowthUpgrade", UpgradeId)
+	if not Success then
+		Logger.Warn("Equipment", "Failed to update equipped attribute for %s", Player.Name)
+	end
+end
+
+local function UpdateMultiplierAttribute(Player: Player)
+	local Success = pcall(function()
+		local GrowthService = ServiceRegistry.Get("GrowthService")
+		GrowthService:UpdateMultiplierAttribute(Player)
+	end)
+	if not Success then
+		Logger.Warn("Equipment", "Failed to update multiplier attribute for %s", Player.Name)
+	end
+end
+
+local function PushEquipmentState(Player: Player, Session: Sessions.Session)
+	if not StateChangedRemote then
+		return
+	end
+	local Success = pcall(StateChangedRemote.FireClient, StateChangedRemote, Player, BuildEquipmentState(Session))
+	if not Success then
+		Logger.Warn("Equipment", "Failed to publish equipment state for %s", Player.Name)
 	end
 end
 
@@ -187,22 +215,14 @@ function EquipmentService:OnSessionCreated(Player: Player, Session: Sessions.Ses
 					InvalidUpgrade,
 					Player.Name
 				)
+				return
 			end
 		end
 	end
 
-	Player:SetAttribute("EquippedGrowthUpgrade", Session.EquippedGrowthUpgrade or "None")
-
-	local Success, GrowthService = pcall(function()
-		return ServiceRegistry.Get("GrowthService")
-	end)
-	if Success and GrowthService then
-		GrowthService:UpdateMultiplierAttribute(Player)
-	end
-
-	if StateChangedRemote then
-		StateChangedRemote:FireClient(Player, BuildEquipmentState(Session))
-	end
+	SetEquippedAttribute(Player, Session.EquippedGrowthUpgrade or "None")
+	UpdateMultiplierAttribute(Player)
+	PushEquipmentState(Player, Session)
 end
 
 function EquipmentService:OnSessionDestroyed(Player: Player)
@@ -240,7 +260,7 @@ function EquipmentService:InvokeUnlockSafe(Player: Player, UpgradeId: unknown): 
 	end
 
 	local Success, Ok, Msg = pcall(function()
-		if type(UpgradeId) ~= "string" then
+		if type(UpgradeId) ~= "string" or #UpgradeId > MAX_UPGRADE_ID_LENGTH then
 			return false, ResultCodes.InvalidUpgrade
 		end
 		return self:UnlockUpgrade(Player, UpgradeId)
@@ -261,7 +281,7 @@ function EquipmentService:InvokeEquipSafe(Player: Player, UpgradeId: unknown): (
 	end
 
 	local Success, Ok, Msg = pcall(function()
-		if UpgradeId ~= nil and type(UpgradeId) ~= "string" then
+		if UpgradeId ~= nil and (type(UpgradeId) ~= "string" or #UpgradeId > MAX_UPGRADE_ID_LENGTH) then
 			return false, ResultCodes.InvalidUpgrade
 		end
 		return self:EquipUpgrade(Player, UpgradeId :: string?)
@@ -321,11 +341,8 @@ function EquipmentService:UnlockUpgrade(Player: Player, UpgradeId: string): (boo
 		return false, ResultCodes.MutationFailed
 	end
 
-	Player:SetAttribute("EquippedGrowthUpgrade", Session.EquippedGrowthUpgrade or "None")
-
-	if StateChangedRemote then
-		StateChangedRemote:FireClient(Player, BuildEquipmentState(Session))
-	end
+	SetEquippedAttribute(Player, Session.EquippedGrowthUpgrade or "None")
+	PushEquipmentState(Player, Session)
 
 	QueueImmediateSave(Player, "UnlockUpgrade", UpgradeId)
 
@@ -367,18 +384,9 @@ function EquipmentService:EquipUpgrade(Player: Player, UpgradeId: string?): (boo
 		return false, ResultCodes.MutationFailed
 	end
 
-	Player:SetAttribute("EquippedGrowthUpgrade", TargetId)
-
-	local GrowthServiceOk, GrowthService = pcall(function()
-		return ServiceRegistry.Get("GrowthService")
-	end)
-	if GrowthServiceOk and GrowthService then
-		GrowthService:UpdateMultiplierAttribute(Player)
-	end
-
-	if StateChangedRemote then
-		StateChangedRemote:FireClient(Player, BuildEquipmentState(Session))
-	end
+	SetEquippedAttribute(Player, TargetId)
+	UpdateMultiplierAttribute(Player)
+	PushEquipmentState(Player, Session)
 
 	QueueImmediateSave(Player, "EquipUpgrade", TargetId)
 

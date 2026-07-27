@@ -113,6 +113,7 @@ local SeenSequenceIds: { [string]: boolean } = {}
 for _, Id in Sequence do
 	assert(type(Id) == "string" and Id ~= "", "Sequence element must be non-empty string")
 	assert(not SeenSequenceIds[Id], "Sequence element must be unique: " .. tostring(Id))
+	assert(Upgrades[Id] ~= nil, "Sequence element must have a definition: " .. tostring(Id))
 	SeenSequenceIds[Id] = true
 end
 
@@ -146,6 +147,13 @@ end
 
 assert(Upgrades.None.Multiplier == 1.0, "None multiplier must be 1.0")
 assert(PreviousUpgradeMap["Protein"] == nil, "Protein must have no predecessor")
+
+local PredecessorCount = 0
+for Id in PreviousUpgradeMap do
+	assert(SeenSequenceIds[Id] == true, "Predecessor entry must reference a Sequence element: " .. tostring(Id))
+	PredecessorCount += 1
+end
+assert(PredecessorCount == #Sequence - 2, "Predecessor map must contain exactly the real upgrades after Protein")
 
 for i = 2, #Sequence do
 	local CurrentId = Sequence[i]

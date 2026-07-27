@@ -21,8 +21,10 @@
 - **Authoritative Level**: Unlock validation calculates Level from `Session.Bigger` using `LevelFormula.GetLevelFromBigger(Session.Bigger)`. Never trust client attributes (`Player:GetAttribute("Level")`).
 - **Offline Progression**: Equipment multipliers apply ONLY to active gameplay growth. Offline progression uses existing entitlement rules (`SaveService`). `UpgradesConfig` is NOT a dependency of `SaveService`.
 - **Formula Multiplier Composition**: `equipment multiplier × HasDoubleMultiplier × HasVip`. Preserve fractional growth in `GrowthFormula.Calculate`.
-- **Immediate Save Behavior**: Mutation succeeds → presentation sync succeeds → `SaveService:QueueProfileSave(Player)` queues non-blocking save via FIFO worker → remote returns.
+- **Immediate Save Behavior**: A successful mutation keeps its authoritative result even if presentation sync or `SaveService:QueueProfileSave(Player)` fails. Presentation and queue failures are isolated and logged; autosave/final save remain the durability fallback.
 - **Deep Freezing**: Deep-freeze `Sequence`, every `UpgradeDefinition`, `Upgrades`, and `UpgradesConfig`.
+- **Client State Boundary**: Accept only complete, well-formed authoritative snapshots, copy incoming arrays, and give callbacks defensive copies.
+- **Remote Boundary**: Reject malformed or oversized IDs, allow one in-flight mutation per player, rate-limit rapid requests, and always release locks after exceptions.
 
 ---
 
@@ -46,10 +48,13 @@ The exact scope of created and modified files for MVP-007:
 
 ## Verification Results
 
+- `lune run tests/unit/equipment_system.luau`: PASS (configuration, formula, service, client, lifecycle, persistence-boundary, and remote-security coverage)
 - `lune run tests/unit/movement_validation.luau`: PASS
 - `lune run tests/unit/stomp_validation.luau`: PASS
-- `lune run tests/unit/equipment_system.luau`: PASS (Config, Formula, Service tests all PASS)
-- `stylua --check src tests`: PASS (0 formatting diffs)
-- `selene src`: PASS (0 errors, 0 warnings)
-- `rojo build default.project.json -o "$env:TEMP\bigger-mvp007.rbxl"`: PASS
-- `git diff --check`: PASS (0 trailing whitespace or merge conflict markers)
+- `stylua --check src tests`: PASS
+- Scoped MVP-007 Selene command: PASS (0 errors, 0 warnings)
+- `selene src tests`: repository-wide pre-existing Lune/test incompatibilities remain outside MVP-007 scope; no global rules or unrelated files were changed.
+- `rojo build default.project.json -o "$env:TEMP\bigger-mvp007-review.rbxl"`: PASS
+- `git diff --check`: PASS
+- Focused Studio QA in a temporary Rojo-built place: PASS for equipment authority, multipliers, rate limiting, loaded-state repair, client synchronization, malformed-state rejection, and defensive copies.
+- Full DataStore-backed rejoin QA: unavailable in the unpublished temporary place; production persistence semantics are covered by unit tests and require confirmation in a published MVP-007-mapped place.
