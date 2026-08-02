@@ -286,7 +286,11 @@ function GuiController.Init()
 		if child:IsA("ImageButton") then
 			ApplyHoverAnimation(child)
 			child.MouseButton1Click:Connect(function()
-				print(child.Name .. " button clicked (stub)")
+				if child.Name == "Rebirth" then
+					local RebirthController = require(script.Parent:WaitForChild("RebirthController"))
+					RebirthController.Open()
+				end
+				UIEventBus.Publish("SidebarButtonClicked", child.Name)
 			end)
 		end
 	end
@@ -354,7 +358,7 @@ function GuiController.Init()
 				end
 			end
 		end
-		local vipButton = rightSidebar:FindFirstChild("Vip")
+		local vipButton = RightSidebar:FindFirstChild("Vip")
 		if vipButton and vipButton:IsA("ImageButton") then
 			vipButton.MouseButton1Click:Connect(function()
 				local assetId = LocalPlayer:GetAttribute("VipGamePassAssetId")

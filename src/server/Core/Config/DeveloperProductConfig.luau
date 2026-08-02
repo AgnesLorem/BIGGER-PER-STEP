@@ -78,6 +78,8 @@ local DeveloperProductConfig: { [string]: ProductConfig } = {
 			},
 		},
 		AnalyticsKey = "Skip_Rebirth",
+		Surface = "PortalOnly",
+		Price = 1,
 	},
 }
 

@@ -1,20 +1,15 @@
 --!strict
 -- RebirthController.luau
--- Client controller for the Rebirth panel: wires buttons, listens for UpdateRebirth, renders UI.
--- Does NOT calculate gameplay values. Only binds gameplay logic to the existing UI.
+-- Client controller for the Rebirth panel (Pure Renderer).
+-- Displays authoritative Server Rebirth state sent via UpdateRebirth remote.
+-- Does NOT calculate gameplay values. Only binds gameplay logic to the approved UI freeze layout.
 
 --// Raw Requirings \\--
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
 
 --// Requirings \\--
-local FormatNumber = require(
-	ReplicatedStorage:WaitForChild("BiggerShared")
-		:WaitForChild("Core")
-		:WaitForChild("Utilities")
-		:WaitForChild("FormatNumber")
-)
+local UIEventBus = require(script.Parent:WaitForChild("UIEventBus"))
 
 --// Types \\--
 type RebirthTierSnapshot = {
@@ -26,7 +21,10 @@ type RebirthUpdate = {
 	Timestamp: number,
 	CurrentSize: number,
 	RequiredSize: number,
+	CurrentLevel: number,
+	RequiredLevel: number,
 	GrowthMultiplier: number,
+	NextGrowthMultiplier: number,
 	Rebirths: number,
 	CanRebirth: boolean,
 	PreviewTiers: { RebirthTierSnapshot },
@@ -40,18 +38,18 @@ local RebirthController = {}
 
 -- GUI References
 local ScreenGui: ScreenGui
+local OverlayHUD: Frame
 local Panel: Frame
 local CloseButton: TextButton
-local BarBG: Frame
+local RequirementLabel: TextLabel
+local ProgressLabel: TextLabel
 local BarFill: Frame
-local CurrentSizeLabel: TextLabel
-local RequiredSizeLabel: TextLabel
-local MultiplierPreviewLabel: TextLabel
-local RebirthCountLabel: TextLabel
+local CurrentStat: TextLabel
+local NextStat: TextLabel
 local RebirthButton: TextButton
+local RebirthButtonText: TextLabel
 local SkipRebirthButton: TextButton
-local LeftArrow: GuiButton
-local RightArrow: GuiButton
+local SkipRebirthButtonText: TextLabel
 
 -- Remote References
 local RequestRebirthRemote: RemoteEvent
@@ -59,11 +57,10 @@ local RequestSkipRebirthRemote: RemoteEvent
 local UpdateRebirthRemote: RemoteEvent
 
 -- State
-local PreviewIndex: number = 0
 local IsOpen = false
 local CachedState: RebirthUpdate?
 local PanelRegistry: {
-	Connections: { RBXScriptConnection },
+	Connections: { RBXScriptConnection | { Disconnect: () -> () } },
 	Tasks: { thread },
 	Destroyed: boolean,
 }
@@ -77,7 +74,11 @@ local function PanelRegistryDestroy()
 	PanelRegistry.Destroyed = true
 
 	for _, Connection in PanelRegistry.Connections do
-		Connection:Disconnect()
+		if typeof(Connection) == "RBXScriptConnection" then
+			(Connection :: RBXScriptConnection):Disconnect()
+		elseif typeof(Connection) == "table" and typeof(Connection.Disconnect) == "function" then
+			Connection.Disconnect()
+		end
 	end
 	table.clear(PanelRegistry.Connections)
 
@@ -100,95 +101,106 @@ local function NewPanelRegistry()
 	}
 end
 
-local TWEEN_INFO = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
-local function RenderTier(Tier: RebirthTierSnapshot?)
-	if not CurrentSizeLabel or not RequiredSizeLabel or not MultiplierPreviewLabel then
-		return
-	end
-	if not Tier then
-		if CachedState then
-			CurrentSizeLabel.Text = FormatNumber(CachedState.CurrentSize)
-			RequiredSizeLabel.Text = FormatNumber(CachedState.RequiredSize)
-			MultiplierPreviewLabel.Text = "Current: " .. tostring(CachedState.GrowthMultiplier) .. "X"
-		end
-		return
-	end
-	if CachedState then
-		CurrentSizeLabel.Text = "→ " .. FormatNumber(CachedState.CurrentSize)
-	end
-	RequiredSizeLabel.Text = "Next: " .. FormatNumber(Tier.RequiredSize)
-	MultiplierPreviewLabel.Text = tostring(Tier.GrowthMultiplier) .. "X"
-end
 
 local function Render(State: RebirthUpdate)
 	CachedState = State
-	PreviewIndex = 0
 
 	if not Panel then
 		return
 	end
 
-	-- Rebirth count
-	if RebirthCountLabel then
-		RebirthCountLabel.Text = "Rebirths: " .. tostring(State.Rebirths)
+	-- Requirement label
+	if RequirementLabel then
+		RequirementLabel.Text = "Reach Level " .. tostring(State.RequiredLevel) .. "\nto Rebirth"
 	end
 
-	-- Multiplier bar fill
-	if BarFill and BarBG then
-		local Ratio: number
-		if State.CanRebirth then
-			Ratio = 1
-		else
-			Ratio = math.clamp(if State.RequiredSize > 0 then State.CurrentSize / State.RequiredSize else 0, 0, 1)
-		end
-		TweenService:Create(BarFill, TWEEN_INFO, {
-			Size = UDim2.fromScale(Ratio, 1),
-		}):Play()
+	-- Progress bar text and fill
+	if ProgressLabel then
+		ProgressLabel.Text = "Lv" .. tostring(State.CurrentLevel) .. " / " .. tostring(State.RequiredLevel)
 	end
 
-	-- Button state
+	if BarFill then
+		local ratio = if State.RequiredLevel > 0 then math.clamp(State.CurrentLevel / State.RequiredLevel, 0, 1) else 0
+		BarFill.Size = UDim2.fromScale(math.max(ratio, 0.02), 1)
+	end
+
+	-- Current multiplier card
+	if CurrentStat then
+		CurrentStat.Text = tostring(State.GrowthMultiplier) .. "X Strength"
+	end
+
+	-- Next multiplier card
+	if NextStat then
+		NextStat.Text = tostring(State.NextGrowthMultiplier) .. "X Strength"
+	end
+
+	-- Rebirth button state driven by server CanRebirth
 	if RebirthButton then
 		RebirthButton.Active = State.CanRebirth
+		if RebirthButtonText then
+			RebirthButtonText.Text = "Rebirth"
+		end
+		local btnImg = RebirthButton:FindFirstChild("BtnImg") :: ImageLabel?
+		if btnImg then
+			btnImg.ImageColor3 = if State.CanRebirth then Color3.new(1, 1, 1) else Color3.fromRGB(150, 150, 150)
+		end
 	end
 
-	-- Render current tier (no preview offset)
-	RenderTier(nil)
+	if SkipRebirthButton then
+		SkipRebirthButton.Active = true
+		if SkipRebirthButtonText then
+			SkipRebirthButtonText.Text = "Skip Rebirth"
+		end
+	end
 end
 
-local function Open()
-	if not Panel or IsOpen then
+function RebirthController.Open()
+	if not Panel then
 		return
 	end
 	IsOpen = true
+	if OverlayHUD then
+		OverlayHUD.Visible = true
+	end
 	Panel.Visible = true
-	Panel.Size = UDim2.fromOffset(0, 0)
-	TweenService:Create(Panel, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		Size = UDim2.fromScale(0.55, 0.55),
-	}):Play()
+
+	-- Request fresh update from the server
+	pcall(function()
+		RequestRebirthRemote:FireServer("Refresh")
+	end)
 
 	if CachedState then
 		Render(CachedState)
 	end
 end
 
-local function Close()
-	if not Panel or not IsOpen then
+function RebirthController.Close()
+	if not Panel then
 		return
 	end
 	IsOpen = false
-
-	local CloseTween = TweenService:Create(
-		Panel,
-		TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-		{ Size = UDim2.new(0, 0, 0, 0) }
-	)
-	CloseTween:Play()
-	CloseTween.Completed:Connect(function()
-		if not IsOpen then
-			Panel.Visible = false
+	Panel.Visible = false
+	if OverlayHUD then
+		local anyOtherOpen = false
+		for _, child in ipairs(OverlayHUD:GetChildren()) do
+			if child:IsA("GuiObject") and child.Visible then
+				anyOtherOpen = true
+				break
+			end
 		end
-	end)
+		if not anyOtherOpen then
+			OverlayHUD.Visible = false
+		end
+	end
+end
+
+function RebirthController.Toggle()
+	if IsOpen then
+		RebirthController.Close()
+	else
+		RebirthController.Open()
+	end
 end
 
 --// Initialization \\--
@@ -197,45 +209,57 @@ function RebirthController.Init()
 	ScreenGui = PlayerGui:WaitForChild("MainHUD") :: ScreenGui
 
 	-- Remotes (idempotent — reference existing ones)
-	local RemotesFolder = ReplicatedStorage:WaitForChild("Remotes")
-	RequestRebirthRemote = RemotesFolder:WaitForChild("RequestRebirth") :: RemoteEvent
-	RequestSkipRebirthRemote = RemotesFolder:WaitForChild("RequestSkipRebirth") :: RemoteEvent
-	UpdateRebirthRemote = RemotesFolder:WaitForChild("UpdateRebirth") :: RemoteEvent
+	local RemotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
+	if not RemotesFolder then
+		RemotesFolder = Instance.new("Folder")
+		RemotesFolder.Name = "Remotes"
+		RemotesFolder.Parent = ReplicatedStorage
+	end
+	RequestRebirthRemote = RemotesFolder:FindFirstChild("RequestRebirth") :: RemoteEvent
+	if not RequestRebirthRemote then
+		RequestRebirthRemote = Instance.new("RemoteEvent")
+		RequestRebirthRemote.Name = "RequestRebirth"
+		RequestRebirthRemote.Parent = RemotesFolder
+	end
+	RequestSkipRebirthRemote = RemotesFolder:FindFirstChild("RequestSkipRebirth") :: RemoteEvent
+	if not RequestSkipRebirthRemote then
+		RequestSkipRebirthRemote = Instance.new("RemoteEvent")
+		RequestSkipRebirthRemote.Name = "RequestSkipRebirth"
+		RequestSkipRebirthRemote.Parent = RemotesFolder
+	end
+	UpdateRebirthRemote = RemotesFolder:FindFirstChild("UpdateRebirth") :: RemoteEvent
+	if not UpdateRebirthRemote then
+		UpdateRebirthRemote = Instance.new("RemoteEvent")
+		UpdateRebirthRemote.Name = "UpdateRebirth"
+		UpdateRebirthRemote.Parent = RemotesFolder
+	end
 
 	-- Panel references under OverlayHUD
-	local OverlayHUD = ScreenGui:WaitForChild("SafeAreaRoot"):WaitForChild("OverlayHUD")
+	local SafeAreaRoot = ScreenGui:WaitForChild("SafeAreaRoot")
+	OverlayHUD = SafeAreaRoot:WaitForChild("OverlayHUD") :: Frame
 	Panel = OverlayHUD:WaitForChild("RebirthPanel") :: Frame
 	Panel.Visible = false
 
 	CloseButton = Panel:FindFirstChild("CloseButton") :: TextButton
 
+	RequirementLabel = Panel:FindFirstChild("RequirementLabel") :: TextLabel
+
 	local MultiplierBar = Panel:FindFirstChild("MultiplierBar") :: Frame
-	BarBG = MultiplierBar and MultiplierBar:FindFirstChild("BarBG") :: Frame
+	ProgressLabel = MultiplierBar and MultiplierBar:FindFirstChild("ProgressLabel") :: TextLabel
+	local BarBG = MultiplierBar and MultiplierBar:FindFirstChild("BarBG") :: Frame
 	BarFill = BarBG and BarBG:FindFirstChild("BarFill") :: Frame
 
-	CurrentSizeLabel = Panel:FindFirstChild("CurrentSizeLabel") :: TextLabel
-	RequiredSizeLabel = Panel:FindFirstChild("RequiredSizeLabel") :: TextLabel
-	MultiplierPreviewLabel = Panel:FindFirstChild("MultiplierPreviewLabel") :: TextLabel
-	RebirthCountLabel = Panel:FindFirstChild("RebirthCountLabel") :: TextLabel
+	local CurrentCard = Panel:FindFirstChild("CurrentCard") :: ImageLabel
+	CurrentStat = CurrentCard and CurrentCard:FindFirstChild("Stat") :: TextLabel
 
-	RebirthButton = Panel:FindFirstChild("RebirthButton") :: TextButton
-	SkipRebirthButton = Panel:FindFirstChild("SkipRebirthButton") :: TextButton
+	local NextCard = Panel:FindFirstChild("NextCard") :: ImageLabel
+	NextStat = NextCard and NextCard:FindFirstChild("Stat") :: TextLabel
 
-	local Arrows = Panel:FindFirstChild("Arrows") :: Frame
-	LeftArrow = Arrows and Arrows:FindFirstChild("LeftArrow") :: GuiButton
-	RightArrow = Arrows and Arrows:FindFirstChild("RightArrow") :: GuiButton
+	RebirthButton = Panel:FindFirstChild("RebirthButton", true) :: TextButton
+	RebirthButtonText = RebirthButton and RebirthButton:FindFirstChild("ButtonText") :: TextLabel
 
-	-- Wire launcher button (persists for session, like GuiController sidebar buttons)
-	local SafeAreaRoot = ScreenGui:WaitForChild("SafeAreaRoot")
-	local PersistentHUD = SafeAreaRoot:WaitForChild("PersistentHUD")
-	local LeftSidebar = PersistentHUD:WaitForChild("LeftSidebar")
-	local Launcher = LeftSidebar:FindFirstChild("Rebirth") :: ImageButton
-	if Launcher then
-		-- Persists for the session (mirrors GuiController sidebar wiring).
-		Launcher.Activated:Connect(function()
-			Open()
-		end)
-	end
+	SkipRebirthButton = Panel:FindFirstChild("SkipRebirthButton", true) :: TextButton
+	SkipRebirthButtonText = SkipRebirthButton and SkipRebirthButton:FindFirstChild("ButtonText") :: TextLabel
 end
 
 function RebirthController.Start()
@@ -251,17 +275,24 @@ function RebirthController.Start()
 		end)
 	)
 
-	-- Wire panel button callbacks — these are re-bound on each Open() via the registry
-	-- but the Activated connections are bound once here and read IsOpen state.
-	-- We bind them once and they fire regardless of panel visibility (server validates).
-	-- Launcher connection lives for session (already wired in Init).
+	-- Subscribe to UIEventBus for sidebar button clicks
+	local eventConn = UIEventBus.Subscribe("SidebarButtonClicked", function(buttonName: any)
+		if buttonName == "Rebirth" then
+			RebirthController.Open()
+		end
+	end)
+	table.insert(PanelRegistry.Connections, eventConn)
 
 	-- RebirthButton
 	if RebirthButton then
 		table.insert(
 			PanelRegistry.Connections,
 			RebirthButton.Activated:Connect(function()
-				RequestRebirthRemote:FireServer()
+				if CachedState and CachedState.CanRebirth then
+					pcall(function()
+						RequestRebirthRemote:FireServer()
+					end)
+				end
 			end)
 		)
 	end
@@ -271,7 +302,9 @@ function RebirthController.Start()
 		table.insert(
 			PanelRegistry.Connections,
 			SkipRebirthButton.Activated:Connect(function()
-				RequestSkipRebirthRemote:FireServer()
+				pcall(function()
+					RequestSkipRebirthRemote:FireServer()
+				end)
 			end)
 		)
 	end
@@ -281,43 +314,21 @@ function RebirthController.Start()
 		table.insert(
 			PanelRegistry.Connections,
 			CloseButton.Activated:Connect(function()
-				Close()
+				RebirthController.Close()
 			end)
 		)
 	end
 
-	-- Arrow buttons (preview-only — no server calls)
-	if LeftArrow then
-		table.insert(
-			PanelRegistry.Connections,
-			LeftArrow.Activated:Connect(function()
-				if PreviewIndex > 0 then
-					PreviewIndex -= 1
-					if CachedState then
-						RenderTier(CachedState.PreviewTiers[PreviewIndex + 1])
-					end
-				else
-					RenderTier(nil)
-				end
-			end)
-		)
-	end
-	if RightArrow then
-		table.insert(
-			PanelRegistry.Connections,
-			RightArrow.Activated:Connect(function()
-				if CachedState and PreviewIndex < #CachedState.PreviewTiers then
-					PreviewIndex += 1
-					RenderTier(CachedState.PreviewTiers[PreviewIndex])
-				end
-			end)
-		)
-	end
-
-	-- Initial render if we already have state (e.g. panel was open before)
+	-- Initial render if we already have state
 	if CachedState and IsOpen then
 		Render(CachedState)
 	end
+	-- Request fresh update from the server
+	pcall(function()
+		RequestRebirthRemote:FireServer("Refresh")
+	end)
+
+
 end
 
 return RebirthController

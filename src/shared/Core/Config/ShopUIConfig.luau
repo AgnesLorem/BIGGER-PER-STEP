@@ -36,14 +36,7 @@ local ShopUIConfig: { [string]: ShopItem } = {
 		Icon = "rbxassetid://88201938796604",
 		SortOrder = 3,
 	},
-	SkipRebirth = {
-		ProductId = 0,
-		Display = "SKIP REBIRTH",
-		Description = "Instantly rebirth without reaching the size requirement!",
-		Gradient = { Color3.fromRGB(255, 170, 0), Color3.fromRGB(255, 85, 0) },
-		Icon = "rbxassetid://88201938796604",
-		SortOrder = 4,
-	},
+
 }
 
 return table.freeze(ShopUIConfig)
