@@ -1,25 +1,30 @@
 --!strict
 --// Raw Requirings \\--
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 --// Requirings \\--
-local GrowthTypes = require(
-	game:GetService("ReplicatedStorage")
-		:WaitForChild("BiggerShared")
-		:WaitForChild("Core")
-		:WaitForChild("Types")
-		:WaitForChild("GrowthTypes")
+local UpgradesConfig = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Config")
+		:WaitForChild("UpgradesConfig")
+)
+local RebirthFormula = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("RebirthFormula")
 )
 local Sessions = require(script.Parent.Parent.Parent.Core.Registry.RuntimeRegistry.Sessions)
-
---// Types \\--
-type GrowthContext = GrowthTypes.GrowthContext
-type Session = Sessions.Session
 
 --// Service \\--
 local GrowthFormula = {}
 
-function GrowthFormula.GetMultiplier(Session: Session): number
-	local Multiplier = 1
+function GrowthFormula.GetMultiplier(Session: Sessions.Session): number
+	local EquipmentMult = UpgradesConfig.GetMultiplier(Session.EquippedGrowthUpgrade)
+	local RebirthMult = RebirthFormula.GetMultiplier(Session.Rebirth or 0)
+	local Multiplier = EquipmentMult * RebirthMult
 	if Session.HasDoubleMultiplier then
 		Multiplier *= 2
 	end
@@ -30,7 +35,7 @@ function GrowthFormula.GetMultiplier(Session: Session): number
 	return Multiplier
 end
 
-function GrowthFormula.Calculate(Session: Session, Context: GrowthContext): number
+function GrowthFormula.Calculate(Session: Sessions.Session, Context: any): number
 	local Multiplier = GrowthFormula.GetMultiplier(Session)
 	local BaseGain = Context.BaseGain
 	local ZoneMultiplier = Context.ZoneMultiplier or 1

@@ -8,7 +8,7 @@ return table.freeze({
 	RuntimeFolderName = "RuntimeWorlds",
 	RuntimeOffset = Vector3.new(0, 0, 450),
 	PortalName = "Portal_World1",
-	RequiredLevel = 5,
+	RequiredLevel = 8,
 	EntryMarkerName = "EntrySpawn",
 	ReturnWorldName = "Big Island",
 	ReturnMarkerName = "ReturnSpawn",

@@ -13,6 +13,13 @@ local GrowthTypes = require(
 		:WaitForChild("Types")
 		:WaitForChild("GrowthTypes")
 )
+local LevelFormula = require(
+	game:GetService("ReplicatedStorage")
+		:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("LevelFormula")
+)
 
 --// Types \\--
 type GrowthContext = GrowthTypes.GrowthContext
@@ -79,7 +86,7 @@ function GrowthService:SetBigger(Player: Player, Value: number): boolean
 
 	Player:SetAttribute("Bigger", NormalizedValue)
 
-	local Level = math.floor((NormalizedValue / 236) ^ 0.25) + 1
+	local Level = LevelFormula.GetLevelFromBigger(NormalizedValue)
 	Player:SetAttribute("Level", Level)
 
 	local Leaderstats = Player:FindFirstChild("leaderstats")
