@@ -6,6 +6,8 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 --// Requirings \--
 
 local SaveConfig = require(script.Parent.Parent.Config.SaveConfig)
@@ -14,6 +16,18 @@ local Sessions = require(script.Parent.Parent.Registry.RuntimeRegistry.Sessions)
 local Scheduler = require(script.Parent.Parent.Scheduler.Scheduler)
 local Logger = require(script.Parent.Parent.Utilities.Logger)
 local PlayerProfileSchema = require(script.Parent.Parent.Utilities.PlayerProfileSchema)
+local UpgradesConfig = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Config")
+		:WaitForChild("UpgradesConfig")
+)
+local RebirthFormula = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("RebirthFormula")
+)
 
 --// Types \--
 
@@ -217,8 +231,20 @@ function SaveService:LoadProfile(Player: Player): Profile
 	end
 
 	local RuntimeProfile = Profiles.Create(Player.UserId, OwnerToken, function(Profile: Profile)
-		local Multiplier = if Profile.HasDoubleMultiplier then 2 else 1
-		return if Profile.HasVip then Multiplier * 2 else Multiplier
+		local EquipmentMult = if UpgradesConfig and type(UpgradesConfig.GetMultiplier) == "function"
+			then UpgradesConfig.GetMultiplier(Profile.EquippedGrowthUpgrade)
+			else 1.0
+		local RebirthMult = if RebirthFormula and type(RebirthFormula.GetMultiplier) == "function"
+			then RebirthFormula.GetMultiplier(Profile.Rebirth or 0)
+			else 1.0
+		local Multiplier = EquipmentMult * RebirthMult
+		if Profile.HasDoubleMultiplier then
+			Multiplier *= 2
+		end
+		if Profile.HasVip then
+			Multiplier *= 2
+		end
+		return Multiplier
 	end)
 	local ExpectedOwnerToken = RuntimeProfile.OwnerToken
 	local function IsCurrentLoad(): boolean

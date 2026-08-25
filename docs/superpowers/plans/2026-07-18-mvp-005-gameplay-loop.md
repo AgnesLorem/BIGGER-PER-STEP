@@ -79,6 +79,13 @@ GamePassService:Prompt(Player: Player, PassKey: "Vip" | "PremiumZone"): boolean
 - [ ] In Edit Mode remove only the approved orphan Spawn trigger.
 - [ ] Rename the three lobby triggers by ascending Z and duplicate through AFKZone7 at +53-stud spacing.
 - [ ] Make all triggers anchored, invisible, and non-colliding/non-touching/non-querying.
+- [ ] Audit and remove the obsolete `Workspace.Starter place` folder only after
+  proving it has no live references or required gameplay/runtime descendants.
+- [ ] Relocate the same seven trigger parts near `Workspace.Portal_World1` in a
+  compact 4+3 layout using whole-instance CFrames; preserve all gameplay and
+  collision contracts and keep the portal/spawn approach clear.
+- [ ] Verify grounding, bounding-box separation, exact object counts, two Play
+  Solo runs, AFK multiplier transitions, portal behavior, and clean Output.
 - [ ] Replace AFK config with the exact seven-zone ordered data.
 - [ ] Select only the highest containing zone; locked AFKZone7 grants zero without fallback.
 - [ ] Prompt Premium Zone once per entry and apply verified ownership next tick.

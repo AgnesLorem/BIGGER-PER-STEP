@@ -3,6 +3,9 @@ local luau = require("@lune/luau")
 local task = require("@lune/task")
 
 local Sessions = require("../../src/server/Core/Registry/RuntimeRegistry/Sessions")
+local LevelFormula = require("../../src/shared/Game/Progression/LevelFormula")
+local UpgradesConfig = require("../../src/shared/Game/Config/UpgradesConfig")
+local RebirthConfig = require("../../src/shared/Game/Config/RebirthConfig")
 
 local TEST_SYNTHETIC_VIP_PASS_ASSET_ID = 910001
 local TEST_SYNTHETIC_PREMIUM_ZONE_PASS_ASSET_ID = 910002
@@ -19,19 +22,34 @@ local function check(Name, Callback)
 	end
 end
 
+local function loadModule(Path, Name, Environment)
+	assert(fs.isFile(Path), Name .. " production module is missing")
+	local Chunk = luau.load(fs.readFile(Path), Name)
+	setfenv(Chunk, setmetatable(Environment or {}, { __index = getfenv() }))
+	return Chunk()
+end
+
+local RebirthFormula = loadModule("src/shared/Game/Progression/RebirthFormula.luau", "RebirthFormula", {
+	script = {
+		Parent = {
+			Parent = {
+				Config = {
+					RebirthConfig = RebirthConfig,
+				},
+			},
+		},
+	},
+	require = function(Dependency)
+		return Dependency
+	end,
+})
+
 local function waitUntil(Predicate, Message)
 	local Deadline = os.clock() + 1
 	while not Predicate() and os.clock() < Deadline do
 		task.wait()
 	end
 	assert(Predicate(), Message)
-end
-
-local function loadModule(Path, Name, Environment)
-	assert(fs.isFile(Path), Name .. " production module is missing")
-	local Chunk = luau.load(fs.readFile(Path), Name)
-	setfenv(Chunk, setmetatable(Environment or {}, { __index = getfenv() }))
-	return Chunk()
 end
 
 local function childContainer(Children)
@@ -1027,7 +1045,7 @@ check("cancelled and delayed paid results fail closed", function()
 	assert(Harness.Service:ActivateChoices(Harness.WorldInstance, Harness.Coordinator) == true)
 	Harness.PaidPortal.Children.Trigger.Touched:Fire(Harness.Hit)
 	Harness.MarketplaceService.PromptProductPurchaseFinished:Fire(
-		Harness.Player,
+		Harness.Player.UserId,
 		TEST_SYNTHETIC_WORLD1_TRIPLE_REWARD_PRODUCT_ID,
 		false
 	)
@@ -1214,6 +1232,10 @@ local function loadGrowthFormula()
 	local ReplicatedStorage = childContainer({
 		BiggerShared = childContainer({
 			Core = childContainer({ Types = childContainer({ GrowthTypes = GrowthTypes }) }),
+			Game = childContainer({
+				Config = childContainer({ UpgradesConfig = UpgradesConfig }),
+				Progression = childContainer({ RebirthFormula = RebirthFormula }),
+			}),
 		}),
 	})
 	local Game = {}
@@ -1232,11 +1254,14 @@ local function loadGrowthFormula()
 	})
 end
 
-local function loadGrowthService(GrowthFormula)
+local function loadGrowthService(GrowthFormula, LevelFormulaModule)
 	local GrowthTypes = {}
 	local ReplicatedStorage = childContainer({
 		BiggerShared = childContainer({
 			Core = childContainer({ Types = childContainer({ GrowthTypes = GrowthTypes }) }),
+			Game = childContainer({
+				Progression = childContainer({ LevelFormula = LevelFormulaModule or LevelFormula }),
+			}),
 		}),
 	})
 	local EventBus = { Publish = function() end }
@@ -1265,6 +1290,536 @@ local function loadGrowthService(GrowthFormula)
 		end,
 	})
 end
+
+check("GrowthService derives Player Level through canonical LevelFormula", function()
+	local Formula = loadGrowthFormula()
+	local Calls = 0
+	local Service = loadGrowthService(Formula, {
+		GetLevelFromBigger = function(Bigger)
+			Calls += 1
+			assert(Bigger == 60416)
+			return 77
+		end,
+	})
+	local Player = fakePlayer(6303)
+	local Session = fakeSession(Player)
+	Sessions.Set(Player, Session)
+	assert(Service:SetBigger(Player, 60416))
+	assert(Player:GetAttribute("Level") == 77)
+	assert(Calls == 1)
+	Sessions.Remove(Player)
+end)
+
+local function loadSessionService(ProfileByUserId, LevelFormulaModule)
+	local PlayerAdded = signal()
+	local PlayerRemoving = signal()
+	local Players = {
+		PlayerAdded = PlayerAdded,
+		PlayerRemoving = PlayerRemoving,
+	}
+	function Players:GetPlayers()
+		return {}
+	end
+
+	local ReplicatedStorage = childContainer({
+		BiggerShared = childContainer({
+			Game = childContainer({
+				Progression = childContainer({
+					LevelFormula = LevelFormulaModule,
+					RebirthFormula = RebirthFormula,
+				}),
+			}),
+		}),
+	})
+	local Profiles = {}
+	local ProfileEntries = {}
+	function Profiles.Get(UserId)
+		if not ProfileEntries[UserId] then
+			ProfileEntries[UserId] = {
+				Phase = "Active",
+				OwnerToken = "owner-" .. tostring(UserId),
+				WriteQueue = {},
+				LastError = nil,
+			}
+		end
+		return ProfileEntries[UserId]
+	end
+	local SaveService = {}
+	function SaveService:LoadProfile(Player)
+		return assert(ProfileByUserId[Player.UserId])
+	end
+	function SaveService:FreezeMutations() end
+	function SaveService:ReleaseProfile()
+		return true
+	end
+	local GrowthService = { UpdateMultiplierAttribute = function() end }
+	local EventBus = { Publish = function() end }
+	local Core = {
+		Config = { SaveConfig = { ShutdownTimeoutSeconds = 1 } },
+		Registry = { RuntimeRegistry = { Profiles = Profiles, Sessions = Sessions } },
+		Utilities = { Logger = { Info = function() end, Warn = function() end } },
+		Events = { EventBus = EventBus },
+	}
+	local Services = {
+		Parent = Core,
+		SaveService = SaveService,
+		GrowthService = GrowthService,
+	}
+	local Game = {}
+	function Game:GetService(Name)
+		if Name == "Players" then
+			return Players
+		end
+		assert(Name == "ReplicatedStorage")
+		return ReplicatedStorage
+	end
+	function Game:BindToClose() end
+
+	local Instance = {}
+	function Instance.new(ClassName)
+		return {
+			ClassName = ClassName,
+			IsA = function(self, Expected)
+				return self.ClassName == Expected
+			end,
+		}
+	end
+
+	local Service = loadModule("src/server/Core/Services/SessionService.luau", "SessionService", {
+		game = Game,
+		script = { Parent = Services },
+		Instance = Instance,
+		tick = os.clock,
+		require = function(Dependency)
+			return Dependency
+		end,
+	})
+	Service:Init()
+	return Service, Players, PlayerAdded
+end
+
+check("SessionService derives isolated Player Levels through canonical LevelFormula", function()
+	local Calls = 0
+	local Bigger5 = LevelFormula.GetRequirementForLevel(5)
+	local Bigger10 = LevelFormula.GetRequirementForLevel(10)
+	local Profiles = {
+		[6304] = {
+			Bigger = Bigger5,
+			Destruction = 0,
+			Rebirth = 0,
+			UnlockedGrowthUpgrades = {},
+			EquippedGrowthUpgrade = nil,
+			CompletedPortals = {},
+			Settings = { SoundEnabled = true, MusicEnabled = true },
+			HasDoubleMultiplier = false,
+			HasVip = false,
+			HasPremiumZonePass = false,
+			ProcessedPurchaseIds = {},
+			LastActiveTimestamp = 0,
+			LastLogoutTimestamp = 0,
+			LastSaveTimestamp = 0,
+		},
+		[6305] = {
+			Bigger = Bigger10,
+			Destruction = 0,
+			Rebirth = 0,
+			UnlockedGrowthUpgrades = {},
+			EquippedGrowthUpgrade = nil,
+			CompletedPortals = {},
+			Settings = { SoundEnabled = true, MusicEnabled = true },
+			HasDoubleMultiplier = false,
+			HasVip = false,
+			HasPremiumZonePass = false,
+			ProcessedPurchaseIds = {},
+			LastActiveTimestamp = 0,
+			LastLogoutTimestamp = 0,
+			LastSaveTimestamp = 0,
+		},
+	}
+	local Service, Players, PlayerAdded = loadSessionService(Profiles, {
+		GetLevelFromBigger = function(Bigger)
+			Calls += 1
+			return LevelFormula.GetLevelFromBigger(Bigger)
+		end,
+	})
+	local PlayerA = fakePlayer(6304)
+	local PlayerB = fakePlayer(6305)
+	PlayerA.Parent = Players
+	PlayerB.Parent = Players
+	function PlayerA:LoadCharacter() end
+	function PlayerB:LoadCharacter() end
+	function PlayerA:Kick() end
+	function PlayerB:Kick() end
+	PlayerAdded:Fire(PlayerA)
+	PlayerAdded:Fire(PlayerB)
+	assert(PlayerA:GetAttribute("Level") == 5)
+	assert(PlayerB:GetAttribute("Level") == 10)
+	assert(Calls == 2)
+	assert(Service:GetSession(PlayerA).Bigger == Bigger5)
+	assert(Service:GetSession(PlayerB).Bigger == Bigger10)
+	Sessions.Remove(PlayerA)
+	Sessions.Remove(PlayerB)
+end)
+
+local function loadScaleCurve(LevelFormulaModule)
+	local BiggerShared = childContainer({
+		Game = childContainer({
+			Progression = childContainer({ LevelFormula = LevelFormulaModule }),
+		}),
+	})
+	local Core = childContainer({ Parent = BiggerShared })
+	local Utilities = childContainer({ Parent = Core })
+	return loadModule("src/shared/Core/Utilities/ScaleCurve.luau", "ScaleCurve", {
+		script = { Parent = Utilities },
+		require = function(Dependency)
+			return Dependency
+		end,
+	})
+end
+
+check("ScaleCurve level mode consumes canonical LevelFormula", function()
+	local Calls = 0
+	local ScaleCurve = loadScaleCurve({
+		GetLevelFromBigger = function(Bigger)
+			Calls += 1
+			assert(Bigger == 123)
+			return 7
+		end,
+	})
+	assert(ScaleCurve.GetVisualScale(123, "level", 0.2) == 2.2)
+	assert(Calls == 1)
+end)
+
+check("ScaleCurve level boundaries match canonical LevelFormula", function()
+	local ScaleCurve = loadScaleCurve(LevelFormula)
+	for _, Level in { 5, 10, 25, 50, 100, 200, 500 } do
+		local Requirement = LevelFormula.GetRequirementForLevel(Level)
+		assert(ScaleCurve.GetVisualScale(Requirement - 1, "level", 0.2) == 1 + (Level - 2) * 0.2)
+		assert(ScaleCurve.GetVisualScale(Requirement, "level", 0.2) == 1 + (Level - 1) * 0.2)
+		assert(ScaleCurve.GetVisualScale(Requirement + 1, "level", 0.2) == 1 + (Level - 1) * 0.2)
+	end
+end)
+
+local function loadGuiController(LevelFormulaModule)
+	local function node(Children)
+		Children = Children or {}
+		Children.ChildAdded = signal()
+		Children.ChildRemoved = signal()
+		Children.WaitCalls = {}
+		function Children:WaitForChild(Name, Timeout)
+			table.insert(self.WaitCalls, { Name = Name, Timeout = Timeout })
+			return self[Name]
+		end
+		function Children:FindFirstChild(Name)
+			return self[Name]
+		end
+		function Children:FindFirstChildOfClass()
+			return nil
+		end
+		function Children:GetChildren()
+			return {}
+		end
+		function Children:AddChild(Name, Child)
+			Child.Name = Name
+			self[Name] = Child
+			self.ChildAdded:Fire(Child)
+		end
+		function Children:RemoveChild(Name)
+			local Child = self[Name]
+			self[Name] = nil
+			if Child then
+				self.ChildRemoved:Fire(Child)
+			end
+			return Child
+		end
+		return Children
+	end
+
+	local LevelLabel = node({ Text = "" })
+	local ProgressFill = node({ Visible = false })
+	local ProgressTextLabel = node({ Text = "" })
+	local ProgressBG = node({
+		LevelLabel = LevelLabel,
+		BarContainer = node({ ProgressFill = ProgressFill }),
+		ProgressTextLabel = ProgressTextLabel,
+	})
+	local MainHUD = node({
+		SafeAreaRoot = node({
+			PersistentHUD = node({
+				LeftSidebar = node(),
+				RightSidebar = node(),
+				BottomHUD = node({
+					ProgressBarFrame = node({ ProgressBG = ProgressBG }),
+					ButtonsContainer = node(),
+				}),
+			}),
+		}),
+	})
+	local AttributeSignals = {
+		Bigger = signal(),
+		Level = signal(),
+		Multiplier = signal(),
+		Rebirth = signal(),
+		RebirthMultiplier = signal(),
+	}
+	local Player = fakePlayer(6306)
+	Player.Attributes = { Bigger = 60416, Level = 5, Multiplier = 2 }
+	local PlayerGui = node({ MainHUD = MainHUD })
+	PlayerGui.Name = "PlayerGui"
+	Player.PlayerGui = PlayerGui
+	Player.ChildAdded = signal()
+	Player.ChildRemoved = signal()
+	function Player:FindFirstChild(Name)
+		return self[Name]
+	end
+	function Player:WaitForChild(Name, _Timeout)
+		return self[Name]
+	end
+	function Player:GetAttributeChangedSignal(Name)
+		return AttributeSignals[Name]
+	end
+
+	local ReplicatedStorage = childContainer({
+		BiggerShared = childContainer({
+			Core = childContainer({
+				Utilities = childContainer({
+					FormatNumber = function(Value)
+						return tostring(Value)
+					end,
+				}),
+				Config = childContainer({ ShopUIConfig = {} }),
+			}),
+			Game = childContainer({
+				Progression = childContainer({ LevelFormula = LevelFormulaModule }),
+			}),
+		}),
+	})
+	local Tweens = {}
+	local Warnings = {}
+	local TweenService = {}
+	function TweenService:Create(Target, _, Properties)
+		local Tween = {}
+		function Tween:Play()
+			for Key, Value in Properties do
+				Target[Key] = Value
+			end
+			table.insert(Tweens, { Target = Target, Properties = Properties })
+		end
+		return Tween
+	end
+	local Game = {}
+	function Game:GetService(Name)
+		if Name == "Players" then
+			return { LocalPlayer = Player }
+		elseif Name == "ReplicatedStorage" then
+			return ReplicatedStorage
+		elseif Name == "TweenService" then
+			return TweenService
+		elseif Name == "MarketplaceService" then
+			return {}
+		end
+		error("unexpected service " .. Name)
+	end
+
+	local Controller = loadModule("src/client/controllers/GuiController.luau", "GuiController", {
+		game = Game,
+		UDim2 = {
+			new = function(XScale, XOffset, YScale, YOffset)
+				return { XScale = XScale, XOffset = XOffset, YScale = YScale, YOffset = YOffset }
+			end,
+		},
+		TweenInfo = {
+			new = function()
+				return {}
+			end,
+		},
+		Enum = {
+			EasingStyle = { Quad = "Quad" },
+			EasingDirection = { Out = "Out" },
+		},
+		warn = function(Message)
+			table.insert(Warnings, Message)
+		end,
+		require = function(Dependency)
+			return Dependency
+		end,
+	})
+	return Controller, Player, AttributeSignals, ProgressFill, Tweens, MainHUD, PlayerGui, node, Warnings
+end
+
+check("GuiController consumes canonical progress once and tolerates missing attributes", function()
+	local Calls = 0
+	local Controller, Player, AttributeSignals, ProgressFill = loadGuiController({
+		GetProgress = function(Bigger)
+			Calls += 1
+			assert(Bigger == 60416 or Bigger == 0)
+			return {
+				Level = if Bigger == 0 then 1 else 5,
+				CurrentRequirement = if Bigger == 0 then 0 else 60416,
+				NextRequirement = if Bigger == 0 then 236 else 147500,
+				BiggerIntoLevel = 0,
+				BiggerRequiredForNextLevel = if Bigger == 0 then 236 else 87084,
+				Progress = if Bigger == 0 then 0 else 0.25,
+			}
+		end,
+	})
+	Controller.Init()
+	Controller.Start()
+	Controller.Start()
+	assert(Calls == 1)
+	assert(ProgressFill.Size.XScale == 0.25)
+	assert(#AttributeSignals.Bigger.Callbacks == 1)
+	assert(#AttributeSignals.Level.Callbacks == 1)
+	assert(#AttributeSignals.Multiplier.Callbacks == 1)
+	Player.Attributes = {}
+	AttributeSignals.Bigger:Fire()
+	assert(Calls == 2)
+end)
+
+check("GuiController reports unavailable then binds and rebinds the canonical MainHUD", function()
+	local Calls = 0
+	local Controller, Player, AttributeSignals, _, _, MainHUD, PlayerGui, Node, Warnings = loadGuiController({
+		GetProgress = function()
+			Calls += 1
+			return { Progress = 0 }
+		end,
+	})
+	PlayerGui:RemoveChild("MainHUD")
+	Controller.Init()
+	Controller.Start()
+	assert(Controller.GetStatus() == "HUDUnavailable")
+	assert(Calls == 0)
+	assert(PlayerGui.WaitCalls[1].Name == "MainHUD" and PlayerGui.WaitCalls[1].Timeout == 5)
+	PlayerGui:AddChild("MainHUD", MainHUD)
+	assert(Controller.GetStatus() == "Ready" and Calls == 1)
+	PlayerGui:RemoveChild("MainHUD")
+	assert(Controller.GetStatus() == "HUDUnavailable")
+	local ReplacementPlayerGui = Node({ MainHUD = MainHUD })
+	ReplacementPlayerGui.Name = "PlayerGui"
+	Player.PlayerGui = nil
+	Player.ChildRemoved:Fire(PlayerGui)
+	Player.PlayerGui = ReplacementPlayerGui
+	Player.ChildAdded:Fire(ReplacementPlayerGui)
+	assert(Controller.GetStatus() == "Ready" and Calls == 2)
+	Controller.Init()
+	Controller.Start()
+	assert(#AttributeSignals.Bigger.Callbacks == 1)
+	assert(#AttributeSignals.Level.Callbacks == 1)
+	assert(#AttributeSignals.Multiplier.Callbacks == 1)
+	assert(#Warnings == 1)
+	Controller.Destroy()
+	assert(Controller.GetStatus() == "HUDUnavailable")
+end)
+
+check("ObjectiveController shows each objective activation for exactly three seconds", function()
+	local AttributeSignals = {
+		ObjectiveActive = signal(),
+		ObjectiveText = signal(),
+		ObjectiveReward = signal(),
+	}
+	local Player = fakePlayer(6307)
+	Player.Attributes = {
+		ObjectiveActive = false,
+		ObjectiveText = "STOMP THE SPIDER",
+		ObjectiveReward = "+1 Destruction",
+	}
+	Player.PlayerGui = nil
+	Player.ChildAdded = signal()
+	Player.ChildRemoved = signal()
+	local WaitTimeout
+	function Player:FindFirstChild(Name)
+		return self[Name]
+	end
+	function Player:WaitForChild(Name, Timeout)
+		WaitTimeout = Timeout
+		return self[Name]
+	end
+	function Player:GetAttributeChangedSignal(Name)
+		return AttributeSignals[Name]
+	end
+
+	local Created = {}
+	local Instance = {}
+	function Instance.new(ClassName)
+		local Object = { ClassName = ClassName }
+		table.insert(Created, Object)
+		return Object
+	end
+	local Delays = {}
+	local Warnings = {}
+	local FakeTask = {}
+	function FakeTask.delay(Duration, Callback)
+		table.insert(Delays, { Duration = Duration, Callback = Callback })
+	end
+	local Game = {}
+	function Game:GetService(Name)
+		assert(Name == "Players")
+		return { LocalPlayer = Player }
+	end
+	local function Values(...)
+		return { ... }
+	end
+	local Controller = loadModule("src/client/controllers/ObjectiveController.luau", "ObjectiveController", {
+		game = Game,
+		Instance = Instance,
+		task = FakeTask,
+		Vector2 = { new = Values },
+		UDim2 = { fromScale = Values, fromOffset = Values, new = Values },
+		UDim = { new = Values },
+		Color3 = { fromRGB = Values },
+		Enum = {
+			Font = { GothamBold = "GothamBold", Gotham = "Gotham" },
+			TextXAlignment = { Left = "Left" },
+			TextYAlignment = { Top = "Top" },
+		},
+		warn = function(Message)
+			table.insert(Warnings, Message)
+		end,
+	})
+	Controller.Start()
+	Controller.Start()
+	assert(Controller.GetStatus() == "PlayerGuiUnavailable")
+	assert(WaitTimeout == 5)
+	local PlayerGui = { Name = "PlayerGui" }
+	Player.PlayerGui = PlayerGui
+	Player.ChildAdded:Fire(PlayerGui)
+	assert(Controller.GetStatus() == "Ready")
+	local ObjectiveGui
+	for _, Object in Created do
+		if Object.ClassName == "ScreenGui" then
+			ObjectiveGui = Object
+		end
+	end
+	assert(ObjectiveGui and ObjectiveGui.Enabled == false)
+	Player.Attributes.ObjectiveActive = true
+	AttributeSignals.ObjectiveActive:Fire()
+	assert(ObjectiveGui.Enabled == true)
+	assert(#Delays == 1 and Delays[1].Duration == 3)
+	AttributeSignals.ObjectiveText:Fire()
+	assert(#Delays == 1 and ObjectiveGui.Enabled == true)
+	Delays[1].Callback()
+	assert(ObjectiveGui.Enabled == false)
+	assert(#AttributeSignals.ObjectiveActive.Callbacks == 1)
+	assert(#AttributeSignals.ObjectiveText.Callbacks == 1)
+	assert(#AttributeSignals.ObjectiveReward.Callbacks == 1)
+	Player.PlayerGui = nil
+	Player.ChildRemoved:Fire(PlayerGui)
+	assert(Controller.GetStatus() == "PlayerGuiUnavailable")
+	local ReplacementPlayerGui = { Name = "PlayerGui" }
+	Player.PlayerGui = ReplacementPlayerGui
+	Player.ChildAdded:Fire(ReplacementPlayerGui)
+	assert(Controller.GetStatus() == "Ready")
+	local ScreenGuiCount = 0
+	for _, Object in Created do
+		if Object.ClassName == "ScreenGui" then
+			ScreenGuiCount += 1
+		end
+	end
+	assert(ScreenGuiCount == 2)
+	assert(#Warnings == 1)
+	Controller.Destroy()
+	assert(Controller.GetStatus() == "PlayerGuiUnavailable")
+end)
 
 local function runGrowthSequence(ZoneMultiplier, HasVip, Count)
 	local Formula = loadGrowthFormula()

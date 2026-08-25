@@ -26,7 +26,8 @@ local function ApplyScale(Player: Player, Character: Model, Bigger: number)
 		return
 	end
 
-	local VisualScale = ScaleCurve.GetVisualScale(Bigger, ScaleConfig.Formula, ScaleConfig.CurveParameter)
+	local VisualScale =
+		ScaleCurve.GetVisualScale(Bigger, ScaleConfig.Formula, ScaleConfig.Coefficient, ScaleConfig.Exponent)
 	VisualScale = math.clamp(VisualScale, ScaleConfig.MinVisualScale, ScaleConfig.MaxVisualScale)
 
 	BodyHeight.Value = VisualScale

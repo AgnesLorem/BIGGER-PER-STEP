@@ -24,6 +24,8 @@ export type Session = {
 	CurrentAFKZone: string?,
 	PremiumZonePromptedThisEntry: boolean,
 	GamePassQueryGenerations: { Vip: number, PremiumZone: number },
+	EquipmentRequestInFlight: boolean,
+	EquipmentLastRequestTimestamp: number,
 	LastActiveTimestamp: number,
 	LastLogoutTimestamp: number,
 	LastSaveTimestamp: number,

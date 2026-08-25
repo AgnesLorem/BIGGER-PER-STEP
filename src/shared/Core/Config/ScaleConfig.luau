@@ -1,8 +1,9 @@
 --!strict
 return table.freeze({
-	Formula = "level",
-	CurveParameter = 0.2,
+	Formula = "power",
+	Coefficient = 0.080739,
+	Exponent = 0.8299,
 	MinVisualScale = 1,
-	MaxVisualScale = 100,
+	MaxVisualScale = 200,
 	TweenTime = 0.25,
 })

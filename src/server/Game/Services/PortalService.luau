@@ -106,10 +106,11 @@ function PortalService:TryEnterPortal(Hit: BasePart, SessionService: any, WorldI
 	end
 
 	local Session = Sessions.Get(Player)
-	if not Session or Session.State ~= "InLobby" then
+	if not Session or Session.State ~= "InLobby" or Session.ProfileMutationsFrozen then
 		return
 	end
-	if GetDerivedLevel(Session) < World1Config.RequiredLevel then
+	local LevelRead, Level = pcall(GetDerivedLevel, Session)
+	if not LevelRead or Level < World1Config.RequiredLevel then
 		return
 	end
 

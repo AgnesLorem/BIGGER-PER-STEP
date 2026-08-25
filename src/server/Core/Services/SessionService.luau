@@ -1,6 +1,7 @@
 --// Raw Requirings \\--
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 --// Requirings \\--
 local SaveConfig = require(script.Parent.Parent.Config.SaveConfig)
@@ -10,6 +11,18 @@ local Logger = require(script.Parent.Parent.Utilities.Logger)
 local EventBus = require(script.Parent.Parent.Events.EventBus)
 local SaveService = require(script.Parent.SaveService)
 local GrowthService = require(script.Parent.GrowthService)
+local LevelFormula = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("LevelFormula")
+)
+local RebirthFormula = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("RebirthFormula")
+)
 
 --// Types \\--
 type Session = Sessions.Session
@@ -38,6 +51,11 @@ local function CreateLeaderstats(Player: Player, Session: Session)
 	DestructionValue.Name = "Destruction"
 	DestructionValue.Value = Session.Destruction
 	DestructionValue.Parent = Leaderstats
+
+	local RebirthValue = Instance.new("IntValue")
+	RebirthValue.Name = "Rebirth"
+	RebirthValue.Value = Session.Rebirth
+	RebirthValue.Parent = Leaderstats
 
 	Leaderstats.Parent = Player
 end
@@ -92,6 +110,8 @@ local function OnPlayerAdded(Player: Player)
 		CurrentAFKZone = nil,
 		PremiumZonePromptedThisEntry = false,
 		GamePassQueryGenerations = { Vip = 0, PremiumZone = 0 },
+		EquipmentRequestInFlight = false,
+		EquipmentLastRequestTimestamp = 0,
 		State = "InLobby",
 		JoinedAt = tick(),
 		PurchaseHistory = Profile.ProcessedPurchaseIds,
@@ -123,10 +143,12 @@ local function OnPlayerAdded(Player: Player)
 	CreateLeaderstats(Player, Session)
 	Player:SetAttribute("Bigger", Session.Bigger)
 	Player:SetAttribute("Destruction", Session.Destruction)
+	Player:SetAttribute("Rebirth", Session.Rebirth)
+	Player:SetAttribute("RebirthMultiplier", RebirthFormula.GetMultiplier(Session.Rebirth))
 	ClearObjectiveAttributes(Player)
 	GrowthService:UpdateMultiplierAttribute(Player)
 
-	local Level = math.floor((Session.Bigger / 236) ^ 0.25) + 1
+	local Level = LevelFormula.GetLevelFromBigger(Session.Bigger)
 	Player:SetAttribute("Level", Level)
 	EventBus.Publish("PlayerSessionCreated", Player, Session)
 	Logger.Info("Session", "Session created for %s", Player.Name)

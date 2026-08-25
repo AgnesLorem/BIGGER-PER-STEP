@@ -16,16 +16,16 @@ local UpgradesConfig = require(
 		:WaitForChild("Config")
 		:WaitForChild("UpgradesConfig")
 )
-local LevelFormula = require(
-	ReplicatedStorage:WaitForChild("BiggerShared")
-		:WaitForChild("Game")
-		:WaitForChild("Progression")
-		:WaitForChild("LevelFormula")
-)
 
 export type EquipmentState = {
 	EquippedUpgradeId: string,
 	UnlockedUpgradeIds: { string },
+}
+
+type EquipmentRequest = {
+	RequestId: string,
+	Operation: string,
+	Payload: unknown,
 }
 
 local ResultCodes = table.freeze({
@@ -41,19 +41,22 @@ local ResultCodes = table.freeze({
 	RequestInFlight = "RequestInFlight",
 	PlayerDisconnected = "PlayerDisconnected",
 	MutationFailed = "MutationFailed",
+	InvalidRequest = "InvalidRequest",
 })
 
 local EquipmentService = {}
 EquipmentService.ResultCodes = ResultCodes
 
-local InFlightRequests: { [Player]: boolean } = {}
-local LastRequestTimestamp: { [Player]: number } = {}
-
 local EquipmentFolder: Folder
-local UnlockRemote: RemoteFunction
-local EquipRemote: RemoteFunction
-local GetStateRemote: RemoteFunction
+local RequestRemote: RemoteEvent
+local ResponseRemote: RemoteEvent
 local StateChangedRemote: RemoteEvent
+local Initialized = false
+local Started = false
+local Connections: { RBXScriptConnection } = {}
+local SessionCreatedCallback: ((Player, Sessions.Session) -> ())? = nil
+local SessionDestroyedCallback: ((Player) -> ())? = nil
+local HandleRequest: (Player, unknown) -> ()
 
 local function BuildEquipmentState(Session: Sessions.Session): EquipmentState
 	local UnlockedList: { string } = {}
@@ -94,74 +97,59 @@ local function QueueImmediateSave(Player: Player, ActionName: string, UpgradeId:
 	end
 end
 
+local function GetOrCreate(Parent: Instance, Name: string, ClassName: string): Instance
+	local Existing = Parent:FindFirstChild(Name)
+	if Existing then
+		assert(Existing:IsA(ClassName), string.format("Equipment.%s must be a %s", Name, ClassName))
+		return Existing
+	end
+	local Created = Instance.new(ClassName)
+	Created.Name = Name
+	Created.Parent = Parent
+	return Created
+end
+
 function EquipmentService:Init()
+	if Initialized then
+		return
+	end
+
 	local EventsFolder = ReplicatedStorage:FindFirstChild("BiggerEvents") :: Folder?
 	if not EventsFolder then
-		EventsFolder = Instance.new("Folder")
-		EventsFolder.Name = "BiggerEvents"
-		EventsFolder.Parent = ReplicatedStorage
+		EventsFolder = GetOrCreate(ReplicatedStorage, "BiggerEvents", "Folder") :: Folder
+	elseif not EventsFolder:IsA("Folder") then
+		error("BiggerEvents must be a Folder")
 	end
 
-	EquipmentFolder = EventsFolder:FindFirstChild("Equipment") :: Folder?
-	if not EquipmentFolder then
-		EquipmentFolder = Instance.new("Folder")
-		EquipmentFolder.Name = "Equipment"
-		EquipmentFolder.Parent = EventsFolder
-	end
-
-	UnlockRemote = EquipmentFolder:FindFirstChild("UnlockUpgrade") :: RemoteFunction?
-	if not UnlockRemote then
-		UnlockRemote = Instance.new("RemoteFunction")
-		UnlockRemote.Name = "UnlockUpgrade"
-		UnlockRemote.Parent = EquipmentFolder
-	end
-
-	EquipRemote = EquipmentFolder:FindFirstChild("EquipUpgrade") :: RemoteFunction?
-	if not EquipRemote then
-		EquipRemote = Instance.new("RemoteFunction")
-		EquipRemote.Name = "EquipUpgrade"
-		EquipRemote.Parent = EquipmentFolder
-	end
-
-	GetStateRemote = EquipmentFolder:FindFirstChild("GetEquipmentState") :: RemoteFunction?
-	if not GetStateRemote then
-		GetStateRemote = Instance.new("RemoteFunction")
-		GetStateRemote.Name = "GetEquipmentState"
-		GetStateRemote.Parent = EquipmentFolder
-	end
-
-	StateChangedRemote = EquipmentFolder:FindFirstChild("EquipmentStateChanged") :: RemoteEvent?
-	if not StateChangedRemote then
-		StateChangedRemote = Instance.new("RemoteEvent")
-		StateChangedRemote.Name = "EquipmentStateChanged"
-		StateChangedRemote.Parent = EquipmentFolder
-	end
-
-	UnlockRemote.OnServerInvoke = function(Player: Player, UpgradeId: unknown)
-		return self:InvokeUnlockSafe(Player, UpgradeId)
-	end
-
-	EquipRemote.OnServerInvoke = function(Player: Player, UpgradeId: unknown)
-		return self:InvokeEquipSafe(Player, UpgradeId)
-	end
-
-	GetStateRemote.OnServerInvoke = function(Player: Player)
-		return self:GetEquipmentState(Player)
-	end
+	EquipmentFolder = GetOrCreate(EventsFolder, "Equipment", "Folder") :: Folder
+	RequestRemote = GetOrCreate(EquipmentFolder, "Request", "RemoteEvent") :: RemoteEvent
+	ResponseRemote = GetOrCreate(EquipmentFolder, "Response", "RemoteEvent") :: RemoteEvent
+	StateChangedRemote = GetOrCreate(EquipmentFolder, "StateChanged", "RemoteEvent") :: RemoteEvent
+	table.insert(Connections, RequestRemote.OnServerEvent:Connect(HandleRequest))
+	Initialized = true
 end
 
 function EquipmentService:Start()
-	EventBus.Subscribe("PlayerSessionCreated", function(Player: Player, Session: Sessions.Session)
+	if Started then
+		return
+	end
+	Started = true
+
+	SessionCreatedCallback = function(Player: Player, Session: Sessions.Session)
 		self:OnSessionCreated(Player, Session)
-	end)
-
-	EventBus.Subscribe("PlayerSessionDestroyed", function(Player: Player)
+	end
+	SessionDestroyedCallback = function(Player: Player)
 		self:OnSessionDestroyed(Player)
-	end)
+	end
+	EventBus.Subscribe("PlayerSessionCreated", SessionCreatedCallback)
+	EventBus.Subscribe("PlayerSessionDestroyed", SessionDestroyedCallback)
 
-	Players.PlayerRemoving:Connect(function(Player: Player)
-		self:OnSessionDestroyed(Player)
-	end)
+	table.insert(
+		Connections,
+		Players.PlayerRemoving:Connect(function(Player: Player)
+			self:OnSessionDestroyed(Player)
+		end)
+	)
 end
 
 function EquipmentService:OnSessionCreated(Player: Player, Session: Sessions.Session)
@@ -206,31 +194,41 @@ function EquipmentService:OnSessionCreated(Player: Player, Session: Sessions.Ses
 end
 
 function EquipmentService:OnSessionDestroyed(Player: Player)
-	InFlightRequests[Player] = nil
-	LastRequestTimestamp[Player] = nil
+	local Session = Sessions.Get(Player)
+	if Session then
+		Session.EquipmentRequestInFlight = false
+		Session.EquipmentLastRequestTimestamp = 0
+	end
 end
 
 local function CheckRateLimitAndLock(Player: Player): (boolean, string)
 	if Player.Parent ~= Players then
 		return false, ResultCodes.PlayerDisconnected
 	end
-	if InFlightRequests[Player] then
+	local Session = Sessions.Get(Player)
+	if not Session then
+		return false, ResultCodes.NoSession
+	end
+	if Session.EquipmentRequestInFlight then
 		return false, ResultCodes.RequestInFlight
 	end
 
 	local Now = os.clock()
-	local Last = LastRequestTimestamp[Player] or 0
+	local Last = Session.EquipmentLastRequestTimestamp or 0
 	if Now - Last < 0.1 then
 		return false, ResultCodes.RateLimited
 	end
 
-	InFlightRequests[Player] = true
-	LastRequestTimestamp[Player] = Now
+	Session.EquipmentRequestInFlight = true
+	Session.EquipmentLastRequestTimestamp = Now
 	return true, ResultCodes.Success
 end
 
 local function ReleaseLock(Player: Player)
-	InFlightRequests[Player] = nil
+	local Session = Sessions.Get(Player)
+	if Session then
+		Session.EquipmentRequestInFlight = false
+	end
 end
 
 function EquipmentService:InvokeUnlockSafe(Player: Player, UpgradeId: unknown): (boolean, string)
@@ -307,10 +305,7 @@ function EquipmentService:UnlockUpgrade(Player: Player, UpgradeId: string): (boo
 		return false, ResultCodes.PreviousUpgradeLocked
 	end
 
-	local AuthoritativeLevel = LevelFormula.GetLevelFromBigger(Session.Bigger)
-	if
-		not UpgradesConfig.CanUnlock(Session.UnlockedGrowthUpgrades, Session.Destruction, AuthoritativeLevel, UpgradeId)
-	then
+	if not UpgradesConfig.CanUnlock(Session.UnlockedGrowthUpgrades, Session.Destruction, UpgradeId) then
 		return false, ResultCodes.RequirementsNotMet
 	end
 
@@ -384,6 +379,90 @@ function EquipmentService:EquipUpgrade(Player: Player, UpgradeId: string?): (boo
 
 	Logger.Info("Equipment", "Player %s equipped upgrade %s", Player.Name, TargetId)
 	return true, ResultCodes.Success
+end
+
+local function SendResponse(Player: Player, RequestId: string, Success: boolean, ErrorCode: string)
+	ResponseRemote:FireClient(Player, {
+		RequestId = RequestId,
+		Success = Success,
+		ErrorCode = ErrorCode,
+		StateSnapshot = EquipmentService:GetEquipmentState(Player),
+	})
+end
+
+local function ParseRequest(Value: unknown): EquipmentRequest?
+	if type(Value) ~= "table" then
+		return nil
+	end
+	local Request = Value :: any
+	if
+		type(Request.RequestId) ~= "string"
+		or #Request.RequestId < 1
+		or #Request.RequestId > 64
+		or (Request.Operation ~= "GetState" and Request.Operation ~= "Unlock" and Request.Operation ~= "Equip")
+	then
+		return nil
+	end
+	return Request :: EquipmentRequest
+end
+
+HandleRequest = function(Player: Player, Value: unknown)
+	local Request = ParseRequest(Value)
+	if not Request then
+		return
+	end
+
+	if Request.Operation == "Unlock" then
+		local Payload = Request.Payload
+		if type(Payload) ~= "table" or type((Payload :: any).UpgradeId) ~= "string" then
+			SendResponse(Player, Request.RequestId, false, ResultCodes.InvalidRequest)
+			return
+		end
+		local Success, Code = EquipmentService:InvokeUnlockSafe(Player, (Payload :: any).UpgradeId)
+		SendResponse(Player, Request.RequestId, Success, Code)
+		return
+	end
+
+	if Request.Operation == "Equip" then
+		local Payload = Request.Payload
+		if type(Payload) ~= "table" then
+			SendResponse(Player, Request.RequestId, false, ResultCodes.InvalidRequest)
+			return
+		end
+		local UpgradeId = (Payload :: any).UpgradeId
+		if UpgradeId ~= nil and type(UpgradeId) ~= "string" then
+			SendResponse(Player, Request.RequestId, false, ResultCodes.InvalidRequest)
+			return
+		end
+		local Success, Code = EquipmentService:InvokeEquipSafe(Player, UpgradeId)
+		SendResponse(Player, Request.RequestId, Success, Code)
+		return
+	end
+
+	local Allowed, Code = CheckRateLimitAndLock(Player)
+	if not Allowed then
+		SendResponse(Player, Request.RequestId, false, Code)
+		return
+	end
+	ReleaseLock(Player)
+	SendResponse(Player, Request.RequestId, true, ResultCodes.Success)
+end
+
+function EquipmentService:Destroy()
+	for _, Connection in Connections do
+		Connection:Disconnect()
+	end
+	table.clear(Connections)
+	if SessionCreatedCallback then
+		EventBus.Unsubscribe("PlayerSessionCreated", SessionCreatedCallback)
+	end
+	if SessionDestroyedCallback then
+		EventBus.Unsubscribe("PlayerSessionDestroyed", SessionDestroyedCallback)
+	end
+	SessionCreatedCallback = nil
+	SessionDestroyedCallback = nil
+	Initialized = false
+	Started = false
 end
 
 return EquipmentService

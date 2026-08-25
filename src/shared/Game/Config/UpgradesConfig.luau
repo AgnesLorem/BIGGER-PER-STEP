@@ -7,7 +7,6 @@ export type UpgradeDefinition = {
 	Name: string,
 	Multiplier: number,
 	RequiredDestruction: number,
-	RequiredLevel: number,
 }
 
 local MAX_SAFE_INTEGER = 9007199254740991
@@ -28,7 +27,6 @@ local NoneDefinition: UpgradeDefinition = {
 	Name = "None",
 	Multiplier = 1.0,
 	RequiredDestruction = 0,
-	RequiredLevel = 1,
 }
 
 local ProteinDefinition: UpgradeDefinition = {
@@ -36,55 +34,48 @@ local ProteinDefinition: UpgradeDefinition = {
 	Name = "Protein",
 	Multiplier = 1.5,
 	RequiredDestruction = 1,
-	RequiredLevel = 5,
 }
 
 local SilverProteinDefinition: UpgradeDefinition = {
 	Id = "SilverProtein",
 	Name = "Silver Protein",
 	Multiplier = 2.0,
-	RequiredDestruction = 5,
-	RequiredLevel = 10,
+	RequiredDestruction = 3,
 }
 
 local GoldProteinDefinition: UpgradeDefinition = {
 	Id = "GoldProtein",
 	Name = "Gold Protein",
 	Multiplier = 3.0,
-	RequiredDestruction = 15,
-	RequiredLevel = 25,
+	RequiredDestruction = 8,
 }
 
 local DiamondProteinDefinition: UpgradeDefinition = {
 	Id = "DiamondProtein",
 	Name = "Diamond Protein",
 	Multiplier = 5.0,
-	RequiredDestruction = 30,
-	RequiredLevel = 50,
+	RequiredDestruction = 15,
 }
 
 local GrowthSerumDefinition: UpgradeDefinition = {
 	Id = "GrowthSerum",
 	Name = "Growth Serum",
 	Multiplier = 10.0,
-	RequiredDestruction = 60,
-	RequiredLevel = 100,
+	RequiredDestruction = 30,
 }
 
 local AdvancedSerumDefinition: UpgradeDefinition = {
 	Id = "AdvancedSerum",
 	Name = "Advanced Serum",
 	Multiplier = 25.0,
-	RequiredDestruction = 120,
-	RequiredLevel = 200,
+	RequiredDestruction = 60,
 }
 
 local TitanSerumDefinition: UpgradeDefinition = {
 	Id = "TitanSerum",
 	Name = "Titan Serum",
 	Multiplier = 50.0,
-	RequiredDestruction = 250,
-	RequiredLevel = 500,
+	RequiredDestruction = 100,
 }
 
 local Upgrades: { [string]: UpgradeDefinition } = {
@@ -134,13 +125,6 @@ for Key, Def in Upgrades do
 			and Def.RequiredDestruction % 1 == 0
 			and Def.RequiredDestruction <= MAX_SAFE_INTEGER,
 		"RequiredDestruction must be non-negative safe integer"
-	)
-	assert(
-		type(Def.RequiredLevel) == "number"
-			and Def.RequiredLevel >= 1
-			and Def.RequiredLevel % 1 == 0
-			and Def.RequiredLevel <= MAX_SAFE_INTEGER,
-		"RequiredLevel must be positive safe integer"
 	)
 end
 
@@ -204,12 +188,7 @@ function UpgradesConfig.GetPreviousUpgradeId(UpgradeId: string): string?
 	return FrozenPreviousMap[UpgradeId]
 end
 
-function UpgradesConfig.CanUnlock(
-	UnlockedMap: { [string]: boolean }?,
-	Destruction: number,
-	Level: number,
-	UpgradeId: string
-): boolean
+function UpgradesConfig.CanUnlock(UnlockedMap: { [string]: boolean }?, Destruction: number, UpgradeId: string): boolean
 	if type(UpgradeId) ~= "string" or UpgradeId == "None" or UpgradeId == "" then
 		return false
 	end
@@ -217,10 +196,13 @@ function UpgradesConfig.CanUnlock(
 	if not TargetDef then
 		return false
 	end
-	if type(Destruction) ~= "number" or Destruction ~= Destruction or Destruction < 0 or Destruction % 1 ~= 0 then
-		return false
-	end
-	if type(Level) ~= "number" or Level ~= Level or Level < 1 or Level % 1 ~= 0 then
+	if
+		type(Destruction) ~= "number"
+		or Destruction ~= Destruction
+		or Destruction < 0
+		or Destruction % 1 ~= 0
+		or Destruction > MAX_SAFE_INTEGER
+	then
 		return false
 	end
 
@@ -234,7 +216,7 @@ function UpgradesConfig.CanUnlock(
 		return false -- Previous upgrade in sequence is locked
 	end
 
-	if Destruction < TargetDef.RequiredDestruction or Level < TargetDef.RequiredLevel then
+	if Destruction < TargetDef.RequiredDestruction then
 		return false
 	end
 
