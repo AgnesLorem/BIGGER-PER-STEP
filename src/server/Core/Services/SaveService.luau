@@ -28,6 +28,12 @@ local RebirthFormula = require(
 		:WaitForChild("Progression")
 		:WaitForChild("RebirthFormula")
 )
+local AuraFormula = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("AuraFormula")
+)
 
 --// Types \--
 
@@ -92,6 +98,9 @@ local function Snapshot(
 		Rebirth = Session.Rebirth,
 		UnlockedGrowthUpgrades = Session.UnlockedGrowthUpgrades,
 		EquippedGrowthUpgrade = Session.EquippedGrowthUpgrade,
+		UnlockedAuras = Session.UnlockedAuras,
+		EquippedAura = Session.EquippedAura,
+		AuraVFXEnabled = Session.AuraVFXEnabled,
 		CompletedPortals = Session.CompletedPortals,
 		Settings = Session.Settings,
 		HasDoubleMultiplier = Session.HasDoubleMultiplier,
@@ -237,7 +246,10 @@ function SaveService:LoadProfile(Player: Player): Profile
 		local RebirthMult = if RebirthFormula and type(RebirthFormula.GetMultiplier) == "function"
 			then RebirthFormula.GetMultiplier(Profile.Rebirth or 0)
 			else 1.0
-		local Multiplier = EquipmentMult * RebirthMult
+		local AuraMult = if AuraFormula and type(AuraFormula.GetMultiplier) == "function"
+			then AuraFormula.GetMultiplier(Profile.UnlockedAuras or {})
+			else 1.0
+		local Multiplier = EquipmentMult * RebirthMult * AuraMult
 		if Profile.HasDoubleMultiplier then
 			Multiplier *= 2
 		end

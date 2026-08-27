@@ -1235,7 +1235,14 @@ local function loadGrowthFormula()
 			Core = childContainer({ Types = childContainer({ GrowthTypes = GrowthTypes }) }),
 			Game = childContainer({
 				Config = childContainer({ UpgradesConfig = UpgradesConfig }),
-				Progression = childContainer({ RebirthFormula = RebirthFormula }),
+				Progression = childContainer({
+					RebirthFormula = RebirthFormula,
+					AuraFormula = {
+						GetMultiplier = function()
+							return 1.0
+						end,
+					},
+				}),
 			}),
 		}),
 	})
@@ -1261,7 +1268,14 @@ local function loadGrowthService(GrowthFormula, LevelFormulaModule)
 		BiggerShared = childContainer({
 			Core = childContainer({ Types = childContainer({ GrowthTypes = GrowthTypes }) }),
 			Game = childContainer({
-				Progression = childContainer({ LevelFormula = LevelFormulaModule or LevelFormula }),
+				Progression = childContainer({
+					LevelFormula = LevelFormulaModule or LevelFormula,
+					AuraFormula = {
+						GetMultiplier = function()
+							return 1.0
+						end,
+					},
+				}),
 			}),
 		}),
 	})
@@ -1328,6 +1342,11 @@ local function loadSessionService(ProfileByUserId, LevelFormulaModule)
 				Progression = childContainer({
 					LevelFormula = LevelFormulaModule,
 					RebirthFormula = RebirthFormula,
+					AuraFormula = {
+						GetMultiplier = function()
+							return 1.0
+						end,
+					},
 				}),
 			}),
 		}),

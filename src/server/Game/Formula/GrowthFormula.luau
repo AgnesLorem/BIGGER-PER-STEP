@@ -16,6 +16,12 @@ local RebirthFormula = require(
 		:WaitForChild("Progression")
 		:WaitForChild("RebirthFormula")
 )
+local AuraFormula = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("AuraFormula")
+)
 local Sessions = require(script.Parent.Parent.Parent.Core.Registry.RuntimeRegistry.Sessions)
 
 --// Service \\--
@@ -24,7 +30,8 @@ local GrowthFormula = {}
 function GrowthFormula.GetMultiplier(Session: Sessions.Session): number
 	local EquipmentMult = UpgradesConfig.GetMultiplier(Session.EquippedGrowthUpgrade)
 	local RebirthMult = RebirthFormula.GetMultiplier(Session.Rebirth or 0)
-	local Multiplier = EquipmentMult * RebirthMult
+	local AuraMult = AuraFormula.GetMultiplier(Session.UnlockedAuras or {})
+	local Multiplier = EquipmentMult * RebirthMult * AuraMult
 	if Session.HasDoubleMultiplier then
 		Multiplier *= 2
 	end

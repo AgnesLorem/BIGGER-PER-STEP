@@ -23,6 +23,12 @@ local RebirthFormula = require(
 		:WaitForChild("Progression")
 		:WaitForChild("RebirthFormula")
 )
+local AuraFormula = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("AuraFormula")
+)
 
 --// Types \\--
 type Session = Sessions.Session
@@ -101,6 +107,9 @@ local function OnPlayerAdded(Player: Player)
 		Rebirth = Profile.Rebirth,
 		UnlockedGrowthUpgrades = Profile.UnlockedGrowthUpgrades,
 		EquippedGrowthUpgrade = Profile.EquippedGrowthUpgrade,
+		UnlockedAuras = Profile.UnlockedAuras,
+		EquippedAura = Profile.EquippedAura,
+		AuraVFXEnabled = Profile.AuraVFXEnabled,
 		CompletedPortals = Profile.CompletedPortals,
 		Settings = Profile.Settings,
 		HasDoubleMultiplier = Profile.HasDoubleMultiplier,
@@ -145,6 +154,9 @@ local function OnPlayerAdded(Player: Player)
 	Player:SetAttribute("Destruction", Session.Destruction)
 	Player:SetAttribute("Rebirth", Session.Rebirth)
 	Player:SetAttribute("RebirthMultiplier", RebirthFormula.GetMultiplier(Session.Rebirth))
+	Player:SetAttribute("EquippedAura", Session.EquippedAura or "None")
+	Player:SetAttribute("AuraVFXEnabled", if Session.AuraVFXEnabled == nil then true else Session.AuraVFXEnabled)
+	Player:SetAttribute("AuraMultiplier", AuraFormula.GetMultiplier(Session.UnlockedAuras or {}))
 	ClearObjectiveAttributes(Player)
 	GrowthService:UpdateMultiplierAttribute(Player)
 
