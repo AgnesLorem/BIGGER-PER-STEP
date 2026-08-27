@@ -203,6 +203,11 @@ local BiggerShared = createContainer({
 		Progression = createContainer({
 			LevelFormula = createModuleContainer(LevelFormula),
 			RebirthFormula = createModuleContainer(RebirthFormula),
+			AuraFormula = createModuleContainer({
+				GetMultiplier = function()
+					return 1.0
+				end,
+			}),
 		}),
 	}),
 	Core = createContainer({
@@ -313,7 +318,18 @@ function PortalPlayers:GetPlayerFromCharacter()
 	return self.CurrentPlayer
 end
 local PortalReplicatedStorage = {
-	BiggerShared = { Game = { Progression = { LevelFormula = createModuleContainer(LevelFormula) } } },
+	BiggerShared = {
+		Game = {
+			Progression = {
+				LevelFormula = createModuleContainer(LevelFormula),
+				AuraFormula = createModuleContainer({
+					GetMultiplier = function()
+						return 1.0
+					end,
+				}),
+			},
+		},
+	},
 }
 local PortalGame = {}
 function PortalGame:GetService(Name: string): any

@@ -841,6 +841,15 @@ local function loadSessionService()
 				Progression = Container({
 					LevelFormula = LevelFormula,
 					RebirthFormula = RebirthFormula,
+					AuraFormula = {
+						GetMultiplier = function()
+							return 1.0
+						end,
+					},
+				}),
+				Config = Container({
+					UpgradesConfig = {},
+					AuraConfig = {},
 				}),
 			}),
 		}),
@@ -1072,6 +1081,15 @@ local function loadShutdownSessionService(BlockedUserId)
 				Progression = Container({
 					LevelFormula = LevelFormula,
 					RebirthFormula = RebirthFormula,
+					AuraFormula = {
+						GetMultiplier = function()
+							return 1.0
+						end,
+					},
+				}),
+				Config = Container({
+					UpgradesConfig = {},
+					AuraConfig = {},
 				}),
 			}),
 		}),
