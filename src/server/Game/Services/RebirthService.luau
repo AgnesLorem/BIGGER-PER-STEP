@@ -29,6 +29,7 @@ local LevelFormula = require(
 		:WaitForChild("Progression")
 		:WaitForChild("LevelFormula")
 )
+local GrowthFormula = require(script.Parent.Parent.Formula.GrowthFormula)
 
 local ResultCodes = table.freeze({
 	Success = "Success",
@@ -88,13 +89,26 @@ local function HandleRequest(Player: Player, _Value: unknown)
 		return
 	end
 
-	local Success, Code, NewCount = RebirthService:RequestRebirth(Player)
+	local Success, Code, NewCount, TotalMult, RebirthMult = RebirthService:RequestRebirth(Player)
 	if ResponseRemote then
-		ResponseRemote:FireClient(Player, {
-			Success = Success,
-			ErrorCode = Code,
-			RebirthCount = NewCount,
-		})
+		if Success then
+			ResponseRemote:FireClient(Player, {
+				Success = true,
+				ErrorCode = Code,
+				Rebirth = NewCount,
+				Level = 1,
+				Bigger = 0,
+				Multiplier = TotalMult,
+				RebirthMultiplier = RebirthMult,
+			})
+		else
+			local Session = Sessions.Get(Player)
+			ResponseRemote:FireClient(Player, {
+				Success = false,
+				ErrorCode = Code,
+				Rebirth = if Session then Session.Rebirth else (NewCount or 0),
+			})
+		end
 	end
 end
 
@@ -131,28 +145,28 @@ function RebirthService:Start()
 	)
 end
 
-function RebirthService:RequestRebirth(Player: Player): (boolean, string, number?)
+function RebirthService:RequestRebirth(Player: Player): (boolean, string, number?, number?, number?)
 	if Player.Parent ~= Players then
-		return false, ResultCodes.PlayerDisconnected, nil
+		return false, ResultCodes.PlayerDisconnected, nil, nil, nil
 	end
 
 	local Session = Sessions.Get(Player)
 	if not Session then
-		return false, ResultCodes.NoSession, nil
+		return false, ResultCodes.NoSession, nil, nil, nil
 	end
 	if Session.ProfileMutationsFrozen then
-		return false, ResultCodes.Frozen, nil
+		return false, ResultCodes.Frozen, nil, nil, nil
 	end
 
 	local Now = os.clock()
 	local LastRebirth = LastRebirthTimestamps[Player] or 0
 	if Now - LastRebirth < RebirthConfig.MinimumRebirthCooldownSeconds then
-		return false, ResultCodes.RateLimited, Session.Rebirth
+		return false, ResultCodes.RateLimited, Session.Rebirth, nil, nil
 	end
 
 	local CurrentLevel = LevelFormula.GetLevelFromBigger(Session.Bigger)
 	if not RebirthFormula.CanRebirth(CurrentLevel, Session.Rebirth) then
-		return false, ResultCodes.RequirementsNotMet, Session.Rebirth
+		return false, ResultCodes.RequirementsNotMet, Session.Rebirth, nil, nil
 	end
 
 	local NewRebirthCount = Session.Rebirth + 1
@@ -163,16 +177,20 @@ function RebirthService:RequestRebirth(Player: Player): (boolean, string, number
 	end)
 
 	if not Mutated then
-		return false, ResultCodes.MutationFailed, Session.Rebirth
+		return false, ResultCodes.MutationFailed, Session.Rebirth, nil, nil
 	end
 
 	LastRebirthTimestamps[Player] = Now
+
+	local NewRebirthMultiplier = RebirthFormula.GetMultiplier(NewRebirthCount)
+	local NewTotalMultiplier = GrowthFormula.GetMultiplier(Session)
 
 	-- Authoritative state sync to player attributes
 	Player:SetAttribute("Bigger", 0)
 	Player:SetAttribute("Level", 1)
 	Player:SetAttribute("Rebirth", NewRebirthCount)
-	Player:SetAttribute("RebirthMultiplier", RebirthFormula.GetMultiplier(NewRebirthCount))
+	Player:SetAttribute("RebirthMultiplier", NewRebirthMultiplier)
+	Player:SetAttribute("Multiplier", NewTotalMultiplier)
 
 	-- Update leaderstats
 	local Leaderstats = Player:FindFirstChild("leaderstats")
@@ -202,7 +220,7 @@ function RebirthService:RequestRebirth(Player: Player): (boolean, string, number
 	QueueImmediateSave(Player, NewRebirthCount)
 	Logger.Info("Rebirth", "Player %s completed Rebirth %d", Player.Name, NewRebirthCount)
 
-	return true, ResultCodes.Success, NewRebirthCount
+	return true, ResultCodes.Success, NewRebirthCount, NewTotalMultiplier, NewRebirthMultiplier
 end
 
 function RebirthService:Destroy()

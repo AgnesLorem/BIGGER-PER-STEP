@@ -43,16 +43,31 @@ local HUDWarningEmitted = false
 local Initialized = false
 local Started = false
 
+export type HUDStateOverride = {
+	Bigger: number?,
+	Level: number?,
+	Multiplier: number?,
+	Rebirth: number?,
+	RebirthMultiplier: number?,
+}
+
 --// Helpers \\--
-local function UpdateHUD()
+local function UpdateHUD(OverrideState: HUDStateOverride?)
 	if not LevelLabel or not ProgressFill or not ProgressTextLabel then
 		return
 	end
-	local biggerAttribute = LocalPlayer:GetAttribute("Bigger")
+	local biggerAttribute = if OverrideState and OverrideState.Bigger ~= nil
+		then OverrideState.Bigger
+		else LocalPlayer:GetAttribute("Bigger")
 	local bigger = if type(biggerAttribute) == "number" and biggerAttribute >= 0 then biggerAttribute else 0
-	local levelAttribute = LocalPlayer:GetAttribute("Level")
+	local levelAttribute = if OverrideState and OverrideState.Level ~= nil
+		then OverrideState.Level
+		else LocalPlayer:GetAttribute("Level")
 	local _level = if type(levelAttribute) == "number" then levelAttribute else 1
-	local multiplier = LocalPlayer:GetAttribute("Multiplier") or 1
+	local multiplierAttribute = if OverrideState and OverrideState.Multiplier ~= nil
+		then OverrideState.Multiplier
+		else LocalPlayer:GetAttribute("Multiplier")
+	local multiplier = if type(multiplierAttribute) == "number" then multiplierAttribute else 1
 	local progress = LevelFormula.GetProgress(bigger)
 
 	LevelLabel.Text = FormatNumber(bigger) .. " BIGGER"
@@ -71,6 +86,45 @@ local function UpdateHUD()
 	end
 
 	ProgressTextLabel.Text = tostring(multiplier) .. "X Multiplier"
+end
+
+local RebirthResponseBound = false
+
+local function OnRebirthResponse(Value: unknown)
+	if type(Value) ~= "table" then
+		return
+	end
+	local Response = Value :: any
+	if Response.Success == true then
+		UpdateHUD({
+			Bigger = if type(Response.Bigger) == "number" then Response.Bigger else 0,
+			Level = if type(Response.Level) == "number" then Response.Level else 1,
+			Multiplier = if type(Response.Multiplier) == "number" then Response.Multiplier else nil,
+			Rebirth = if type(Response.Rebirth) == "number" then Response.Rebirth else nil,
+			RebirthMultiplier = if type(Response.RebirthMultiplier) == "number"
+				then Response.RebirthMultiplier
+				else nil,
+		})
+	end
+end
+
+local function SetupRebirthResponse()
+	if RebirthResponseBound then
+		return
+	end
+	local EventsFolder = ReplicatedStorage:FindFirstChild("BiggerEvents")
+	if not EventsFolder then
+		return
+	end
+	local RebirthFolder = EventsFolder:FindFirstChild("Rebirth")
+	if not RebirthFolder then
+		return
+	end
+	local ResponseRemote = RebirthFolder:FindFirstChild("Response")
+	if ResponseRemote and ResponseRemote:IsA("RemoteEvent") then
+		RebirthResponseBound = true
+		table.insert(ControllerConnections, ResponseRemote.OnClientEvent:Connect(OnRebirthResponse))
+	end
 end
 
 local function TrackHUDConnection(Connection: RBXScriptConnection)
@@ -175,6 +229,7 @@ local function BindHUD(Candidate: Instance?): boolean
 			ApplyHoverAnimation(Child)
 			TrackHUDConnection(Child.MouseButton1Click:Connect(function()
 				if Child.Name == "Rebirth" then
+					SetupRebirthResponse()
 					local EventsFolder = ReplicatedStorage:FindFirstChild("BiggerEvents")
 					local RebirthFolder = EventsFolder and EventsFolder:FindFirstChild("Rebirth")
 					local RequestRemote = RebirthFolder and RebirthFolder:FindFirstChild("Request")
@@ -309,11 +364,37 @@ function GuiController.Start()
 		return
 	end
 	Started = true
-	table.insert(ControllerConnections, LocalPlayer:GetAttributeChangedSignal("Bigger"):Connect(UpdateHUD))
-	table.insert(ControllerConnections, LocalPlayer:GetAttributeChangedSignal("Level"):Connect(UpdateHUD))
-	table.insert(ControllerConnections, LocalPlayer:GetAttributeChangedSignal("Multiplier"):Connect(UpdateHUD))
-	table.insert(ControllerConnections, LocalPlayer:GetAttributeChangedSignal("Rebirth"):Connect(UpdateHUD))
-	table.insert(ControllerConnections, LocalPlayer:GetAttributeChangedSignal("RebirthMultiplier"):Connect(UpdateHUD))
+	SetupRebirthResponse()
+	table.insert(
+		ControllerConnections,
+		LocalPlayer:GetAttributeChangedSignal("Bigger"):Connect(function()
+			UpdateHUD()
+		end)
+	)
+	table.insert(
+		ControllerConnections,
+		LocalPlayer:GetAttributeChangedSignal("Level"):Connect(function()
+			UpdateHUD()
+		end)
+	)
+	table.insert(
+		ControllerConnections,
+		LocalPlayer:GetAttributeChangedSignal("Multiplier"):Connect(function()
+			UpdateHUD()
+		end)
+	)
+	table.insert(
+		ControllerConnections,
+		LocalPlayer:GetAttributeChangedSignal("Rebirth"):Connect(function()
+			UpdateHUD()
+		end)
+	)
+	table.insert(
+		ControllerConnections,
+		LocalPlayer:GetAttributeChangedSignal("RebirthMultiplier"):Connect(function()
+			UpdateHUD()
+		end)
+	)
 	UpdateHUD()
 end
 
@@ -324,6 +405,7 @@ end
 function GuiController.Destroy()
 	DisconnectConnections(ControllerConnections)
 	DetachPlayerGui()
+	RebirthResponseBound = false
 	Initialized = false
 	Started = false
 	HUDWarningEmitted = false
