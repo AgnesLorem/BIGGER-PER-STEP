@@ -237,4 +237,8 @@ function FloatingFeedbackController.Destroy()
 	Started = false
 end
 
+function FloatingFeedbackController.Show(text: string, color: Color3?, duration: number?, popScale: number?)
+	ShowFeedback(text, color or Color3.fromRGB(255, 255, 255), duration or 1.5, popScale or 1.5)
+end
+
 return FloatingFeedbackController

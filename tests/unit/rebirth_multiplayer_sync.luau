@@ -624,7 +624,19 @@ local MockMarketplaceService = {
 	PromptGamePassPurchase = function() end,
 }
 
+local LastFeedbackMessage = nil
+local MockFloatingFeedbackController = {
+	Show = function(text: string, _color: any, _duration: any, _popScale: any)
+		LastFeedbackMessage = text
+	end,
+}
+
 local GuiController = loadModule("src/client/controllers/GuiController.luau", "GuiController", {
+	script = createContainer({
+		Parent = createContainer({
+			FloatingFeedbackController = createModuleContainer(MockFloatingFeedbackController),
+		}),
+	}),
 	game = {
 		GetService = function(self: any, Svc: string)
 			if Svc == "Players" then
@@ -679,7 +691,19 @@ ClientPlayer:SetAttribute("Rebirth", 0)
 assert(MockLevelLabel.Text == "600 BIGGER", "HUD must show initial 600 Bigger")
 assert(MockProgressTextLabel.Text == "1X Multiplier", "HUD must show initial 1X Multiplier")
 
--- 2. Server sends Rebirth #1 Authoritative Snapshot via Response Remote
+-- 2. Test Rebirth Failure Case (RequirementsNotMet) -> Must show visible feedback and keep HUD unchanged
+ClientRebirthResponse:FireClient(ClientPlayer, {
+	Success = false,
+	ErrorCode = "RequirementsNotMet",
+	Rebirth = 0,
+	RequiredLevel = 20,
+})
+
+assert(LastFeedbackMessage == "Need Level 20 to Rebirth!", "Must show failure feedback for RequirementsNotMet")
+assert(MockLevelLabel.Text == "600 BIGGER", "HUD must not reset on failure")
+assert(MockProgressTextLabel.Text == "1X Multiplier", "HUD multiplier must not reset on failure")
+
+-- 3. Server sends Rebirth #1 Authoritative Snapshot via Response Remote
 ClientRebirthResponse:FireClient(ClientPlayer, {
 	Success = true,
 	ErrorCode = "Success",
@@ -697,7 +721,7 @@ assert(
 	"HUD must immediately show 1.75X Multiplier on Rebirth #1 snapshot"
 )
 
--- 3. Server sends Rebirth #2 Authoritative Snapshot via Response Remote
+-- 4. Server sends Rebirth #2 Authoritative Snapshot via Response Remote
 ClientRebirthResponse:FireClient(ClientPlayer, {
 	Success = true,
 	ErrorCode = "Success",
@@ -714,7 +738,7 @@ assert(
 	"HUD must immediately show 2.5X Multiplier on Rebirth #2 snapshot"
 )
 
--- 4. Server sends Rebirth #3 Authoritative Snapshot via Response Remote
+-- 5. Server sends Rebirth #3 Authoritative Snapshot via Response Remote
 ClientRebirthResponse:FireClient(ClientPlayer, {
 	Success = true,
 	ErrorCode = "Success",
@@ -732,7 +756,37 @@ assert(
 )
 
 GuiController.Destroy()
-print("  GuiController Authoritative Snapshot & Instant HUD Update: PASS")
+print("  GuiController Authoritative Snapshot & Failure Feedback: PASS")
+
+-- =========================================================================
+-- SECTION 6.5: SCALECURVE API INTEGRITY & MONOTONICITY
+-- =========================================================================
+print("--- [6.5] Testing ScaleCurve API Integrity ---")
+local ScaleCurve = loadModule("src/shared/Core/Utilities/ScaleCurve.luau", "ScaleCurve", {
+	script = createContainer({
+		Parent = createContainer({
+			Parent = createContainer({
+				Parent = createContainer({
+					Game = createContainer({
+						Progression = createContainer({
+							LevelFormula = createModuleContainer(LevelFormula),
+						}),
+					}),
+				}),
+			}),
+		}),
+	}),
+})
+
+local scaleL1 = ScaleCurve.GetVisualScale(0, "level", 0.5)
+assert(scaleL1 == 1.0, "Scale at Level 1 (0 Bigger) must be 1.0")
+
+local scaleL20 = ScaleCurve.GetVisualScale(600, "level", 0.5)
+assert(scaleL20 == 1 + (20 - 1) * 0.5, "Scale at Level 20 (600 Bigger) must use LevelFormula.GetLevelFromBigger")
+
+local scalePower = ScaleCurve.GetVisualScale(600, "power", 0.080739, 0.8299)
+assert(scalePower > 1.0, "Scale with power formula must evaluate without error")
+print("  ScaleCurve API Integrity (GetLevelFromBigger): PASS")
 
 -- =========================================================================
 -- SECTION 7: PERSISTENCE & DATA CONSISTENCY

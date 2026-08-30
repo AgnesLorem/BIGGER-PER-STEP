@@ -26,6 +26,21 @@ local LevelFormula = require(
 		:WaitForChild("Progression")
 		:WaitForChild("LevelFormula")
 )
+local RebirthFormula = nil
+pcall(function()
+	local sharedFolder = ReplicatedStorage:FindFirstChild("BiggerShared")
+	local gameFolder = sharedFolder and sharedFolder:FindFirstChild("Game")
+	local progFolder = gameFolder and gameFolder:FindFirstChild("Progression")
+	local rf = progFolder and progFolder:FindFirstChild("RebirthFormula")
+	if rf then
+		RebirthFormula = require(rf)
+	end
+end)
+
+local FloatingFeedbackController = nil
+pcall(function()
+	FloatingFeedbackController = require(script.Parent.FloatingFeedbackController)
+end)
 
 local GuiController = {}
 
@@ -90,6 +105,16 @@ end
 
 local RebirthResponseBound = false
 
+local function EmitFeedback(text: string, r: number, g: number, b: number, duration: number, popScale: number)
+	if FloatingFeedbackController and type(FloatingFeedbackController.Show) == "function" then
+		local color = nil
+		pcall(function()
+			color = Color3.fromRGB(r, g, b)
+		end)
+		FloatingFeedbackController.Show(text, color, duration, popScale)
+	end
+end
+
 local function OnRebirthResponse(Value: unknown)
 	if type(Value) ~= "table" then
 		return
@@ -105,6 +130,23 @@ local function OnRebirthResponse(Value: unknown)
 				then Response.RebirthMultiplier
 				else nil,
 		})
+	else
+		local currentRebirth = if type(Response.Rebirth) == "number"
+			then Response.Rebirth
+			else (LocalPlayer:GetAttribute("Rebirth") or 0)
+		if Response.ErrorCode == "RequirementsNotMet" then
+			local reqLevel = if type(Response.RequiredLevel) == "number"
+				then Response.RequiredLevel
+				elseif
+					RebirthFormula and type(RebirthFormula.GetRequiredLevel) == "function"
+				then RebirthFormula.GetRequiredLevel(currentRebirth)
+				else 20
+			EmitFeedback("Need Level " .. tostring(reqLevel) .. " to Rebirth!", 255, 80, 80, 2.0, 1.8)
+		elseif Response.ErrorCode == "RateLimited" then
+			EmitFeedback("Please wait a moment...", 255, 200, 50, 1.0, 1.2)
+		elseif Response.ErrorCode == "ProfileFrozen" then
+			EmitFeedback("Data is saving, please wait...", 255, 200, 50, 1.5, 1.2)
+		end
 	end
 end
 

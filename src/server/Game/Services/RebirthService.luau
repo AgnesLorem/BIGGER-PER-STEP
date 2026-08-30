@@ -103,10 +103,12 @@ local function HandleRequest(Player: Player, _Value: unknown)
 			})
 		else
 			local Session = Sessions.Get(Player)
+			local CurrentRebirth = if Session then Session.Rebirth else (NewCount or 0)
 			ResponseRemote:FireClient(Player, {
 				Success = false,
 				ErrorCode = Code,
-				Rebirth = if Session then Session.Rebirth else (NewCount or 0),
+				Rebirth = CurrentRebirth,
+				RequiredLevel = RebirthFormula.GetRequiredLevel(CurrentRebirth),
 			})
 		end
 	end
