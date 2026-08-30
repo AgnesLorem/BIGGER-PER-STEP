@@ -204,9 +204,11 @@ local function BindHUD(Candidate: Instance?): boolean
 	local ProgressBG = ProgressBarFrame and ProgressBarFrame:FindFirstChild("ProgressBG")
 	local BarContainer = ProgressBG and ProgressBG:FindFirstChild("BarContainer")
 	local ButtonsContainer = BottomHUD and BottomHUD:FindFirstChild("ButtonsContainer")
-	local FoundLevelLabel = ProgressBG and ProgressBG:FindFirstChild("LevelLabel")
+	local FoundLevelLabel = (ProgressBarFrame and ProgressBarFrame:FindFirstChild("LevelLabel"))
+		or (ProgressBG and ProgressBG:FindFirstChild("LevelLabel"))
 	local FoundProgressFill = BarContainer and BarContainer:FindFirstChild("ProgressFill")
-	local FoundProgressTextLabel = ProgressBG and ProgressBG:FindFirstChild("ProgressTextLabel")
+	local FoundProgressTextLabel = (ProgressBarFrame and ProgressBarFrame:FindFirstChild("ProgressTextLabel"))
+		or (ProgressBG and ProgressBG:FindFirstChild("ProgressTextLabel"))
 	if
 		not LeftSidebar
 		or not BottomHUD

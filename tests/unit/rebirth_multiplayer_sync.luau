@@ -560,13 +560,14 @@ local MockProgressBG = createMockInstance("ProgressBG", "Frame")
 MockProgressBG.Parent = MockProgressBarFrame
 MockProgressBarFrame.ProgressBG = MockProgressBG
 
+-- Place file hierarchy: LevelLabel and ProgressTextLabel are direct children of ProgressBarFrame
 local MockLevelLabel = createMockInstance("LevelLabel", "TextLabel")
-MockLevelLabel.Parent = MockProgressBG
-MockProgressBG.LevelLabel = MockLevelLabel
+MockLevelLabel.Parent = MockProgressBarFrame
+MockProgressBarFrame.LevelLabel = MockLevelLabel
 
 local MockProgressTextLabel = createMockInstance("ProgressTextLabel", "TextLabel")
-MockProgressTextLabel.Parent = MockProgressBG
-MockProgressBG.ProgressTextLabel = MockProgressTextLabel
+MockProgressTextLabel.Parent = MockProgressBarFrame
+MockProgressBarFrame.ProgressTextLabel = MockProgressTextLabel
 
 local MockBarContainer = createMockInstance("BarContainer", "Frame")
 MockBarContainer.Parent = MockProgressBG
@@ -588,6 +589,11 @@ ClientPlayerGui.MainHUD = MockScreenGui
 
 local ClientRebirthRequest = createMockInstance("Request", "RemoteEvent")
 local ClientRebirthResponse = createMockInstance("Response", "RemoteEvent")
+
+local RebirthRequestFired = false
+ClientRebirthRequest.OnServerEvent:Connect(function()
+	RebirthRequestFired = true
+end)
 
 local ClientRebirthFolder = createContainer({
 	Request = ClientRebirthRequest,
@@ -656,6 +662,13 @@ local GuiController = loadModule("src/client/controllers/GuiController.luau", "G
 
 GuiController.Init()
 GuiController.Start()
+
+-- REGRESSION ASSERTION: GuiController must successfully bind to actual Place hierarchy
+assert(GuiController.GetStatus() == "Ready", "GuiController must be Ready with actual Place UI hierarchy")
+
+-- REGRESSION ASSERTION: Rebirth button click must be bound and fire Request remote to server
+MockRebirthButton.MouseButton1Click:Fire()
+assert(RebirthRequestFired == true, "Rebirth button click must fire RequestRemote to Server")
 
 -- 1. Initial Client State (Rebirth 0, Level 20, 600 Bigger)
 ClientPlayer:SetAttribute("Bigger", 600)
