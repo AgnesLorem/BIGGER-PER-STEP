@@ -581,6 +581,64 @@ local MockButtonsContainer = createMockInstance("ButtonsContainer", "Frame")
 MockButtonsContainer.Parent = MockBottomHUD
 MockBottomHUD.ButtonsContainer = MockButtonsContainer
 
+local MockOverlayHUD = createMockInstance("OverlayHUD", "Frame")
+MockOverlayHUD.Parent = MockSafeAreaRoot
+MockSafeAreaRoot.OverlayHUD = MockOverlayHUD
+MockOverlayHUD.Visible = false
+
+local MockRebirthPanel = createMockInstance("RebirthPanel", "Frame")
+MockRebirthPanel.Parent = MockOverlayHUD
+MockOverlayHUD.RebirthPanel = MockRebirthPanel
+MockRebirthPanel.Visible = false
+
+local MockCloseButton = createMockInstance("CloseButton", "ImageButton")
+MockCloseButton.Parent = MockRebirthPanel
+MockRebirthPanel.CloseButton = MockCloseButton
+
+local MockMultiplierBar = createMockInstance("MultiplierBar", "Frame")
+MockMultiplierBar.Parent = MockRebirthPanel
+MockRebirthPanel.MultiplierBar = MockMultiplierBar
+
+local MockBarBG = createMockInstance("BarBG", "Frame")
+MockBarBG.Parent = MockMultiplierBar
+MockMultiplierBar.BarBG = MockBarBG
+
+local MockBarFill = createMockInstance("BarFill", "Frame")
+MockBarFill.Parent = MockBarBG
+MockBarBG.BarFill = MockBarFill
+
+local MockProgressLabel = createMockInstance("ProgressLabel", "TextLabel")
+MockProgressLabel.Parent = MockBarBG
+MockBarBG.ProgressLabel = MockProgressLabel
+
+local MockCurrentCard = createMockInstance("CurrentCard", "Frame")
+MockCurrentCard.Parent = MockRebirthPanel
+MockRebirthPanel.CurrentCard = MockCurrentCard
+
+local MockCurrentStat = createMockInstance("Stat", "TextLabel")
+MockCurrentStat.Parent = MockCurrentCard
+MockCurrentCard.Stat = MockCurrentStat
+
+local MockNextCard = createMockInstance("NextCard", "Frame")
+MockNextCard.Parent = MockRebirthPanel
+MockRebirthPanel.NextCard = MockNextCard
+
+local MockNextStat = createMockInstance("Stat", "TextLabel")
+MockNextStat.Parent = MockNextCard
+MockNextCard.Stat = MockNextStat
+
+local MockPanelButtons = createMockInstance("Buttons", "Frame")
+MockPanelButtons.Parent = MockRebirthPanel
+MockRebirthPanel.Buttons = MockPanelButtons
+
+local MockRebirthConfirmButton = createMockInstance("RebirthButton", "ImageButton")
+MockRebirthConfirmButton.Parent = MockPanelButtons
+MockPanelButtons.RebirthButton = MockRebirthConfirmButton
+
+local MockSkipRebirthButton = createMockInstance("SkipRebirthButton", "ImageButton")
+MockSkipRebirthButton.Parent = MockPanelButtons
+MockPanelButtons.SkipRebirthButton = MockSkipRebirthButton
+
 local ClientPlayer = createMockPlayer(4001, "ClientPlayer")
 local ClientPlayerGui = createMockInstance("PlayerGui", "PlayerGui")
 ClientPlayerGui.Parent = ClientPlayer
@@ -678,10 +736,6 @@ GuiController.Start()
 -- REGRESSION ASSERTION: GuiController must successfully bind to actual Place hierarchy
 assert(GuiController.GetStatus() == "Ready", "GuiController must be Ready with actual Place UI hierarchy")
 
--- REGRESSION ASSERTION: Rebirth button click must be bound and fire Request remote to server
-MockRebirthButton.MouseButton1Click:Fire()
-assert(RebirthRequestFired == true, "Rebirth button click must fire RequestRemote to Server")
-
 -- 1. Initial Client State (Rebirth 0, Level 20, 600 Bigger)
 ClientPlayer:SetAttribute("Bigger", 600)
 ClientPlayer:SetAttribute("Level", 20)
@@ -690,8 +744,40 @@ ClientPlayer:SetAttribute("Rebirth", 0)
 
 assert(MockLevelLabel.Text == "600 BIGGER", "HUD must show initial 600 Bigger")
 assert(MockProgressTextLabel.Text == "1X Multiplier", "HUD must show initial 1X Multiplier")
+assert(MockRebirthPanel.Visible == false, "RebirthPanel must initially be closed")
+assert(MockOverlayHUD.Visible == false, "OverlayHUD must initially be hidden")
 
--- 2. Test Rebirth Failure Case (RequirementsNotMet) -> Must show visible feedback and keep HUD unchanged
+-- [TEST A] Clicking LeftSidebar.Rebirth OPENS RebirthPanel and DOES NOT fire RPC
+RebirthRequestFired = false
+MockRebirthButton.MouseButton1Click:Fire()
+assert(MockRebirthPanel.Visible == true, "Clicking LeftSidebar.Rebirth must open RebirthPanel")
+assert(MockOverlayHUD.Visible == true, "OverlayHUD must be visible when RebirthPanel is open")
+assert(RebirthRequestFired == false, "Clicking LeftSidebar.Rebirth MUST NEVER fire RequestRemote directly")
+assert(MockProgressLabel.Text == "Lv20 / 20", "RebirthPanel must dynamically show Level requirement Lv20 / 20")
+assert(MockCurrentStat.Text == "1X Strength", "RebirthPanel must show current multiplier 1X Strength")
+assert(MockNextStat.Text == "1.75X Strength", "RebirthPanel must show next multiplier 1.75X Strength")
+
+-- [TEST B] Clicking SkipRebirthButton CLOSES RebirthPanel and DOES NOT fire RPC
+MockSkipRebirthButton.MouseButton1Click:Fire()
+assert(MockRebirthPanel.Visible == false, "Clicking SkipRebirthButton must close RebirthPanel")
+assert(MockOverlayHUD.Visible == false, "OverlayHUD must hide when all modals are closed")
+assert(RebirthRequestFired == false, "Clicking SkipRebirthButton MUST NEVER fire RequestRemote")
+
+-- [TEST B2] Clicking CloseButton also CLOSES RebirthPanel
+MockRebirthButton.MouseButton1Click:Fire()
+assert(MockRebirthPanel.Visible == true, "Panel reopens")
+MockCloseButton.MouseButton1Click:Fire()
+assert(MockRebirthPanel.Visible == false, "CloseButton must close RebirthPanel")
+assert(RebirthRequestFired == false, "CloseButton MUST NEVER fire RequestRemote")
+
+-- [TEST C] Clicking RebirthPanel.Buttons.RebirthButton FIRES RequestRemote
+MockRebirthButton.MouseButton1Click:Fire()
+assert(MockRebirthPanel.Visible == true, "Panel open for confirmation")
+RebirthRequestFired = false
+MockRebirthConfirmButton.MouseButton1Click:Fire()
+assert(RebirthRequestFired == true, "RebirthPanel.Buttons.RebirthButton MUST fire RequestRemote to Server")
+
+-- 2. Test Rebirth Failure Case (RequirementsNotMet) -> Must show visible feedback and keep HUD/Panel unchanged
 ClientRebirthResponse:FireClient(ClientPlayer, {
 	Success = false,
 	ErrorCode = "RequirementsNotMet",
@@ -702,8 +788,9 @@ ClientRebirthResponse:FireClient(ClientPlayer, {
 assert(LastFeedbackMessage == "Need Level 20 to Rebirth!", "Must show failure feedback for RequirementsNotMet")
 assert(MockLevelLabel.Text == "600 BIGGER", "HUD must not reset on failure")
 assert(MockProgressTextLabel.Text == "1X Multiplier", "HUD multiplier must not reset on failure")
+assert(MockRebirthPanel.Visible == true, "RebirthPanel should remain open on failure so player sees feedback")
 
--- 3. Server sends Rebirth #1 Authoritative Snapshot via Response Remote
+-- 3. Server sends Rebirth #1 Authoritative Snapshot via Response Remote -> Must close panel and update HUD
 ClientRebirthResponse:FireClient(ClientPlayer, {
 	Success = true,
 	ErrorCode = "Success",
@@ -714,12 +801,29 @@ ClientRebirthResponse:FireClient(ClientPlayer, {
 	RebirthMultiplier = 1.75,
 })
 
--- VERIFY HUD UPDATES IMMEDIATELY FROM SNAPSHOT
+-- VERIFY PANEL CLOSES AND HUD UPDATES IMMEDIATELY FROM SNAPSHOT
+assert(MockRebirthPanel.Visible == false, "Successful rebirth must close RebirthPanel")
+assert(MockOverlayHUD.Visible == false, "OverlayHUD must be hidden on success")
 assert(MockLevelLabel.Text == "0 BIGGER", "HUD must immediately show 0 BIGGER on Rebirth #1 snapshot")
 assert(
 	MockProgressTextLabel.Text == "1.75X Multiplier",
 	"HUD must immediately show 1.75X Multiplier on Rebirth #1 snapshot"
 )
+
+-- [TEST E] Rebirth 1 state: verify dynamic requirement refresh for Rebirth #2 (Req Level 70, Next Mult 2.50x)
+ClientPlayer:SetAttribute("Rebirth", 1)
+ClientPlayer:SetAttribute("Level", 70)
+ClientPlayer:SetAttribute("Bigger", 8000)
+ClientPlayer:SetAttribute("Multiplier", 1.75)
+
+MockRebirthButton.MouseButton1Click:Fire()
+assert(MockRebirthPanel.Visible == true, "Reopen panel at Rebirth 1")
+assert(
+	MockProgressLabel.Text == "Lv70 / 70",
+	"RebirthPanel must dynamically show Level requirement Lv70 / 70 for R1->R2"
+)
+assert(MockCurrentStat.Text == "1.75X Strength", "RebirthPanel must show current multiplier 1.75X Strength")
+assert(MockNextStat.Text == "2.5X Strength", "RebirthPanel must show next multiplier 2.5X Strength")
 
 -- 4. Server sends Rebirth #2 Authoritative Snapshot via Response Remote
 ClientRebirthResponse:FireClient(ClientPlayer, {
@@ -732,6 +836,7 @@ ClientRebirthResponse:FireClient(ClientPlayer, {
 	RebirthMultiplier = 2.50,
 })
 
+assert(MockRebirthPanel.Visible == false, "Panel closed on Rebirth 2 success")
 assert(MockLevelLabel.Text == "0 BIGGER", "HUD must immediately show 0 BIGGER on Rebirth #2 snapshot")
 assert(
 	MockProgressTextLabel.Text == "2.5X Multiplier",
@@ -756,7 +861,7 @@ assert(
 )
 
 GuiController.Destroy()
-print("  GuiController Authoritative Snapshot & Failure Feedback: PASS")
+print("  GuiController Rebirth Confirmation UI Flow & Authoritative Sync: PASS")
 
 -- =========================================================================
 -- SECTION 6.5: SCALECURVE API INTEGRITY & MONOTONICITY

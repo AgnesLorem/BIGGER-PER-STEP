@@ -49,6 +49,12 @@ local ScreenGui: ScreenGui? = nil
 local LevelLabel: TextLabel? = nil
 local ProgressFill: ImageLabel? = nil
 local ProgressTextLabel: TextLabel? = nil
+local OverlayHUD: Frame? = nil
+local RebirthPanel: Frame? = nil
+local RebirthProgressLabel: TextLabel? = nil
+local RebirthBarFill: Frame? = nil
+local RebirthCurrentStat: TextLabel? = nil
+local RebirthNextStat: TextLabel? = nil
 local CurrentPlayerGui: PlayerGui? = nil
 local HUDConnections: { RBXScriptConnection } = {}
 local PlayerGuiConnections: { RBXScriptConnection } = {}
@@ -103,6 +109,73 @@ local function UpdateHUD(OverrideState: HUDStateOverride?)
 	ProgressTextLabel.Text = tostring(multiplier) .. "X Multiplier"
 end
 
+local function UpdateRebirthPanel()
+	if not RebirthPanel then
+		return
+	end
+	local currentRebirth = (LocalPlayer:GetAttribute("Rebirth") or 0) :: number
+	local biggerAttr = LocalPlayer:GetAttribute("Bigger")
+	local bigger = if type(biggerAttr) == "number" and biggerAttr >= 0 then biggerAttr else 0
+	local levelAttr = LocalPlayer:GetAttribute("Level")
+	local currentLevel = if type(levelAttr) == "number" then levelAttr else LevelFormula.GetLevelFromBigger(bigger)
+
+	local reqLevel = if RebirthFormula and type(RebirthFormula.GetRequiredLevel) == "function"
+		then RebirthFormula.GetRequiredLevel(currentRebirth)
+		else (20 + currentRebirth * 50)
+
+	local currentMult = if RebirthFormula and type(RebirthFormula.GetMultiplier) == "function"
+		then RebirthFormula.GetMultiplier(currentRebirth)
+		else (1.0 + currentRebirth * 0.75)
+
+	local nextMult = if RebirthFormula and type(RebirthFormula.GetMultiplier) == "function"
+		then RebirthFormula.GetMultiplier(currentRebirth + 1)
+		else (1.0 + (currentRebirth + 1) * 0.75)
+
+	if RebirthProgressLabel then
+		RebirthProgressLabel.Text = "Lv" .. tostring(math.floor(currentLevel)) .. " / " .. tostring(reqLevel)
+	end
+	if RebirthBarFill then
+		local ratio = math.clamp(currentLevel / math.max(1, reqLevel), 0, 1)
+		RebirthBarFill.Size = UDim2.new(ratio, 0, 1, 0)
+	end
+	if RebirthCurrentStat then
+		RebirthCurrentStat.Text = tostring(currentMult) .. "X Strength"
+	end
+	if RebirthNextStat then
+		RebirthNextStat.Text = tostring(nextMult) .. "X Strength"
+	end
+end
+
+local function OpenRebirthPanel()
+	if not RebirthPanel then
+		return
+	end
+	UpdateRebirthPanel()
+	RebirthPanel.Visible = true
+	if OverlayHUD then
+		OverlayHUD.Visible = true
+	end
+end
+
+local function CloseRebirthPanel()
+	if not RebirthPanel then
+		return
+	end
+	RebirthPanel.Visible = false
+	if OverlayHUD then
+		local anyVisible = false
+		for _, child in OverlayHUD:GetChildren() do
+			if child:IsA("GuiObject") and child.Name ~= "ModalBackdrop" and child.Visible then
+				anyVisible = true
+				break
+			end
+		end
+		if not anyVisible then
+			OverlayHUD.Visible = false
+		end
+	end
+end
+
 local RebirthResponseBound = false
 
 local function EmitFeedback(text: string, r: number, g: number, b: number, duration: number, popScale: number)
@@ -121,6 +194,7 @@ local function OnRebirthResponse(Value: unknown)
 	end
 	local Response = Value :: any
 	if Response.Success == true then
+		CloseRebirthPanel()
 		UpdateHUD({
 			Bigger = if type(Response.Bigger) == "number" then Response.Bigger else 0,
 			Level = if type(Response.Level) == "number" then Response.Level else 1,
@@ -174,7 +248,7 @@ local function TrackHUDConnection(Connection: RBXScriptConnection)
 end
 
 -- Hook up hover scaling animations to a button
-local function ApplyHoverAnimation(button: ImageButton)
+local function ApplyHoverAnimation(button: GuiButton)
 	local uiScale = button:FindFirstChildOfClass("UIScale")
 	if not uiScale then
 		uiScale = Instance.new("UIScale")
@@ -228,6 +302,12 @@ local function ClearHUD()
 	LevelLabel = nil
 	ProgressFill = nil
 	ProgressTextLabel = nil
+	OverlayHUD = nil
+	RebirthPanel = nil
+	RebirthProgressLabel = nil
+	RebirthBarFill = nil
+	RebirthCurrentStat = nil
+	RebirthNextStat = nil
 	Status = "HUDUnavailable"
 end
 
@@ -268,11 +348,37 @@ local function BindHUD(Candidate: Instance?): boolean
 	ProgressFill = FoundProgressFill :: ImageLabel
 	ProgressTextLabel = FoundProgressTextLabel :: TextLabel
 
-	for _, Child in LeftSidebar:GetChildren() do
-		if Child:IsA("ImageButton") then
-			ApplyHoverAnimation(Child)
-			TrackHUDConnection(Child.MouseButton1Click:Connect(function()
-				if Child.Name == "Rebirth" then
+	local FoundOverlayHUD = SafeAreaRoot and SafeAreaRoot:FindFirstChild("OverlayHUD")
+	local FoundRebirthPanel = FoundOverlayHUD and FoundOverlayHUD:FindFirstChild("RebirthPanel")
+	OverlayHUD = FoundOverlayHUD :: Frame?
+	RebirthPanel = FoundRebirthPanel :: Frame?
+
+	if RebirthPanel then
+		local MultiplierBar = RebirthPanel:FindFirstChild("MultiplierBar")
+		local BarBG = MultiplierBar and MultiplierBar:FindFirstChild("BarBG")
+		RebirthBarFill = BarBG and BarBG:FindFirstChild("BarFill") :: Frame?
+		RebirthProgressLabel = BarBG and BarBG:FindFirstChild("ProgressLabel") :: TextLabel?
+
+		local CurrentCard = RebirthPanel:FindFirstChild("CurrentCard")
+		RebirthCurrentStat = CurrentCard and CurrentCard:FindFirstChild("Stat") :: TextLabel?
+
+		local NextCard = RebirthPanel:FindFirstChild("NextCard")
+		RebirthNextStat = NextCard and NextCard:FindFirstChild("Stat") :: TextLabel?
+
+		local CloseBtn = RebirthPanel:FindFirstChild("CloseButton")
+		if CloseBtn and (CloseBtn:IsA("ImageButton") or CloseBtn:IsA("TextButton")) then
+			ApplyHoverAnimation(CloseBtn :: GuiButton)
+			TrackHUDConnection(CloseBtn.MouseButton1Click:Connect(function()
+				CloseRebirthPanel()
+			end))
+		end
+
+		local ButtonsFrame = RebirthPanel:FindFirstChild("Buttons")
+		if ButtonsFrame then
+			local RebirthConfirmBtn = ButtonsFrame:FindFirstChild("RebirthButton")
+			if RebirthConfirmBtn and (RebirthConfirmBtn:IsA("ImageButton") or RebirthConfirmBtn:IsA("TextButton")) then
+				ApplyHoverAnimation(RebirthConfirmBtn :: GuiButton)
+				TrackHUDConnection(RebirthConfirmBtn.MouseButton1Click:Connect(function()
 					SetupRebirthResponse()
 					local EventsFolder = ReplicatedStorage:FindFirstChild("BiggerEvents")
 					local RebirthFolder = EventsFolder and EventsFolder:FindFirstChild("Rebirth")
@@ -280,6 +386,27 @@ local function BindHUD(Candidate: Instance?): boolean
 					if RequestRemote and RequestRemote:IsA("RemoteEvent") then
 						RequestRemote:FireServer()
 					end
+				end))
+			end
+
+			local SkipBtn = ButtonsFrame:FindFirstChild("SkipRebirthButton")
+				or ButtonsFrame:FindFirstChild("SkipButton")
+				or ButtonsFrame:FindFirstChild("Skip")
+			if SkipBtn and (SkipBtn:IsA("ImageButton") or SkipBtn:IsA("TextButton")) then
+				ApplyHoverAnimation(SkipBtn :: GuiButton)
+				TrackHUDConnection(SkipBtn.MouseButton1Click:Connect(function()
+					CloseRebirthPanel()
+				end))
+			end
+		end
+	end
+
+	for _, Child in LeftSidebar:GetChildren() do
+		if Child:IsA("ImageButton") or Child:IsA("TextButton") then
+			ApplyHoverAnimation(Child :: GuiButton)
+			TrackHUDConnection(Child.MouseButton1Click:Connect(function()
+				if Child.Name == "Rebirth" then
+					OpenRebirthPanel()
 				else
 					print(Child.Name .. " button clicked (stub)")
 				end
@@ -288,8 +415,8 @@ local function BindHUD(Candidate: Instance?): boolean
 	end
 
 	for _, Child in ButtonsContainer:GetChildren() do
-		if Child:IsA("ImageButton") then
-			ApplyHoverAnimation(Child)
+		if Child:IsA("ImageButton") or Child:IsA("TextButton") then
+			ApplyHoverAnimation(Child :: GuiButton)
 			local Config = ShopUIConfig[Child.Name]
 			if Config then
 				TrackHUDConnection(Child.MouseButton1Click:Connect(function()
@@ -302,8 +429,8 @@ local function BindHUD(Candidate: Instance?): boolean
 	local RightSidebar = PersistentHUD and PersistentHUD:FindFirstChild("RightSidebar")
 	if RightSidebar then
 		for _, Child in RightSidebar:GetChildren() do
-			if Child:IsA("ImageButton") then
-				ApplyHoverAnimation(Child)
+			if Child:IsA("ImageButton") or Child:IsA("TextButton") then
+				ApplyHoverAnimation(Child :: GuiButton)
 				local Config = ShopUIConfig[Child.Name]
 				if Config then
 					TrackHUDConnection(Child.MouseButton1Click:Connect(function()
@@ -313,7 +440,7 @@ local function BindHUD(Candidate: Instance?): boolean
 			end
 		end
 		local VipButton = RightSidebar:FindFirstChild("Vip")
-		if VipButton and VipButton:IsA("ImageButton") then
+		if VipButton and (VipButton:IsA("ImageButton") or VipButton:IsA("TextButton")) then
 			TrackHUDConnection(VipButton.MouseButton1Click:Connect(function()
 				local AssetId = LocalPlayer:GetAttribute("VipGamePassAssetId")
 				if type(AssetId) == "number" and AssetId > 0 and AssetId % 1 == 0 then
@@ -413,30 +540,45 @@ function GuiController.Start()
 		ControllerConnections,
 		LocalPlayer:GetAttributeChangedSignal("Bigger"):Connect(function()
 			UpdateHUD()
+			if RebirthPanel and RebirthPanel.Visible then
+				UpdateRebirthPanel()
+			end
 		end)
 	)
 	table.insert(
 		ControllerConnections,
 		LocalPlayer:GetAttributeChangedSignal("Level"):Connect(function()
 			UpdateHUD()
+			if RebirthPanel and RebirthPanel.Visible then
+				UpdateRebirthPanel()
+			end
 		end)
 	)
 	table.insert(
 		ControllerConnections,
 		LocalPlayer:GetAttributeChangedSignal("Multiplier"):Connect(function()
 			UpdateHUD()
+			if RebirthPanel and RebirthPanel.Visible then
+				UpdateRebirthPanel()
+			end
 		end)
 	)
 	table.insert(
 		ControllerConnections,
 		LocalPlayer:GetAttributeChangedSignal("Rebirth"):Connect(function()
 			UpdateHUD()
+			if RebirthPanel and RebirthPanel.Visible then
+				UpdateRebirthPanel()
+			end
 		end)
 	)
 	table.insert(
 		ControllerConnections,
 		LocalPlayer:GetAttributeChangedSignal("RebirthMultiplier"):Connect(function()
 			UpdateHUD()
+			if RebirthPanel and RebirthPanel.Visible then
+				UpdateRebirthPanel()
+			end
 		end)
 	)
 	UpdateHUD()
