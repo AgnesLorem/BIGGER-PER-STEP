@@ -34,7 +34,7 @@ local function waitUntil(Predicate, Message)
 end
 
 local Defaults = PlayerProfileSchema.Defaults()
-assert(Defaults.SchemaVersion == 1)
+assert(Defaults.SchemaVersion == 2)
 assert(Defaults.Bigger == 1)
 assert(Defaults.Destruction == 0)
 assert(Defaults.Rebirth == 0)
@@ -55,14 +55,14 @@ assert(Defaults.LeaseExpiresAt == nil)
 
 local Legacy = PlayerProfileSchema.Normalize({ Bigger = 12, UnknownLegacyField = "discard" })
 assert(Legacy.Bigger == 12)
-assert(Legacy.SchemaVersion == 1)
+assert(Legacy.SchemaVersion == 2)
 assert(Legacy.UnknownLegacyField == nil)
 
 expectError(function()
 	PlayerProfileSchema.Normalize("not a table")
 end)
 expectError(function()
-	PlayerProfileSchema.Normalize({ SchemaVersion = 2 })
+	PlayerProfileSchema.Normalize({ SchemaVersion = 3 })
 end)
 expectError(function()
 	PlayerProfileSchema.Normalize({ Bigger = 0 })
@@ -588,6 +588,15 @@ local function sessionFromProfile(Player, Profile)
 		HasDoubleMultiplier = Profile.HasDoubleMultiplier,
 		HasVip = Profile.HasVip,
 		HasPremiumZonePass = Profile.HasPremiumZonePass,
+		HasAutoWins = Profile.HasAutoWins,
+		DailyRewardDay = Profile.DailyRewardDay,
+		LastDailyClaimTimestamp = Profile.LastDailyClaimTimestamp,
+		SpinTokens = Profile.SpinTokens,
+		UnlockedTrails = Profile.UnlockedTrails,
+		EquippedTrail = Profile.EquippedTrail,
+		UnlockedTitles = Profile.UnlockedTitles,
+		EquippedTitle = Profile.EquippedTitle,
+		AutoWinsEnabled = false,
 		PurchaseHistory = Profile.ProcessedPurchaseIds,
 		LastActiveTimestamp = Profile.LastActiveTimestamp,
 		LastLogoutTimestamp = Profile.LastLogoutTimestamp,
@@ -1124,6 +1133,8 @@ local function loadConfigValidationService(Rewards, Options)
 		Item = "Item",
 		DoubleMultiplier = "DoubleMultiplier",
 		Vip = "Vip",
+		SkipRebirth = "SkipRebirth",
+		SpinTokens = "SpinTokens",
 	}
 	local ShopUIConfig = Options.ShopUIConfig or {
 		TestProduct = { ProductId = 1234 },
@@ -1137,11 +1148,29 @@ local function loadConfigValidationService(Rewards, Options)
 				Surface = Options.Surface or "Shop",
 			},
 		}
+	local RealBalanceConfig = luau.load(fs.readFile("src/shared/Game/Progression/BalanceConfig.luau"))()
+	local LevelFormulaChunk = luau.load(fs.readFile("src/shared/Game/Progression/LevelFormula.luau"))
+	setfenv(
+		LevelFormulaChunk,
+		setmetatable({
+			script = { Parent = { BalanceConfig = RealBalanceConfig } },
+			require = function()
+				return RealBalanceConfig
+			end,
+		}, { __index = getfenv() })
+	)
+	local RealLevelFormula = LevelFormulaChunk()
 	local ReplicatedStorage = childContainer({
 		BiggerShared = childContainer({
 			Core = childContainer({
 				Config = childContainer({ ShopUIConfig = ShopUIConfig }),
 				Enums = childContainer({ RewardType = RewardType }),
+			}),
+			Game = childContainer({
+				Progression = childContainer({
+					BalanceConfig = RealBalanceConfig,
+					LevelFormula = RealLevelFormula,
+				}),
 			}),
 		}),
 	})
@@ -1272,6 +1301,10 @@ local function loadRewardDispatcher(GrowthService, CharacterScaleService, Destru
 		Item = "Item",
 		DoubleMultiplier = "DoubleMultiplier",
 		Vip = "Vip",
+		SkipRebirth = "SkipRebirth",
+		SpinTokens = "SpinTokens",
+		Trail = "Trail",
+		Title = "Title",
 	}
 	local RewardError = {
 		UnknownReward = "UnknownReward",
@@ -1390,7 +1423,7 @@ Sessions.Set(FrozenPlayer, FrozenSession)
 
 local function persistentSnapshot(Session)
 	return PlayerProfileSchema.Normalize({
-		SchemaVersion = 1,
+		SchemaVersion = PlayerProfileSchema.SchemaVersion,
 		Bigger = Session.Bigger,
 		Destruction = Session.Destruction,
 		Rebirth = Session.Rebirth,
@@ -1401,6 +1434,14 @@ local function persistentSnapshot(Session)
 		HasDoubleMultiplier = Session.HasDoubleMultiplier,
 		HasVip = Session.HasVip,
 		HasPremiumZonePass = Session.HasPremiumZonePass,
+		HasAutoWins = Session.HasAutoWins,
+		DailyRewardDay = Session.DailyRewardDay,
+		LastDailyClaimTimestamp = Session.LastDailyClaimTimestamp,
+		SpinTokens = Session.SpinTokens,
+		UnlockedTrails = Session.UnlockedTrails,
+		EquippedTrail = Session.EquippedTrail,
+		UnlockedTitles = Session.UnlockedTitles,
+		EquippedTitle = Session.EquippedTitle,
 		ProcessedPurchaseIds = Session.PurchaseHistory,
 		LastActiveTimestamp = Session.LastActiveTimestamp,
 		LastLogoutTimestamp = Session.LastLogoutTimestamp,

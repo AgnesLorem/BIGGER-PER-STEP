@@ -4,6 +4,9 @@
 local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
 local HttpService = game:GetService("HttpService")
+local ReplicatedStorageFound, ReplicatedStorage = pcall(function()
+	return game:GetService("ReplicatedStorage")
+end)
 
 --// Requirings \\--
 
@@ -11,7 +14,8 @@ local Sessions = require(script.Parent.Parent.Parent.Core.Registry.RuntimeRegist
 local WorldInstances = require(script.Parent.Parent.Parent.Core.Registry.RuntimeRegistry.WorldInstances)
 local ServiceRegistry = require(script.Parent.Parent.Parent.Core.Registry.ServiceRegistry)
 local Logger = require(script.Parent.Parent.Parent.Core.Utilities.Logger)
-local World1Config = require(script.Parent.Parent.Config.World1Config)
+local ConfigFolder = script.Parent.Parent.Config
+local MapsConfig = require((ConfigFolder :: any).MapsConfig or (ConfigFolder :: any).World1Config)
 local DeveloperProductConfig = require(script.Parent.Parent.Parent.Core.Config.DeveloperProductConfig)
 local ConfigValidationService = require(script.Parent.Parent.Parent.Core.Services.ConfigValidationService)
 local EventBus = require(script.Parent.Parent.Parent.Core.Events.EventBus)
@@ -19,96 +23,65 @@ local EventBus = require(script.Parent.Parent.Parent.Core.Events.EventBus)
 --// Types \\--
 
 type WorldInstance = WorldInstances.WorldInstance
-type Portal = {
-	Model: Model,
-	Visual: BasePart,
-	Trigger: BasePart,
-	LabelPart: BasePart,
-	SurfaceGui: SurfaceGui,
-	TextLabel: TextLabel,
-}
+
+--// Variables \\--
+
+local ShowRewardPopupRemote: RemoteEvent? = nil
+local RequestClaimRewardRemote: RemoteEvent? = nil
 
 --// Helpers \\--
 
-local function GetPlayerFromHit(Hit: BasePart): Player?
-	local Character = Hit:FindFirstAncestorOfClass("Model")
-	if not Character then
+local function EnsureRemote(Name: string): RemoteEvent?
+	if not ReplicatedStorageFound or not ReplicatedStorage then
 		return nil
 	end
-	return Players:GetPlayerFromCharacter(Character)
+
+	local RemotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
+	if not RemotesFolder then
+		RemotesFolder = Instance.new("Folder")
+		RemotesFolder.Name = "Remotes"
+		RemotesFolder.Parent = ReplicatedStorage
+	end
+
+	local Existing = RemotesFolder:FindFirstChild(Name)
+	if Existing and (not Existing.IsA or Existing:IsA("RemoteEvent")) then
+		return Existing
+	end
+
+	local Remote = Instance.new("RemoteEvent")
+	Remote.Name = Name
+	Remote.Parent = RemotesFolder
+	return Remote
 end
 
-local function GetPortal(WorldModel: Instance, Name: string): Portal?
-	local Model = WorldModel:FindFirstChild(Name)
-	if not Model or not Model:IsA("Model") then
-		return nil
+local function GetMapConfigForInstance(WorldInstance: any): any
+	local MapId = WorldInstance.MapId
+	if not MapId and WorldInstance.Model then
+		local Model = WorldInstance.Model
+		if typeof(Model) == "Instance" or (typeof(Model) == "table" and typeof(Model.GetAttribute) == "function") then
+			MapId = Model:GetAttribute("MapId")
+		end
 	end
-
-	local Visual = Model:FindFirstChild("Visual")
-	local Trigger = Model:FindFirstChild("Trigger")
-	local LabelPart = Model:FindFirstChild("LabelPart")
-	local SurfaceGui = LabelPart and LabelPart:FindFirstChild("SurfaceGui")
-	local TextLabel = SurfaceGui and SurfaceGui:FindFirstChild("TextLabel")
-	if
-		not Visual
-		or not Visual:IsA("BasePart")
-		or not Trigger
-		or not Trigger:IsA("BasePart")
-		or not LabelPart
-		or not LabelPart:IsA("BasePart")
-		or not SurfaceGui
-		or not SurfaceGui:IsA("SurfaceGui")
-		or not TextLabel
-		or not TextLabel:IsA("TextLabel")
-	then
-		return nil
+	if MapsConfig and MapsConfig.GetMap then
+		return MapsConfig.GetMap(MapId or "MAP1") or MapsConfig.Maps["MAP1"]
 	end
-
+	local FallbackProductKey = (MapsConfig and MapsConfig.RewardProductKey) or "World1TripleReward"
 	return {
-		Model = Model,
-		Visual = Visual,
-		Trigger = Trigger,
-		LabelPart = LabelPart,
-		SurfaceGui = SurfaceGui,
-		TextLabel = TextLabel,
+		MapId = (MapsConfig and MapsConfig.WorldId) or "WORLD1",
+		Rewards = (MapsConfig and (MapsConfig.Rewards or MapsConfig.RewardPortals)) or {
+			FreeName = "FreeRewardPortal",
+			PaidName = "PaidRewardPortal",
+			FreeDestruction = 1,
+			PaidDestruction = 3,
+			PaidProductKey = FallbackProductKey,
+			FreeLabel = "FREE\n+1 DESTRUCTION",
+			PaidLabel = "3 DESTRUCTION • 29 R$",
+		},
 	}
 end
 
-local function GetPortals(WorldInstance: WorldInstance): (Portal?, Portal?)
-	local PortalConfig = World1Config.RewardPortals
-	return GetPortal(WorldInstance.Model, PortalConfig.FreeName), GetPortal(WorldInstance.Model, PortalConfig.PaidName)
-end
-
-local function GetPaidRewardStatus()
-	return ConfigValidationService:GetDeveloperProductStatus(World1Config.RewardProductKey)
-end
-
-local function SetPortalActive(Portal: Portal, Visible: boolean, TouchEnabled: boolean)
-	Portal.Visual.Transparency = if Visible then 0 else 1
-	Portal.Trigger.Transparency = 1
-	Portal.Trigger.CanCollide = false
-	Portal.Trigger.CanQuery = false
-	Portal.Trigger.CanTouch = Visible and TouchEnabled
-	Portal.LabelPart.Transparency = 1
-	Portal.LabelPart.CanCollide = false
-	Portal.LabelPart.CanQuery = false
-	Portal.LabelPart.CanTouch = false
-	Portal.SurfaceGui.Enabled = Visible
-end
-
-local function SetChoicesActive(WorldInstance: WorldInstance, Visible: boolean, TouchEnabled: boolean): boolean
-	local FreePortal, PaidPortal = GetPortals(WorldInstance)
-	if not FreePortal or not PaidPortal then
-		return false
-	end
-
-	local PortalConfig = World1Config.RewardPortals
-	FreePortal.TextLabel.Text = PortalConfig.FreeLabel
-	local PaidConfigured = GetPaidRewardStatus().IsConfigured
-	PaidPortal.TextLabel.Text = if PaidConfigured then PortalConfig.PaidLabel else "UNAVAILABLE"
-	SetPortalActive(FreePortal, Visible, TouchEnabled)
-	SetPortalActive(PaidPortal, Visible, TouchEnabled and PaidConfigured)
-	return true
+local function GetPaidRewardStatus(ProductKey: string)
+	return ConfigValidationService:GetDeveloperProductStatus(ProductKey)
 end
 
 local function IsCurrentOwner(WorldInstance: WorldInstance, Player: Player): boolean
@@ -139,33 +112,36 @@ local function RecoverPlayer(WorldInstanceService: any, Player: Player, Reason: 
 	end
 end
 
-local function TryFreeChoice(WorldInstance: WorldInstance, Hit: BasePart, WorldInstanceService: any)
+local function ExecuteFreeChoice(WorldInstance: WorldInstance, Player: Player, WorldInstanceService: any): boolean
 	if WorldInstance.RewardState ~= "Choosing" then
-		return
+		return false
 	end
 
-	local Player = GetPlayerFromHit(Hit)
-	if not Player or not IsCurrentOwner(WorldInstance, Player) then
-		return
+	if not IsCurrentOwner(WorldInstance, Player) then
+		return false
 	end
 
 	WorldInstance.RewardState = "Settled"
-	SetChoicesActive(WorldInstance, false, false)
 
 	local ServicesFound, DestructionService, SessionService = pcall(function()
 		return ServiceRegistry.Get("DestructionService"), ServiceRegistry.Get("SessionService")
 	end)
 	if not ServicesFound or not DestructionService or not SessionService then
 		RecoverPlayer(WorldInstanceService, Player, "MissingFreeRewardServices", false)
-		return
+		return false
 	end
 
+	local MapConfig = GetMapConfigForInstance(WorldInstance)
+	local FreeRewardAmount = if MapConfig.Rewards and MapConfig.Rewards.FreeDestruction
+		then MapConfig.Rewards.FreeDestruction
+		else 1
+
 	local Granted, GrantSuccess = pcall(function()
-		return DestructionService:GrantDestruction(Player, World1Config.RewardPortals.FreeDestruction)
+		return DestructionService:GrantDestruction(Player, FreeRewardAmount)
 	end)
 	if not Granted or not GrantSuccess then
 		RecoverPlayer(WorldInstanceService, Player, "FreeRewardGrantFailed", false)
-		return
+		return false
 	end
 
 	local Transitioned, TransitionSuccess = pcall(function()
@@ -173,7 +149,7 @@ local function TryFreeChoice(WorldInstance: WorldInstance, Hit: BasePart, WorldI
 	end)
 	if not Transitioned or not TransitionSuccess then
 		RecoverPlayer(WorldInstanceService, Player, "FreeRewardTransitionFailed", false)
-		return
+		return false
 	end
 
 	local Returned, ReturnSuccess = pcall(function()
@@ -181,38 +157,43 @@ local function TryFreeChoice(WorldInstance: WorldInstance, Hit: BasePart, WorldI
 	end)
 	if not Returned or not ReturnSuccess then
 		RecoverPlayer(WorldInstanceService, Player, "FreeRewardReturnFailed", true)
-		return
+		return false
 	end
 
 	RecoverPlayer(WorldInstanceService, Player, "FreeRewardSettled", false)
+	local DebounceSeconds = if MapsConfig and MapsConfig.ReturnPortalDebounceSeconds
+		then MapsConfig.ReturnPortalDebounceSeconds
+		else 1.5
 	local Debounced = pcall(function()
-		ServiceRegistry.Get("PortalService"):HoldDebounce(Player, World1Config.ReturnPortalDebounceSeconds)
+		ServiceRegistry.Get("PortalService"):HoldDebounce(Player, DebounceSeconds)
 	end)
 	if not Debounced then
 		Logger.Warn("RewardPortal", "Return portal debounce failed for PlayerUserId=%d", Player.UserId)
 	end
+	return true
 end
 
 local function RestoreChoices(WorldInstance: WorldInstance)
 	WorldInstance.PendingRewardPrompt = nil
 	WorldInstance.RewardState = "Choosing"
-	SetChoicesActive(WorldInstance, true, true)
 end
 
-local function TryPaidChoice(WorldInstance: WorldInstance, Hit: BasePart, WorldInstanceService: any)
+local function ExecutePaidChoice(WorldInstance: WorldInstance, Player: Player, WorldInstanceService: any): boolean
 	if WorldInstance.RewardState ~= "Choosing" then
-		return
+		return false
 	end
 
-	local Player = GetPlayerFromHit(Hit)
-	if not Player or not IsCurrentOwner(WorldInstance, Player) then
-		return
+	if not IsCurrentOwner(WorldInstance, Player) then
+		return false
 	end
 
-	local ProductKey = World1Config.RewardProductKey
+	local MapConfig = GetMapConfigForInstance(WorldInstance)
+	local ProductKey = if MapConfig.Rewards and MapConfig.Rewards.PaidProductKey
+		then MapConfig.Rewards.PaidProductKey
+		else ((MapsConfig and MapsConfig.RewardProductKey) or "World1TripleReward")
 	local Product = DeveloperProductConfig[ProductKey]
 	local ProductId = Product and Product.ProductId
-	local ProductStatus = GetPaidRewardStatus()
+	local ProductStatus = GetPaidRewardStatus(ProductKey)
 	local SaveFound, SaveService = pcall(function()
 		return ServiceRegistry.Get("SaveService")
 	end)
@@ -226,7 +207,7 @@ local function TryPaidChoice(WorldInstance: WorldInstance, Hit: BasePart, WorldI
 		or not SaveFound
 		or not SaveService:IsProfileWritable(Player)
 	then
-		return
+		return false
 	end
 
 	WorldInstance.PendingRewardPrompt = {
@@ -238,12 +219,13 @@ local function TryPaidChoice(WorldInstance: WorldInstance, Hit: BasePart, WorldI
 		WorldInstanceService = WorldInstanceService,
 	}
 	WorldInstance.RewardState = "PromptOpen"
-	SetChoicesActive(WorldInstance, true, false)
 
 	local Prompted = pcall(MarketplaceService.PromptProductPurchase, MarketplaceService, Player, ProductId)
 	if not Prompted then
 		RestoreChoices(WorldInstance)
+		return false
 	end
+	return true
 end
 
 local function OnPromptFinished(UserId: number, ProductId: number, WasPurchased: boolean)
@@ -289,7 +271,6 @@ local function OnProductCommitted(Player: Player, ProductKey: string, _PurchaseI
 	local WorldInstanceService = Pending.WorldInstanceService
 	WorldInstance.PendingRewardPrompt = nil
 	WorldInstance.RewardState = "Settled"
-	SetChoicesActive(WorldInstance, false, false)
 
 	local ServicesFound, SessionService = pcall(function()
 		return ServiceRegistry.Get("SessionService")
@@ -319,45 +300,27 @@ function RewardPortalService:Init()
 		return
 	end
 	Initialized = true
+
+	ShowRewardPopupRemote = EnsureRemote("ShowRewardPopup")
+	RequestClaimRewardRemote = EnsureRemote("RequestClaimReward")
+	if RequestClaimRewardRemote and RequestClaimRewardRemote.OnServerEvent then
+		RequestClaimRewardRemote.OnServerEvent:Connect(function(Client: Player, Choice: any)
+			self:RequestClaimReward(Client, Choice)
+		end)
+	end
+
 	MarketplaceService.PromptProductPurchaseFinished:Connect(OnPromptFinished)
 	EventBus.Subscribe("DeveloperProductCommitted", OnProductCommitted)
 end
 
 function RewardPortalService:Start() end
 
-function RewardPortalService:GetPaidRewardStatus()
-	return GetPaidRewardStatus()
+function RewardPortalService:GetPaidRewardStatus(ProductKey: string?)
+	return GetPaidRewardStatus(ProductKey or "World1TripleReward")
 end
 
-function RewardPortalService:BindWorld(WorldInstance: WorldInstance, WorldInstanceService: any): boolean
-	local FreePortal, PaidPortal = GetPortals(WorldInstance)
-	if not FreePortal or not PaidPortal then
-		Logger.Warn(
-			"RewardPortal",
-			"Portal hierarchy missing for PlayerUserId=%d WorldInstanceId=%s",
-			WorldInstance.OwnerUserId,
-			WorldInstance.WorldInstanceId
-		)
-		return false
-	end
-
+function RewardPortalService:BindWorld(WorldInstance: WorldInstance, _WorldInstanceService: any): boolean
 	WorldInstance.RewardState = "Inactive"
-	if not SetChoicesActive(WorldInstance, false, false) then
-		return false
-	end
-
-	table.insert(
-		WorldInstance.Connections,
-		FreePortal.Trigger.Touched:Connect(function(Hit)
-			TryFreeChoice(WorldInstance, Hit, WorldInstanceService)
-		end)
-	)
-	table.insert(
-		WorldInstance.Connections,
-		PaidPortal.Trigger.Touched:Connect(function(Hit)
-			TryPaidChoice(WorldInstance, Hit, WorldInstanceService)
-		end)
-	)
 	return true
 end
 
@@ -371,11 +334,72 @@ function RewardPortalService:ActivateChoices(WorldInstance: WorldInstance, _Worl
 		return false
 	end
 
-	if not SetChoicesActive(WorldInstance, true, true) then
+	WorldInstance.RewardState = "Choosing"
+
+	local Player = WorldInstance.OwnerPlayer
+	if Player and ShowRewardPopupRemote and ShowRewardPopupRemote.FireClient then
+		local MapConfig = GetMapConfigForInstance(WorldInstance)
+		local RewardsConfig = MapConfig.Rewards
+		local ProductKey = if RewardsConfig and RewardsConfig.PaidProductKey
+			then RewardsConfig.PaidProductKey
+			else ((MapsConfig and MapsConfig.RewardProductKey) or "World1TripleReward")
+		local PaidConfigured = GetPaidRewardStatus(ProductKey).IsConfigured
+		local FreeAmount = if RewardsConfig and RewardsConfig.FreeDestruction then RewardsConfig.FreeDestruction else 1
+		local PaidAmount = if RewardsConfig and RewardsConfig.PaidDestruction
+			then RewardsConfig.PaidDestruction
+			else FreeAmount * 3
+		local Payload = {
+			WorldId = MapConfig.MapId,
+			FreeReward = {
+				Type = "Destruction",
+				Amount = FreeAmount,
+				Label = string.format("Claim %dx Free", FreeAmount),
+			},
+			PaidReward = {
+				Type = "Destruction",
+				Amount = PaidAmount,
+				Price = 29,
+				Label = string.format("Claim %dx (29 R$)", PaidAmount),
+				ProductKey = ProductKey,
+				IsConfigured = PaidConfigured,
+			},
+		}
+		pcall(function()
+			ShowRewardPopupRemote:FireClient(Player, Payload)
+		end)
+	end
+
+	return true
+end
+
+function RewardPortalService:RequestClaimReward(Player: Player, Choice: any): boolean
+	if not Player or (Player.IsA and not Player:IsA("Player")) then
 		return false
 	end
-	WorldInstance.RewardState = "Choosing"
-	return true
+
+	if type(Choice) ~= "string" then
+		return false
+	end
+
+	local WorldInstance = WorldInstances.Get(Player)
+	if not WorldInstance or WorldInstance.RewardState ~= "Choosing" or not IsCurrentOwner(WorldInstance, Player) then
+		return false
+	end
+
+	local WorldInstanceServiceFound, WorldInstanceService = pcall(function()
+		return ServiceRegistry.Get("WorldInstanceService")
+	end)
+	if not WorldInstanceServiceFound or not WorldInstanceService then
+		return false
+	end
+
+	if Choice == "Free" then
+		return ExecuteFreeChoice(WorldInstance, Player, WorldInstanceService)
+	elseif Choice == "PaidTriple" or Choice == "Paid" then
+		return ExecutePaidChoice(WorldInstance, Player, WorldInstanceService)
+	else
+		return false
+	end
 end
 
 return RewardPortalService

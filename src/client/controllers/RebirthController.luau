@@ -7,29 +7,27 @@
 --// Raw Requirings \\--
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 --// Requirings \\--
 local UIEventBus = require(script.Parent:WaitForChild("UIEventBus"))
+local ResponsiveController = require(script.Parent:WaitForChild("ResponsiveController"))
+local ResponsiveConfig = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Config")
+		:WaitForChild("ResponsiveConfig")
+)
+local RebirthTypes = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Types")
+		:WaitForChild("RebirthTypes")
+)
 
 --// Types \\--
-type RebirthTierSnapshot = {
-	RequiredSize: number,
-	GrowthMultiplier: number,
-}
-type RebirthUpdate = {
-	Version: number,
-	Timestamp: number,
-	CurrentSize: number,
-	RequiredSize: number,
-	CurrentLevel: number,
-	RequiredLevel: number,
-	GrowthMultiplier: number,
-	NextGrowthMultiplier: number,
-	Rebirths: number,
-	CanRebirth: boolean,
-	PreviewTiers: { RebirthTierSnapshot },
-	Error: string,
-}
+type RebirthTierSnapshot = RebirthTypes.RebirthTierSnapshot
+type RebirthUpdate = RebirthTypes.RebirthUpdate
 
 --// Variables \\--
 local LocalPlayer = Players.LocalPlayer
@@ -40,68 +38,85 @@ local RebirthController = {}
 local ScreenGui: ScreenGui
 local OverlayHUD: Frame
 local Panel: Frame
-local CloseButton: TextButton
-local RequirementLabel: TextLabel
-local ProgressLabel: TextLabel
-local BarFill: Frame
-local CurrentStat: TextLabel
-local NextStat: TextLabel
-local RebirthButton: TextButton
-local RebirthButtonText: TextLabel
-local SkipRebirthButton: TextButton
-local SkipRebirthButtonText: TextLabel
+local CloseButton: GuiButton?
+local RequirementLabel: TextLabel?
+local ProgressLabel: TextLabel?
+local BarFill: Frame?
+local CurrentStat: TextLabel?
+local NextStat: TextLabel?
+local RebirthButton: GuiButton?
+local RebirthButtonText: TextLabel?
+local SkipRebirthButton: GuiButton?
+local SkipRebirthButtonText: TextLabel?
 
 -- Remote References
-local RequestRebirthRemote: RemoteEvent
-local RequestSkipRebirthRemote: RemoteEvent
-local UpdateRebirthRemote: RemoteEvent
+local RequestRebirthRemote: RemoteEvent? = nil
+local RequestSkipRebirthRemote: RemoteEvent? = nil
+local UpdateRebirthRemote: RemoteEvent? = nil
 
 -- State
 local IsOpen = false
 local CachedState: RebirthUpdate?
-local PanelRegistry: {
-	Connections: { RBXScriptConnection | { Disconnect: () -> () } },
-	Tasks: { thread },
-	Destroyed: boolean,
-}
+local Connections: { RBXScriptConnection | { Disconnect: () -> () } } = {}
 
 --// Helpers \\--
 
-local function PanelRegistryDestroy()
-	if PanelRegistry.Destroyed then
+local function EnsureRemote(name: string): RemoteEvent?
+	local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
+	if not remotesFolder then
+		return nil
+	end
+	local remote = remotesFolder:FindFirstChild(name)
+	if remote and remote:IsA("RemoteEvent") then
+		return remote
+	end
+	return nil
+end
+
+local function AttachBounce(button: GuiButton?)
+	if not button then
 		return
 	end
-	PanelRegistry.Destroyed = true
-
-	for _, Connection in PanelRegistry.Connections do
-		if typeof(Connection) == "RBXScriptConnection" then
-			(Connection :: RBXScriptConnection):Disconnect()
-		elseif typeof(Connection) == "table" and typeof(Connection.Disconnect) == "function" then
-			Connection.Disconnect()
-		end
+	local uiScale = button:FindFirstChildOfClass("UIScale")
+	if not uiScale then
+		uiScale = Instance.new("UIScale")
+		uiScale.Parent = button
 	end
-	table.clear(PanelRegistry.Connections)
 
-	for _, Thread in PanelRegistry.Tasks do
-		task.cancel(Thread)
-	end
-	table.clear(PanelRegistry.Tasks)
+	local pressTween = TweenService:Create(
+		uiScale,
+		TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Scale = 0.95 }
+	)
+	local releaseTween = TweenService:Create(
+		uiScale,
+		TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		{ Scale = 1.0 }
+	)
 
-	table.clear(PanelRegistry)
+	table.insert(
+		Connections,
+		button.InputBegan:Connect(function(input)
+			if
+				input.UserInputType == Enum.UserInputType.MouseButton1
+				or input.UserInputType == Enum.UserInputType.Touch
+			then
+				pressTween:Play()
+			end
+		end)
+	)
+	table.insert(
+		Connections,
+		button.InputEnded:Connect(function(input)
+			if
+				input.UserInputType == Enum.UserInputType.MouseButton1
+				or input.UserInputType == Enum.UserInputType.Touch
+			then
+				releaseTween:Play()
+			end
+		end)
+	)
 end
-
-local function NewPanelRegistry()
-	if PanelRegistry and not PanelRegistry.Destroyed then
-		PanelRegistryDestroy()
-	end
-	PanelRegistry = {
-		Connections = {},
-		Tasks = {},
-		Destroyed = false,
-	}
-end
-
-
 
 local function Render(State: RebirthUpdate)
 	CachedState = State
@@ -110,9 +125,9 @@ local function Render(State: RebirthUpdate)
 		return
 	end
 
-	-- Requirement label
+	-- Requirement / Warning label
 	if RequirementLabel then
-		RequirementLabel.Text = "Reach Level " .. tostring(State.RequiredLevel) .. "\nto Rebirth"
+		RequirementLabel.Text = "Rebirth resets your LEVEL!"
 	end
 
 	-- Progress bar text and fill
@@ -122,7 +137,7 @@ local function Render(State: RebirthUpdate)
 
 	if BarFill then
 		local ratio = if State.RequiredLevel > 0 then math.clamp(State.CurrentLevel / State.RequiredLevel, 0, 1) else 0
-		BarFill.Size = UDim2.fromScale(math.max(ratio, 0.02), 1)
+		BarFill.Size = UDim2.fromScale(math.max(ratio, 0.03), 1)
 	end
 
 	-- Current multiplier card
@@ -137,13 +152,20 @@ local function Render(State: RebirthUpdate)
 
 	-- Rebirth button state driven by server CanRebirth
 	if RebirthButton then
-		RebirthButton.Active = State.CanRebirth
+		RebirthButton.Active = true
 		if RebirthButtonText then
 			RebirthButtonText.Text = "Rebirth"
+			RebirthButtonText.TextColor3 = if State.CanRebirth
+				then Color3.fromRGB(255, 255, 255)
+				else Color3.fromRGB(180, 180, 180)
 		end
 		local btnImg = RebirthButton:FindFirstChild("BtnImg") :: ImageLabel?
 		if btnImg then
 			btnImg.ImageColor3 = if State.CanRebirth then Color3.new(1, 1, 1) else Color3.fromRGB(150, 150, 150)
+		elseif RebirthButton:IsA("ImageButton") then
+			(RebirthButton :: ImageButton).ImageColor3 = if State.CanRebirth
+				then Color3.new(1, 1, 1)
+				else Color3.fromRGB(150, 150, 150)
 		end
 	end
 
@@ -166,9 +188,14 @@ function RebirthController.Open()
 	Panel.Visible = true
 
 	-- Request fresh update from the server
-	pcall(function()
-		RequestRebirthRemote:FireServer("Refresh")
-	end)
+	if not RequestRebirthRemote then
+		RequestRebirthRemote = EnsureRemote("RequestRebirth")
+	end
+	if RequestRebirthRemote then
+		pcall(function()
+			RequestRebirthRemote:FireServer("Refresh")
+		end)
+	end
 
 	if CachedState then
 		Render(CachedState)
@@ -184,7 +211,7 @@ function RebirthController.Close()
 	if OverlayHUD then
 		local anyOtherOpen = false
 		for _, child in ipairs(OverlayHUD:GetChildren()) do
-			if child:IsA("GuiObject") and child.Visible then
+			if child:IsA("GuiObject") and child.Name ~= "ModalBackdrop" and child.Visible then
 				anyOtherOpen = true
 				break
 			end
@@ -206,89 +233,102 @@ end
 --// Initialization \\--
 function RebirthController.Init()
 	local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-	ScreenGui = PlayerGui:WaitForChild("MainHUD") :: ScreenGui
+	ScreenGui = PlayerGui:WaitForChild("MainHUD", 10) :: ScreenGui
 
-	-- Remotes (idempotent — reference existing ones)
-	local RemotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
-	if not RemotesFolder then
-		RemotesFolder = Instance.new("Folder")
-		RemotesFolder.Name = "Remotes"
-		RemotesFolder.Parent = ReplicatedStorage
-	end
-	RequestRebirthRemote = RemotesFolder:FindFirstChild("RequestRebirth") :: RemoteEvent
-	if not RequestRebirthRemote then
-		RequestRebirthRemote = Instance.new("RemoteEvent")
-		RequestRebirthRemote.Name = "RequestRebirth"
-		RequestRebirthRemote.Parent = RemotesFolder
-	end
-	RequestSkipRebirthRemote = RemotesFolder:FindFirstChild("RequestSkipRebirth") :: RemoteEvent
-	if not RequestSkipRebirthRemote then
-		RequestSkipRebirthRemote = Instance.new("RemoteEvent")
-		RequestSkipRebirthRemote.Name = "RequestSkipRebirth"
-		RequestSkipRebirthRemote.Parent = RemotesFolder
-	end
-	UpdateRebirthRemote = RemotesFolder:FindFirstChild("UpdateRebirth") :: RemoteEvent
-	if not UpdateRebirthRemote then
-		UpdateRebirthRemote = Instance.new("RemoteEvent")
-		UpdateRebirthRemote.Name = "UpdateRebirth"
-		UpdateRebirthRemote.Parent = RemotesFolder
+	-- Remotes
+	local RemotesFolder = ReplicatedStorage:WaitForChild("Remotes", 5)
+	if RemotesFolder then
+		RequestRebirthRemote = EnsureRemote("RequestRebirth")
+		RequestSkipRebirthRemote = EnsureRemote("RequestSkipRebirth")
+		UpdateRebirthRemote = EnsureRemote("UpdateRebirth")
 	end
 
 	-- Panel references under OverlayHUD
 	local SafeAreaRoot = ScreenGui:WaitForChild("SafeAreaRoot")
-	OverlayHUD = SafeAreaRoot:WaitForChild("OverlayHUD") :: Frame
-	Panel = OverlayHUD:WaitForChild("RebirthPanel") :: Frame
-	Panel.Visible = false
+	OverlayHUD = SafeAreaRoot:WaitForChild("OverlayHUD", 5) :: Frame
+	if OverlayHUD then
+		OverlayHUD.Visible = false
+		Panel = OverlayHUD:WaitForChild("RebirthPanel", 5) :: Frame
+		if Panel then
+			Panel.Visible = false
+			CloseButton = Panel:FindFirstChild("CloseButton", true) :: GuiButton?
+			RequirementLabel = Panel:FindFirstChild("RequirementLabel", true) :: TextLabel?
 
-	CloseButton = Panel:FindFirstChild("CloseButton") :: TextButton
+			ProgressLabel = Panel:FindFirstChild("ProgressLabel", true) :: TextLabel?
+			BarFill = Panel:FindFirstChild("BarFill", true) :: Frame?
 
-	RequirementLabel = Panel:FindFirstChild("RequirementLabel") :: TextLabel
+			local CurrentCard = Panel:FindFirstChild("CurrentCard", true) :: Instance?
+			CurrentStat = CurrentCard and CurrentCard:FindFirstChild("Stat", true) :: TextLabel?
 
-	local MultiplierBar = Panel:FindFirstChild("MultiplierBar") :: Frame
-	ProgressLabel = MultiplierBar and MultiplierBar:FindFirstChild("ProgressLabel") :: TextLabel
-	local BarBG = MultiplierBar and MultiplierBar:FindFirstChild("BarBG") :: Frame
-	BarFill = BarBG and BarBG:FindFirstChild("BarFill") :: Frame
+			local NextCard = Panel:FindFirstChild("NextCard", true) :: Instance?
+			NextStat = NextCard and NextCard:FindFirstChild("Stat", true) :: TextLabel?
 
-	local CurrentCard = Panel:FindFirstChild("CurrentCard") :: ImageLabel
-	CurrentStat = CurrentCard and CurrentCard:FindFirstChild("Stat") :: TextLabel
+			RebirthButton = Panel:FindFirstChild("RebirthButton", true) :: GuiButton?
+			RebirthButtonText = RebirthButton and RebirthButton:FindFirstChild("ButtonText", true) :: TextLabel?
 
-	local NextCard = Panel:FindFirstChild("NextCard") :: ImageLabel
-	NextStat = NextCard and NextCard:FindFirstChild("Stat") :: TextLabel
+			SkipRebirthButton = Panel:FindFirstChild("SkipRebirthButton", true) :: GuiButton?
+			SkipRebirthButtonText = SkipRebirthButton
+				and SkipRebirthButton:FindFirstChild("ButtonText", true) :: TextLabel?
+		end
+	end
+end
 
-	RebirthButton = Panel:FindFirstChild("RebirthButton", true) :: TextButton
-	RebirthButtonText = RebirthButton and RebirthButton:FindFirstChild("ButtonText") :: TextLabel
-
-	SkipRebirthButton = Panel:FindFirstChild("SkipRebirthButton", true) :: TextButton
-	SkipRebirthButtonText = SkipRebirthButton and SkipRebirthButton:FindFirstChild("ButtonText") :: TextLabel
+local function ApplyResponsiveProfile(profile: any)
+	if not Panel then
+		return
+	end
+	local category = if profile and profile.Category then profile.Category else "Desktop"
+	local policy = ResponsiveConfig.Policies[category] or ResponsiveConfig.Policies.Desktop
+	local widthScale = policy.PopupWidthScale or 0.54
+	Panel.Size = UDim2.fromScale(widthScale, 0.72)
 end
 
 function RebirthController.Start()
+	-- Remotes ensure
+	if not UpdateRebirthRemote then
+		local RemotesFolder = ReplicatedStorage:WaitForChild("Remotes", 5)
+		if RemotesFolder then
+			UpdateRebirthRemote = RemotesFolder:WaitForChild("UpdateRebirth", 5) :: RemoteEvent?
+			RequestRebirthRemote = RemotesFolder:WaitForChild("RequestRebirth", 5) :: RemoteEvent?
+			RequestSkipRebirthRemote = RemotesFolder:WaitForChild("RequestSkipRebirth", 5) :: RemoteEvent?
+		end
+	end
+
 	-- Listen for server-pushed state updates
-	NewPanelRegistry()
-	table.insert(
-		PanelRegistry.Connections,
-		UpdateRebirthRemote.OnClientEvent:Connect(function(State: RebirthUpdate)
-			CachedState = State
-			if IsOpen then
-				Render(State)
-			end
-		end)
-	)
+	if UpdateRebirthRemote then
+		table.insert(
+			Connections,
+			UpdateRebirthRemote.OnClientEvent:Connect(function(State: RebirthUpdate)
+				CachedState = State
+				if IsOpen then
+					Render(State)
+				end
+			end)
+		)
+	end
 
 	-- Subscribe to UIEventBus for sidebar button clicks
 	local eventConn = UIEventBus.Subscribe("SidebarButtonClicked", function(buttonName: any)
 		if buttonName == "Rebirth" then
-			RebirthController.Open()
+			RebirthController.Toggle()
 		end
 	end)
-	table.insert(PanelRegistry.Connections, eventConn)
+	table.insert(Connections, eventConn)
 
-	-- RebirthButton
+	-- Attach bounce micro-interactions
+	AttachBounce(RebirthButton)
+	AttachBounce(SkipRebirthButton)
+	AttachBounce(CloseButton)
+
+	-- RebirthButton click
 	if RebirthButton then
 		table.insert(
-			PanelRegistry.Connections,
+			Connections,
 			RebirthButton.Activated:Connect(function()
-				if CachedState and CachedState.CanRebirth then
+				if not RequestRebirthRemote then
+					RequestRebirthRemote = EnsureRemote("RequestRebirth")
+				end
+				if RequestRebirthRemote then
 					pcall(function()
 						RequestRebirthRemote:FireServer()
 					end)
@@ -297,38 +337,71 @@ function RebirthController.Start()
 		)
 	end
 
-	-- SkipRebirthButton
+	-- SkipRebirthButton click
 	if SkipRebirthButton then
 		table.insert(
-			PanelRegistry.Connections,
+			Connections,
 			SkipRebirthButton.Activated:Connect(function()
-				pcall(function()
-					RequestSkipRebirthRemote:FireServer()
-				end)
+				if not RequestSkipRebirthRemote then
+					RequestSkipRebirthRemote = EnsureRemote("RequestSkipRebirth")
+				end
+				if RequestSkipRebirthRemote then
+					pcall(function()
+						RequestSkipRebirthRemote:FireServer()
+					end)
+				end
 			end)
 		)
 	end
 
-	-- CloseButton
+	-- CloseButton click
 	if CloseButton then
 		table.insert(
-			PanelRegistry.Connections,
+			Connections,
 			CloseButton.Activated:Connect(function()
 				RebirthController.Close()
 			end)
 		)
+		if CloseButton:IsA("ImageButton") or CloseButton:IsA("TextButton") then
+			table.insert(
+				Connections,
+				CloseButton.MouseButton1Click:Connect(function()
+					RebirthController.Close()
+				end)
+			)
+		end
 	end
+
+	-- Connect to responsive profile changes
+	table.insert(
+		Connections,
+		ResponsiveController.ProfileChanged:Connect(function(profile)
+			ApplyResponsiveProfile(profile)
+		end)
+	)
+	ApplyResponsiveProfile(ResponsiveController:GetProfile())
 
 	-- Initial render if we already have state
 	if CachedState and IsOpen then
 		Render(CachedState)
 	end
 	-- Request fresh update from the server
-	pcall(function()
-		RequestRebirthRemote:FireServer("Refresh")
-	end)
+	if RequestRebirthRemote then
+		pcall(function()
+			RequestRebirthRemote:FireServer("Refresh")
+		end)
+	end
+end
 
-
+function RebirthController.Destroy()
+	for _, Connection in Connections do
+		if typeof(Connection) == "RBXScriptConnection" then
+			(Connection :: RBXScriptConnection):Disconnect()
+		elseif typeof(Connection) == "table" and typeof(Connection.Disconnect) == "function" then
+			Connection.Disconnect()
+		end
+	end
+	table.clear(Connections)
 end
 
 return RebirthController

@@ -14,7 +14,7 @@
 
 --// Types \\--
 export type EventConnection = {
-	Disconnect: () -> ()
+	Disconnect: () -> (),
 }
 
 type Callback = (...any) -> ()
@@ -41,14 +41,16 @@ function UIEventBus.Subscribe(eventName: string, callback: Callback): EventConne
 					table.remove(list, idx)
 				end
 			end
-		end
+		end,
 	}
 end
 
 -- Publish a UI event. Invokes all subscribers asynchronously in task.spawn.
 function UIEventBus.Publish(eventName: string, ...: any)
 	local list = Listeners[eventName]
-	if not list then return end
+	if not list then
+		return
+	end
 
 	local args = { ... }
 	for _, callback in ipairs(list) do

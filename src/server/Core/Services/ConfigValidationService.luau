@@ -42,6 +42,7 @@ local SupportedDeveloperProductRewards = table.freeze({
 	[RewardType.DoubleMultiplier] = true,
 	[RewardType.Vip] = true,
 	[RewardType.SkipRebirth] = true,
+	[RewardType.SpinTokens] = true,
 })
 
 function ConfigValidationService:Init()

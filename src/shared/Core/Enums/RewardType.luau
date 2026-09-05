@@ -11,4 +11,7 @@ return table.freeze({
 	DoubleMultiplier = "DoubleMultiplier",
 	Vip = "Vip",
 	SkipRebirth = "SkipRebirth",
+	SpinTokens = "SpinTokens",
+	Trail = "Trail",
+	Title = "Title",
 })

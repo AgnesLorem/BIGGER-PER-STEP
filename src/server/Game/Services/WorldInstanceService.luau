@@ -11,6 +11,7 @@ local Sessions = require(script.Parent.Parent.Parent.Core.Registry.RuntimeRegist
 local WorldInstances = require(script.Parent.Parent.Parent.Core.Registry.RuntimeRegistry.WorldInstances)
 local ServiceRegistry = require(script.Parent.Parent.Parent.Core.Registry.ServiceRegistry)
 local Logger = require(script.Parent.Parent.Parent.Core.Utilities.Logger)
+local MapsConfig = require(script.Parent.Parent.Config.MapsConfig)
 local World1Config = require(script.Parent.Parent.Config.World1Config)
 
 --// Types \\--
@@ -32,23 +33,31 @@ local function ClearObjectiveAttributes(Player: Player)
 end
 
 local function GetRuntimeFolder(): Folder
-	local RuntimeFolder = Workspace:FindFirstChild(World1Config.RuntimeFolderName)
+	local RuntimeFolder = Workspace:FindFirstChild(MapsConfig.RuntimeFolderName)
 	if RuntimeFolder and RuntimeFolder:IsA("Folder") then
 		return RuntimeFolder
 	end
 
 	RuntimeFolder = Instance.new("Folder")
-	RuntimeFolder.Name = World1Config.RuntimeFolderName
+	RuntimeFolder.Name = MapsConfig.RuntimeFolderName
 	RuntimeFolder.Parent = Workspace
 	return RuntimeFolder
 end
 
-local function GetTemplate(): Instance?
-	local TemplateFolder = ServerStorage:FindFirstChild(World1Config.TemplateFolderName)
+local function GetTemplate(TemplateName: string?): Instance?
+	local TemplateFolder = ServerStorage:FindFirstChild(MapsConfig.TemplateFolderName)
 	if not TemplateFolder then
 		return nil
 	end
-	return TemplateFolder:FindFirstChild(World1Config.TemplateName)
+
+	if TemplateName and TemplateName ~= "" then
+		local Specific = TemplateFolder:FindFirstChild(TemplateName)
+		if Specific then
+			return Specific
+		end
+	end
+
+	return TemplateFolder:FindFirstChild("MAP1") or TemplateFolder:FindFirstChild(World1Config.TemplateName)
 end
 
 local function GetCharacterRoot(Player: Player): BasePart?
@@ -69,15 +78,24 @@ local function GetMarker(Container: Instance, MarkerName: string): BasePart?
 end
 
 local function GetReturnMarker(): BasePart?
-	local ReturnWorld = Workspace:FindFirstChild(World1Config.ReturnWorldName)
-	if not ReturnWorld then
-		return nil
+	local ReturnWorld = Workspace:FindFirstChild(MapsConfig.ReturnWorldName)
+	if ReturnWorld then
+		local Marker = ReturnWorld:FindFirstChild(MapsConfig.ReturnMarkerName)
+		if Marker and Marker:IsA("BasePart") then
+			return Marker
+		end
 	end
 
-	local Marker = ReturnWorld:FindFirstChild(World1Config.ReturnMarkerName)
-	if Marker and Marker:IsA("BasePart") then
-		return Marker
+	local DirectMarker = Workspace:FindFirstChild(MapsConfig.ReturnMarkerName)
+	if DirectMarker and DirectMarker:IsA("BasePart") then
+		return DirectMarker
 	end
+
+	local AnySpawn = Workspace:FindFirstChildOfClass("SpawnLocation")
+	if AnySpawn then
+		return AnySpawn
+	end
+
 	return nil
 end
 
@@ -97,8 +115,13 @@ local function TeleportPlayerToMarker(Player: Player, Marker: BasePart): boolean
 		return false
 	end
 
+	local Character = Player.Character
+	local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+	local HipHeight = if Humanoid then Humanoid.HipHeight else 2
+	local DynamicOffset = math.max(MapsConfig.TeleportHeightOffset, HipHeight + 3)
+
 	RootPart.AssemblyLinearVelocity = Vector3.zero
-	RootPart.CFrame = Marker.CFrame + Vector3.new(0, World1Config.TeleportHeightOffset, 0)
+	RootPart.CFrame = Marker.CFrame + Vector3.new(0, DynamicOffset, 0)
 	return true
 end
 
@@ -229,7 +252,7 @@ function WorldInstanceService:CleanupPlayer(Player: Player, Reason: string?)
 	Logger.Info("WorldInstance", "Cleaned player world for %s (%s)", Player.Name, Reason or "Unknown")
 end
 
-function WorldInstanceService:CreateWorldForPlayer(Player: Player): WorldInstance?
+function WorldInstanceService:CreateWorld(Player: Player, MapId: string?): WorldInstance?
 	local Session: Session? = Sessions.Get(Player)
 	if not Session then
 		return nil
@@ -258,14 +281,17 @@ function WorldInstanceService:CreateWorldForPlayer(Player: Player): WorldInstanc
 		return nil
 	end
 
-	local Template = GetTemplate()
+	local TargetMapConfig = MapsConfig.GetMap(MapId) or MapsConfig.GetMap("MAP1")
+	local TemplateName = TargetMapConfig and TargetMapConfig.TemplateName or "MAP1"
+	local Template = GetTemplate(TemplateName)
 	if not Template then
 		self:RecoverPlayer(Player, "MissingWorldTemplate", false)
 		return nil
 	end
 
+	local TargetWorldId = TargetMapConfig and TargetMapConfig.MapId or "MAP1"
 	NextInstanceIndex = NextInstanceIndex + 1
-	local WorldInstanceId = `{World1Config.WorldId}_{Player.UserId}_{NextInstanceIndex}`
+	local WorldInstanceId = `{TargetWorldId}_{Player.UserId}_{NextInstanceIndex}`
 	local Cloned, RuntimeWorld = pcall(function()
 		return Template:Clone()
 	end)
@@ -274,15 +300,17 @@ function WorldInstanceService:CreateWorldForPlayer(Player: Player): WorldInstanc
 		return nil
 	end
 
+	local ObjectiveId = TargetMapConfig and TargetMapConfig.Objective.ObjectiveId or "WORLD1_SPIDER"
 	local WorldInstance: WorldInstance = {
 		WorldInstanceId = WorldInstanceId,
 		OwnerUserId = Player.UserId,
 		OwnerPlayer = Player,
 		Model = RuntimeWorld,
+		MapId = TargetWorldId,
 		ObjectiveInitialized = false,
 		ObjectiveActive = false,
 		ObjectiveCompleted = false,
-		ObjectiveId = World1Config.Objective.ObjectiveId,
+		ObjectiveId = ObjectiveId,
 		RewardState = "Inactive",
 		PendingRewardPrompt = nil,
 		Connections = {},
@@ -291,11 +319,12 @@ function WorldInstanceService:CreateWorldForPlayer(Player: Player): WorldInstanc
 	Session.CurrentWorldInstanceId = WorldInstanceId
 	WorldInstances.Set(Player, WorldInstance)
 
-	local SpawnOffset = World1Config.RuntimeOffset * NextInstanceIndex
+	local SpawnOffset = MapsConfig.RuntimeOffset * NextInstanceIndex
 	local Prepared = pcall(function()
 		RuntimeWorld.Name = WorldInstanceId
 		RuntimeWorld:SetAttribute("OwnerUserId", Player.UserId)
 		RuntimeWorld:SetAttribute("WorldInstanceId", WorldInstanceId)
+		RuntimeWorld:SetAttribute("MapId", TargetWorldId)
 		RuntimeWorld.Parent = GetRuntimeFolder()
 
 		if RuntimeWorld:IsA("Model") then
@@ -351,11 +380,13 @@ function WorldInstanceService:CreateWorldForPlayer(Player: Player): WorldInstanc
 		return nil
 	end
 
+	local ObjectiveText = TargetMapConfig and TargetMapConfig.Objective.Text or "Stomp the Objective"
+	local ObjectiveReward = TargetMapConfig and TargetMapConfig.Objective.Reward or "+1 Destruction"
 	local Presented = pcall(function()
-		Player:SetAttribute("CurrentWorldId", World1Config.WorldId)
+		Player:SetAttribute("CurrentWorldId", TargetWorldId)
 		Player:SetAttribute("ObjectiveActive", false)
-		Player:SetAttribute("ObjectiveText", World1Config.Objective.Text)
-		Player:SetAttribute("ObjectiveReward", World1Config.Objective.Reward)
+		Player:SetAttribute("ObjectiveText", ObjectiveText)
+		Player:SetAttribute("ObjectiveReward", ObjectiveReward)
 	end)
 	if not Presented then
 		self:RecoverPlayer(Player, "ObjectivePresentationFailed", false)
@@ -363,6 +394,32 @@ function WorldInstanceService:CreateWorldForPlayer(Player: Player): WorldInstanc
 	end
 
 	return WorldInstance
+end
+
+function WorldInstanceService:CreateWorldForPlayer(Player: Player): WorldInstance?
+	return self:CreateWorld(Player, "MAP1")
+end
+
+function WorldInstanceService:EnterWorld(Player: Player, WorldInstance: WorldInstance?): boolean
+	local Session = Sessions.Get(Player)
+	local TargetWorld = WorldInstance or WorldInstances.Get(Player)
+	if not Session or not TargetWorld or TargetWorld.OwnerPlayer ~= Player then
+		return false
+	end
+
+	local SessionServiceFound, SessionService = pcall(function()
+		return ServiceRegistry.Get("SessionService")
+	end)
+	if not SessionServiceFound or not SessionService then
+		return false
+	end
+
+	local Transitioned = SessionService:TransitionState(Player, "EnteringWorld", "InWorld")
+	if not Transitioned then
+		return false
+	end
+
+	return self:ActivateWorld(Player)
 end
 
 function WorldInstanceService:ActivateWorld(Player: Player): boolean
@@ -395,7 +452,7 @@ end
 function WorldInstanceService:ReturnPlayerToLobby(Player: Player): boolean
 	local ReturnMarker = GetReturnMarker()
 	if not ReturnMarker then
-		LogFailure(Player, nil, "Missing Big Island.ReturnSpawn")
+		LogFailure(Player, nil, "Missing Lobby ReturnSpawn")
 		return false
 	end
 

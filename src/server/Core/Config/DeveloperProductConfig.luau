@@ -58,6 +58,18 @@ local DeveloperProductConfig: { [string]: ProductConfig } = {
 		AnalyticsKey = "Bigger_10M",
 		Surface = "Shop",
 	},
+	BuySpins5 = {
+		ProductId = 0,
+		Rewards = {
+			{
+				Type = RewardType.SpinTokens,
+				Amount = 5,
+			},
+		},
+		AnalyticsKey = "BuySpins5",
+		Surface = "PortalOnly",
+		Price = 49,
+	},
 	World1TripleReward = {
 		ProductId = 0,
 		Rewards = {
@@ -69,6 +81,30 @@ local DeveloperProductConfig: { [string]: ProductConfig } = {
 		AnalyticsKey = "World1_Triple_Reward",
 		Surface = "PortalOnly",
 		Price = 29,
+	},
+	World2TripleReward = {
+		ProductId = 0,
+		Rewards = {
+			{
+				Type = RewardType.Destruction,
+				Amount = 15,
+			},
+		},
+		AnalyticsKey = "World2_Triple_Reward",
+		Surface = "PortalOnly",
+		Price = 45,
+	},
+	World3TripleReward = {
+		ProductId = 0,
+		Rewards = {
+			{
+				Type = RewardType.Destruction,
+				Amount = 60,
+			},
+		},
+		AnalyticsKey = "World3_Triple_Reward",
+		Surface = "PortalOnly",
+		Price = 60,
 	},
 	SkipRebirth = {
 		ProductId = 0,

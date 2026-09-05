@@ -5,7 +5,13 @@ local Players = game:GetService("Players")
 --// Requirings \\--
 local MovementConfig = require(script.Parent.Parent.Config.MovementConfig)
 local Sessions = require(script.Parent.Parent.Parent.Core.Registry.RuntimeRegistry.Sessions)
-local MovementValidation = require(game:GetService("ReplicatedStorage").BiggerShared.Core.Utilities.MovementValidation)
+local MovementValidation = require(
+	game:GetService("ReplicatedStorage")
+		:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Utilities")
+		:WaitForChild("MovementValidation")
+)
 local GrowthSource = require(
 	game:GetService("ReplicatedStorage")
 		:WaitForChild("BiggerShared")
@@ -86,7 +92,7 @@ local function ProcessMovement()
 			continue
 		end
 
-		State.AccumulatedDistance = 0
+		State.AccumulatedDistance = math.max(0, State.AccumulatedDistance - MovementConfig.DistanceThreshold)
 		State.LastRewardTime = CurrentTime
 		GrowthService:AddBigger(Player, {
 			BaseGain = MovementConfig.BaseGain,

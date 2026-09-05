@@ -3,14 +3,17 @@
 
 local Players = game:GetService("Players")
 local Debris = game:GetService("Debris")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 --// Requirings \\--
 
 local Sessions = require(script.Parent.Parent.Parent.Core.Registry.RuntimeRegistry.Sessions)
 local ServiceRegistry = require(script.Parent.Parent.Parent.Core.Registry.ServiceRegistry)
 local Logger = require(script.Parent.Parent.Parent.Core.Utilities.Logger)
-local World1Config = require(script.Parent.Parent.Config.World1Config)
-local StompValidation = require(game:GetService("ReplicatedStorage").BiggerShared.Core.Utilities.StompValidation)
+local MapsConfig = require(script.Parent.Parent.Config.MapsConfig)
+local StompValidation = require(ReplicatedStorage.BiggerShared.Core.Utilities.StompValidation)
+local ScaleCurve = require(ReplicatedStorage.BiggerShared.Core.Utilities.ScaleCurve)
+local ScaleConfig = require(ReplicatedStorage.BiggerShared.Core.Config.ScaleConfig)
 
 --// Variables \\--
 
@@ -39,25 +42,52 @@ local function GetRootPart(Player: Player): BasePart?
 	return nil
 end
 
-local function GetHitbox(WorldModel: Instance): BasePart?
-	local Spider = WorldModel:FindFirstChild(World1Config.Objective.ModelName, true)
-	if not Spider then
-		return nil
+local function GetHitbox(WorldModel: Instance, TargetModelName: string?): (BasePart?, Model?)
+	if TargetModelName and TargetModelName ~= "" then
+		local TargetModel = WorldModel:FindFirstChild(TargetModelName, true)
+		if TargetModel then
+			local Hitbox = TargetModel:FindFirstChild("ObjectiveHitbox", true)
+			if Hitbox and Hitbox:IsA("BasePart") then
+				return Hitbox, if TargetModel:IsA("Model") then TargetModel else nil
+			end
+		end
 	end
 
-	local Hitbox = Spider:FindFirstChild(World1Config.Objective.HitboxName)
-	if Hitbox and Hitbox:IsA("BasePart") then
-		return Hitbox
+	-- Generic discovery: find any ObjectiveHitbox part in the instance
+	local GenericHitbox = WorldModel:FindFirstChild("ObjectiveHitbox", true)
+	if GenericHitbox and GenericHitbox:IsA("BasePart") then
+		local OwningModel = GenericHitbox:FindFirstAncestorOfClass("Model")
+		return GenericHitbox, OwningModel
 	end
 
-	return nil
+	return nil, nil
 end
 
-local function IsValidStomp(Player: Player, Hitbox: BasePart): boolean
+local function GetMapConfigForInstance(WorldInstance: any): MapsConfig.MapDefinition?
+	local MapId = WorldInstance.MapId
+	if not MapId and WorldInstance.Model then
+		MapId = WorldInstance.Model:GetAttribute("MapId")
+	end
+	return MapsConfig.GetMap(MapId or "MAP1")
+end
+
+local function IsValidStomp(Player: Player, Hitbox: BasePart, ObjectiveConfig: MapsConfig.ObjectiveConfig?): boolean
 	local RootPart = GetRootPart(Player)
 	if not RootPart then
 		return false
 	end
+
+	local Session = Sessions.Get(Player)
+	local Bigger = if Session then Session.Bigger else 1
+	local RawVisualScale = ScaleCurve.GetVisualScale(Bigger, ScaleConfig.Formula, ScaleConfig.CurveParameter)
+	local VisualScale = math.clamp(RawVisualScale, ScaleConfig.MinVisualScale, ScaleConfig.MaxVisualScale)
+
+	local MaxHeight = if ObjectiveConfig then ObjectiveConfig.MaximumRootHeight else 8
+	local Padding = if ObjectiveConfig then ObjectiveConfig.HorizontalPadding else 1
+	local MinVelocity = if ObjectiveConfig then ObjectiveConfig.MinimumDownwardVelocity else -2
+
+	local ScaledMaxHeight = MaxHeight * VisualScale
+	local ScaledHorizontalPadding = Padding * VisualScale
 
 	local LocalPosition = Hitbox.CFrame:PointToObjectSpace(RootPart.Position)
 	local HalfSize = Hitbox.Size / 2
@@ -68,10 +98,10 @@ local function IsValidStomp(Player: Player, Hitbox: BasePart): boolean
 		HalfSize.X,
 		HalfSize.Y,
 		HalfSize.Z,
-		World1Config.Objective.HorizontalPadding,
-		World1Config.Objective.MaximumRootHeight,
+		ScaledHorizontalPadding,
+		ScaledMaxHeight,
 		RootPart.AssemblyLinearVelocity.Y,
-		World1Config.Objective.MinimumDownwardVelocity
+		MinVelocity
 	)
 end
 
@@ -85,14 +115,17 @@ local function SyncDestruction(Player: Player, Destruction: number)
 	end
 end
 
-local function BreakSpider(WorldModel: Instance, Hitbox: BasePart)
-	local Spider = WorldModel:FindFirstChild(World1Config.Objective.ModelName, true)
-	if not Spider then
+local function BreakObjective(WorldModel: Instance, Hitbox: BasePart, ModelName: string?)
+	local TargetModel = if ModelName then WorldModel:FindFirstChild(ModelName, true) else nil
+	if not TargetModel then
+		TargetModel = Hitbox:FindFirstAncestorOfClass("Model")
+	end
+	if not TargetModel then
 		return
 	end
 
 	local FragmentIndex = 0
-	for _, Descendant in Spider:GetDescendants() do
+	for _, Descendant in TargetModel:GetDescendants() do
 		if Descendant:IsA("BasePart") and Descendant ~= Hitbox then
 			FragmentIndex += 1
 			local OffsetX = Descendant.Position.X - Hitbox.Position.X
@@ -109,10 +142,10 @@ local function BreakSpider(WorldModel: Instance, Hitbox: BasePart)
 			Descendant.CanTouch = false
 			Descendant.CanQuery = false
 			Descendant.Anchored = false
-			Descendant.AssemblyLinearVelocity = Vector3.new(OffsetX / Magnitude * 10, 8, OffsetZ / Magnitude * 10)
+			Descendant.AssemblyLinearVelocity = Vector3.new(OffsetX / Magnitude * 12, 10, OffsetZ / Magnitude * 12)
 			Descendant.AssemblyAngularVelocity =
-				Vector3.new((FragmentIndex % 3 - 1) * 1.5, 2, (FragmentIndex % 2 * 2 - 1) * 1.5)
-			Debris:AddItem(Descendant, 2)
+				Vector3.new((FragmentIndex % 3 - 1) * 2.5, 3, (FragmentIndex % 2 * 2 - 1) * 2.5)
+			Debris:AddItem(Descendant, 2.5)
 		end
 	end
 end
@@ -155,14 +188,22 @@ function DestructionService:GrantDestruction(Player: Player, Amount: number): bo
 	return true
 end
 
+function DestructionService:DeductDestruction(_Player: Player, _Amount: number): boolean
+	Logger.Warn("Destruction", "DeductDestruction is deprecated; Destruction cannot be spent or deducted.")
+	return false
+end
+
 function DestructionService:BindWorld(WorldInstance, WorldInstanceService)
-	local Hitbox = GetHitbox(WorldInstance.Model)
+	local MapConfig = GetMapConfigForInstance(WorldInstance)
+	local TargetModelName = MapConfig and MapConfig.Objective.ModelName or nil
+	local Hitbox = GetHitbox(WorldInstance.Model, TargetModelName)
 	if not Hitbox then
 		Logger.Warn(
 			"Destruction",
-			"Spider.ObjectiveHitbox missing for PlayerUserId=%d WorldInstanceId=%s",
+			"ObjectiveHitbox missing for PlayerUserId=%d WorldInstanceId=%s TargetModel=%s",
 			WorldInstance.OwnerUserId,
-			WorldInstance.WorldInstanceId
+			WorldInstance.WorldInstanceId,
+			TargetModelName or "Generic"
 		)
 		return false
 	end
@@ -193,13 +234,76 @@ function DestructionService:ActivateWorld(WorldInstance): boolean
 	then
 		return false
 	end
-	local Hitbox = GetHitbox(WorldInstance.Model)
+	local MapConfig = GetMapConfigForInstance(WorldInstance)
+	local Hitbox = GetHitbox(WorldInstance.Model, MapConfig and MapConfig.Objective.ModelName)
 	if not Hitbox then
 		return false
 	end
 	WorldInstance.ObjectiveInitialized = true
 	WorldInstance.ObjectiveActive = true
 	Hitbox.CanTouch = true
+	return true
+end
+
+function DestructionService:CompleteObjective(WorldInstance, WorldInstanceService): boolean
+	local Player = WorldInstance.OwnerPlayer
+	if not Player then
+		return false
+	end
+
+	local Session = Sessions.Get(Player)
+	if not Session or Session.ProfileMutationsFrozen or Session.State ~= "InWorld" then
+		return false
+	end
+	if Session.CurrentWorldInstanceId ~= WorldInstance.WorldInstanceId then
+		return false
+	end
+	if
+		not WorldInstance.ObjectiveInitialized
+		or not WorldInstance.ObjectiveActive
+		or WorldInstance.ObjectiveCompleted
+	then
+		return false
+	end
+
+	WorldInstance.ObjectiveCompleted = true
+	WorldInstance.ObjectiveActive = false
+
+	local MapConfig = GetMapConfigForInstance(WorldInstance)
+	local TargetModelName = MapConfig and MapConfig.Objective.ModelName
+	local Hitbox = GetHitbox(WorldInstance.Model, TargetModelName)
+	if Hitbox then
+		Hitbox.CanTouch = false
+		Hitbox.CanCollide = false
+		Hitbox.CanQuery = false
+	end
+	Player:SetAttribute("ObjectiveActive", false)
+
+	local EffectSuccess = pcall(function()
+		if Hitbox then
+			BreakObjective(WorldInstance.Model, Hitbox, TargetModelName)
+		end
+	end)
+	if not EffectSuccess then
+		Logger.Warn(
+			"Destruction",
+			"Destruction effect failed for PlayerUserId=%d WorldInstanceId=%s",
+			Player.UserId,
+			WorldInstance.WorldInstanceId
+		)
+	end
+	local RewardServiceFound, RewardPortalService = pcall(function()
+		return ServiceRegistry.Get("RewardPortalService")
+	end)
+	local Activated, ActivationSuccess = pcall(function()
+		return RewardServiceFound
+			and RewardPortalService
+			and RewardPortalService:ActivateChoices(WorldInstance, WorldInstanceService)
+	end)
+	if not Activated or not ActivationSuccess then
+		WorldInstanceService:RecoverPlayer(Player, "RewardChoiceActivationFailed", false)
+		return false
+	end
 	return true
 end
 
@@ -223,39 +327,13 @@ function DestructionService:TryCompleteObjective(WorldInstance, Hitbox: BasePart
 	then
 		return
 	end
-	if not IsValidStomp(Player, Hitbox) then
+
+	local MapConfig = GetMapConfigForInstance(WorldInstance)
+	if not IsValidStomp(Player, Hitbox, MapConfig and MapConfig.Objective) then
 		return
 	end
 
-	WorldInstance.ObjectiveCompleted = true
-	WorldInstance.ObjectiveActive = false
-	Hitbox.CanTouch = false
-	Hitbox.CanCollide = false
-	Hitbox.CanQuery = false
-	Player:SetAttribute("ObjectiveActive", false)
-	local EffectSuccess = pcall(function()
-		BreakSpider(WorldInstance.Model, Hitbox)
-	end)
-	if not EffectSuccess then
-		Logger.Warn(
-			"Destruction",
-			"Destruction effect failed for PlayerUserId=%d WorldInstanceId=%s",
-			Player.UserId,
-			WorldInstance.WorldInstanceId
-		)
-	end
-	local RewardServiceFound, RewardPortalService = pcall(function()
-		return ServiceRegistry.Get("RewardPortalService")
-	end)
-	local Activated, ActivationSuccess = pcall(function()
-		return RewardServiceFound
-			and RewardPortalService
-			and RewardPortalService:ActivateChoices(WorldInstance, WorldInstanceService)
-	end)
-	if not Activated or not ActivationSuccess then
-		WorldInstanceService:RecoverPlayer(Player, "RewardChoiceActivationFailed", false)
-		return
-	end
+	self:CompleteObjective(WorldInstance, WorldInstanceService)
 end
 
 return DestructionService

@@ -11,6 +11,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Sessions = require(script.Parent.Parent.Parent.Core.Registry.RuntimeRegistry.Sessions)
 local ServiceRegistry = require(script.Parent.Parent.Parent.Core.Registry.ServiceRegistry)
 local Logger = require(script.Parent.Parent.Parent.Core.Utilities.Logger)
+local RebirthTypes = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Types")
+		:WaitForChild("RebirthTypes")
+)
 local RebirthConfig = require(
 	ReplicatedStorage:WaitForChild("BiggerShared")
 		:WaitForChild("Game")
@@ -33,24 +39,8 @@ local GrowthFormula = require(script.Parent.Parent.Formula.GrowthFormula)
 
 --// Types \\--
 type Session = Sessions.Session
-type RebirthTierSnapshot = {
-	RequiredSize: number,
-	GrowthMultiplier: number,
-}
-type RebirthUpdate = {
-	Version: number,
-	Timestamp: number,
-	CurrentSize: number,
-	RequiredSize: number,
-	CurrentLevel: number,
-	RequiredLevel: number,
-	GrowthMultiplier: number,
-	NextGrowthMultiplier: number,
-	Rebirths: number,
-	CanRebirth: boolean,
-	PreviewTiers: { RebirthTierSnapshot },
-	Error: string,
-}
+type RebirthTierSnapshot = RebirthTypes.RebirthTierSnapshot
+type RebirthUpdate = RebirthTypes.RebirthUpdate
 
 --// Variables \\--
 local RebirthCooldowns: { [Player]: number } = {}
@@ -119,7 +109,7 @@ local function BuildPreviewTiers(CurrentRebirths: number): { RebirthTierSnapshot
 	local Tiers: { RebirthTierSnapshot } = {}
 	for i = 0, RebirthConfig.MaxPreviewTiers - 1 do
 		local FutureRebirths = CurrentRebirths + 1 + i
-		local FutureReqLevel = CalculateRequiredLevel(FutureRebirths)
+		local FutureReqLevel = CalculateRequiredLevel(CurrentRebirths + i)
 		table.insert(Tiers, {
 			RequiredSize = CalculateRequiredSize(FutureReqLevel),
 			GrowthMultiplier = math.max(1, FutureRebirths + 1),
@@ -321,6 +311,9 @@ local function SubscribeEventBus()
 	EventBus.Subscribe("PlayerSessionCreated", function(Player: Player)
 		OnSessionCreated(Player)
 	end)
+	EventBus.Subscribe("BiggerChanged", function(Player: Player)
+		PushUpdate(Player, nil)
+	end)
 end
 
 --// Service \\--
@@ -335,7 +328,7 @@ function RebirthService:Init()
 	RequestRebirthRemote.OnServerEvent:Connect(function(Client: Player, Action: any)
 		OnRequestRebirth(Client, Action)
 	end)
-	
+
 	RequestSkipRebirthRemote.OnServerEvent:Connect(function(Client: Player)
 		OnRequestSkipRebirth(Client)
 	end)

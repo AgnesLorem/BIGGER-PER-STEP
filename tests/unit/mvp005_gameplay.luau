@@ -162,7 +162,19 @@ local function loadCharacterScaleService(BiggerValues)
 			Callback(...)
 		end
 	end
-	local ScaleCurve = require("../../src/shared/Core/Utilities/ScaleCurve")
+	local BalanceConfig = loadModule("src/shared/Game/Progression/BalanceConfig.luau", "BalanceConfig")
+	local LevelFormula = loadModule("src/shared/Game/Progression/LevelFormula.luau", "LevelFormula", {
+		script = { Parent = { BalanceConfig = BalanceConfig } },
+		require = function()
+			return BalanceConfig
+		end,
+	})
+	local ScaleCurve = loadModule("src/shared/Core/Utilities/ScaleCurve.luau", "ScaleCurve", {
+		script = { Parent = { Parent = { Parent = { Game = { Progression = { LevelFormula = LevelFormula } } } } } },
+		require = function()
+			return LevelFormula
+		end,
+	})
 	local ScaleConfig = require("../../src/shared/Core/Config/ScaleConfig")
 	local ReplicatedStorage = childContainer({
 		BiggerShared = childContainer({
@@ -1653,9 +1665,15 @@ end
 
 local function loadGrowthService(GrowthFormula)
 	local GrowthTypes = {}
+	local LevelFormula = {
+		GetLevel = function(Bigger: number)
+			return 1
+		end,
+	}
 	local ReplicatedStorage = childContainer({
 		BiggerShared = childContainer({
 			Core = childContainer({ Types = childContainer({ GrowthTypes = GrowthTypes }) }),
+			Game = childContainer({ Progression = childContainer({ LevelFormula = LevelFormula }) }),
 		}),
 	})
 	local EventBus = { Publish = function() end }

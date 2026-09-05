@@ -40,12 +40,28 @@ type ViewportProfile = ResponsiveController.ViewportProfile
 local LocalPlayer = Players.LocalPlayer
 local GuiController = {}
 
+local QUARANTINED_BUTTONS: { [string]: boolean } = {
+	Daily = true,
+	DailyReward = true,
+	DailyRewards = true,
+	Spin = true,
+	SpinWheel = true,
+	LuckySpin = true,
+	Cosmetics = true,
+	Trails = true,
+	Titles = true,
+	CosmeticShop = true,
+	AutoWins = true,
+	AutoWin = true,
+	Auto = true,
+}
+
 --// Referencing \\--
 local ScreenGui: ScreenGui
 local LevelLabel: TextLabel
 local ProgressFill: ImageLabel
 local ProgressTextLabel: TextLabel
-local ProgressStatsLabel: TextLabel
+local ProgressStatsLabel: TextLabel?
 
 local LeftSidebar: Frame
 local BottomHUD: Frame
@@ -57,7 +73,8 @@ local SelectionOutline: Frame
 --// Helpers \\--
 local function CalculateLevelProgress(bigger: number): (number, number)
 	local derivedLevel = LevelFormula.GetLevel(bigger)
-	local ratio = LevelFormula.GetProgress(bigger)
+	local progressData = LevelFormula.GetProgress(bigger)
+	local ratio = if type(progressData) == "table" then progressData.Progress else (progressData or 0)
 	local _, nextLevelReq = LevelFormula.GetCurrentRange(derivedLevel)
 	return ratio, nextLevelReq
 end
@@ -66,26 +83,30 @@ local function UpdateHUD()
 	local bigger = LocalPlayer:GetAttribute("Bigger") or 1
 	local multiplier = LocalPlayer:GetAttribute("Multiplier") or 1
 
-	LevelLabel.Text = FormatNumber(bigger) .. " BIGGER"
+	if LevelLabel then
+		LevelLabel.Text = FormatNumber(bigger) .. " BIGGER"
+	end
 
 	local ratio, nextLevelReq = CalculateLevelProgress(bigger)
 	if ProgressStatsLabel then
 		ProgressStatsLabel.Text = FormatNumber(bigger) .. " / " .. FormatNumber(nextLevelReq)
 	end
 
-	-- Hide progress fill if player has no size points yet (starting state)
-	if bigger <= 1 then
-		ProgressFill.Visible = false
-		ProgressFill.Size = UDim2.new(0, 0, 1, 0)
-	else
-		ProgressFill.Visible = true
-		-- Animate progress fill size inside the BarContainer
-		TweenService:Create(ProgressFill, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Size = UDim2.new(ratio, 0, 1, 0),
-		}):Play()
+	if ProgressFill then
+		if bigger <= 1 then
+			ProgressFill.Visible = false
+			ProgressFill.Size = UDim2.fromScale(0, 1)
+		else
+			ProgressFill.Visible = true
+			TweenService:Create(ProgressFill, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Size = UDim2.fromScale(ratio, 1),
+			}):Play()
+		end
 	end
 
-	ProgressTextLabel.Text = tostring(multiplier) .. "X Multiplier"
+	if ProgressTextLabel then
+		ProgressTextLabel.Text = tostring(multiplier) .. "X Multiplier"
+	end
 end
 
 -- Hook up hover scaling animations to a button
@@ -115,7 +136,7 @@ local function ApplyHoverAnimation(button: ImageButton)
 	end)
 
 	button.MouseButton1Up:Connect(function()
-		TweenService:Create(uiScale, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		TweenService:Create(uiScale, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			Scale = 1.1,
 		}):Play()
 	end)
@@ -149,7 +170,7 @@ local function ConfigureGamepadNavigation()
 		for i, btn in ipairs(leftButtons) do
 			btn.SelectionImageObject = SelectionOutline
 			btn.SelectionGroup = true
-			
+
 			if numLeft <= 2 then
 				local prev = leftButtons[i - 1] or leftButtons[numLeft]
 				local next = leftButtons[i + 1] or leftButtons[1]
@@ -161,14 +182,16 @@ local function ConfigureGamepadNavigation()
 				local isLeftCol = (i % 2 == 1)
 				local partnerIdx = isLeftCol and (i + 1) or (i - 1)
 				local partner = leftButtons[partnerIdx] or btn
-				
+
 				btn.NextSelectionLeft = isLeftCol and partner or btn
 				btn.NextSelectionRight = isLeftCol and partner or ((#bottomButtons > 0) and bottomButtons[1] or btn)
-				
+
 				local upIdx = i - 2
 				if upIdx < 1 then
 					upIdx = (numLeft % 2 == 0) and (numLeft - (2 - i)) or (numLeft - (1 - i % 2))
-					if upIdx > numLeft then upIdx = numLeft end
+					if upIdx > numLeft then
+						upIdx = numLeft
+					end
 				end
 				local downIdx = i + 2
 				if downIdx > numLeft then
@@ -233,23 +256,27 @@ local function ApplyProfile(profile: ViewportProfile)
 	if RightSidebar then
 		RightSidebar.Visible = (layout.RightSidebarMode ~= "Hidden")
 		if RightSidebar.Visible then
-			RightSidebar.Size = UDim2.new(layout.SidebarWidthScale, 0, RightSidebar.Size.Y.Scale, RightSidebar.Size.Y.Offset)
+			RightSidebar.Size =
+				UDim2.new(layout.SidebarWidthScale, 0, RightSidebar.Size.Y.Scale, RightSidebar.Size.Y.Offset)
 			if layout.RightSidebarMode == "Collapsed" then
 				UIEventBus.Publish("SidebarCollapsed", "RightSidebar")
 			end
 		end
 	end
 
-	-- 2. Apply BottomHUD layout
+	-- 2. Apply BottomHUD layout (Centered horizontally)
 	BottomHUD.Size = UDim2.new(BottomHUD.Size.X.Scale, BottomHUD.Size.X.Offset, layout.HUDHeightScale, 0)
-	
+	BottomHUD.Position = UDim2.new(0.5, 0, 1, -10)
+	BottomHUD.AnchorPoint = Vector2.new(0.5, 1)
+
 	ProgressBarFrame.Visible = (layout.BottomHUDStyle == "Full")
+	ButtonsContainer.AnchorPoint = Vector2.new(0.5, 0)
 	if layout.BottomHUDStyle == "Compact" then
-		ButtonsContainer.Position = UDim2.new(0, 0, 0, 0)
-		ButtonsContainer.Size = UDim2.new(1, 0, 1, 0)
+		ButtonsContainer.Position = UDim2.fromScale(0.5, 0)
+		ButtonsContainer.Size = UDim2.fromScale(1, 1)
 	else
-		ButtonsContainer.Position = UDim2.new(0, 0, 0.65, 0)
-		ButtonsContainer.Size = UDim2.new(1, 0, 0.35, 0)
+		ButtonsContainer.Position = UDim2.fromScale(0.5, 0.58)
+		ButtonsContainer.Size = UDim2.fromScale(1, 0.42)
 	end
 
 	-- 3. Configure Gamepad Navigation
@@ -262,7 +289,7 @@ end
 --// Initialization \\--
 function GuiController.Init()
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-	ScreenGui = playerGui:WaitForChild("MainHUD") :: ScreenGui
+	ScreenGui = playerGui:WaitForChild("MainHUD", 10) :: ScreenGui
 	local safeAreaRoot = ScreenGui:WaitForChild("SafeAreaRoot")
 	local persistentHUD = safeAreaRoot:WaitForChild("PersistentHUD")
 
@@ -270,8 +297,8 @@ function GuiController.Init()
 	SelectionOutline = Instance.new("Frame")
 	SelectionOutline.Name = "SelectionOutline"
 	SelectionOutline.BackgroundTransparency = 1
-	SelectionOutline.Size = UDim2.new(1, 0, 1, 0)
-	SelectionOutline.Position = UDim2.new(0, 0, 0, 0)
+	SelectionOutline.Size = UDim2.fromScale(1, 1)
+	SelectionOutline.Position = UDim2.fromScale(0, 0)
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = Color3.fromRGB(255, 200, 0)
 	stroke.Thickness = 3
@@ -283,13 +310,14 @@ function GuiController.Init()
 
 	LeftSidebar = persistentHUD:WaitForChild("LeftSidebar") :: Frame
 	for _, child in ipairs(LeftSidebar:GetChildren()) do
+		if child:IsA("GuiObject") and QUARANTINED_BUTTONS[child.Name] then
+			child.Visible = false
+			child.Active = false
+			continue
+		end
 		if child:IsA("ImageButton") then
 			ApplyHoverAnimation(child)
 			child.MouseButton1Click:Connect(function()
-				if child.Name == "Rebirth" then
-					local RebirthController = require(script.Parent:WaitForChild("RebirthController"))
-					RebirthController.Open()
-				end
 				UIEventBus.Publish("SidebarButtonClicked", child.Name)
 			end)
 		end
@@ -297,19 +325,24 @@ function GuiController.Init()
 
 	-- Reference BottomHUD
 	BottomHUD = persistentHUD:WaitForChild("BottomHUD") :: Frame
+	BottomHUD.AnchorPoint = Vector2.new(0.5, 1)
+	BottomHUD.Position = UDim2.new(0.5, 0, 1, -10)
 
 	-- Reference Progress Bar components
 	ProgressBarFrame = BottomHUD:WaitForChild("ProgressBarFrame") :: Frame
-	local progressBG = ProgressBarFrame:WaitForChild("ProgressBG") :: ImageLabel
+	LevelLabel = ProgressBarFrame:WaitForChild("LevelLabel") :: TextLabel
+	ProgressTextLabel = ProgressBarFrame:WaitForChild("ProgressTextLabel") :: TextLabel
 
-	LevelLabel = progressBG:WaitForChild("LevelLabel") :: TextLabel
+	local progressBG = ProgressBarFrame:WaitForChild("ProgressBG") :: ImageLabel
 	local barContainer = progressBG:WaitForChild("BarContainer") :: Frame
 	ProgressFill = barContainer:WaitForChild("ProgressFill") :: ImageLabel
-	ProgressTextLabel = progressBG:WaitForChild("ProgressTextLabel") :: TextLabel
-	ProgressStatsLabel = progressBG:WaitForChild("ProgressStatsLabel") :: TextLabel
+	ProgressStatsLabel = progressBG:FindFirstChild("ProgressStatsLabel") :: TextLabel?
 
 	-- Reference Bottom Buttons (Developer Products)
 	ButtonsContainer = BottomHUD:WaitForChild("ButtonsContainer") :: Frame
+	ButtonsContainer.AnchorPoint = Vector2.new(0.5, 0)
+	ButtonsContainer.Position = UDim2.fromScale(0.5, 0.58)
+
 	for _, child in ipairs(ButtonsContainer:GetChildren()) do
 		if child:IsA("ImageButton") then
 			ApplyHoverAnimation(child)
@@ -383,10 +416,13 @@ function GuiController.Init()
 			end
 		end
 	end)
+
+	-- Immediate initial HUD update on Init
+	UpdateHUD()
 end
 
 function GuiController.Start()
-	-- Connect attribute changed signals to update HUD
+	-- Connect attribute changed signals for real-time HUD update
 	LocalPlayer:GetAttributeChangedSignal("Bigger"):Connect(UpdateHUD)
 	LocalPlayer:GetAttributeChangedSignal("Level"):Connect(UpdateHUD)
 	LocalPlayer:GetAttributeChangedSignal("Multiplier"):Connect(UpdateHUD)

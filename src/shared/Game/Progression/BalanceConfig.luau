@@ -29,8 +29,10 @@ local Stages: { StageConfig } = {
 		MinLevel = 1,
 		MaxLevel = 20,
 		BaseRequirement = 0,
-		CalculateRequirement = function(Level: number, BaseRequirement: number): number
-			if Level <= 1 then return 0 end
+		CalculateRequirement = function(Level: number, _BaseRequirement: number): number
+			if Level <= 1 then
+				return 0
+			end
 			return 5 + (Level - 2) -- Linear: 5, 6, 7, 8, 9...
 		end,
 	},

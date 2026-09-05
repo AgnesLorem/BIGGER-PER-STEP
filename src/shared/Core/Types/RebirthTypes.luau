@@ -25,9 +25,14 @@ export type RebirthUpdate = {
 	Timestamp: number,
 	CurrentSize: number,
 	RequiredSize: number,
+	CurrentLevel: number,
+	RequiredLevel: number,
 	GrowthMultiplier: number,
+	NextGrowthMultiplier: number,
 	Rebirths: number,
 	CanRebirth: boolean,
 	PreviewTiers: { RebirthTierSnapshot },
 	Error: string,
 }
+
+return {}

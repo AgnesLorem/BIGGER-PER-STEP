@@ -36,7 +36,6 @@ local ShopUIConfig: { [string]: ShopItem } = {
 		Icon = "rbxassetid://88201938796604",
 		SortOrder = 3,
 	},
-
 }
 
 return table.freeze(ShopUIConfig)

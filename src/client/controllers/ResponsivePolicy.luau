@@ -16,7 +16,12 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 --// Requirings \\--
-local ResponsiveConfig = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Config"):WaitForChild("ResponsiveConfig"))
+local ResponsiveConfig = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Config")
+		:WaitForChild("ResponsiveConfig")
+)
 
 --// Types \\--
 type Category = ResponsiveConfig.Category

@@ -26,7 +26,12 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 --// Requirings \\--
-local ResponsiveConfig = require(ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Config"):WaitForChild("ResponsiveConfig"))
+local ResponsiveConfig = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Config")
+		:WaitForChild("ResponsiveConfig")
+)
 
 --// Types \\--
 type Category = ResponsiveConfig.Category
@@ -53,7 +58,7 @@ export type ViewportProfile = {
 
 type Callback = (...any) -> ()
 export type SignalConnection = {
-	Disconnect: (self: SignalConnection) -> ()
+	Disconnect: (self: SignalConnection) -> (),
 }
 
 type Signal = {
@@ -80,7 +85,7 @@ local function CreateSignal(): Signal
 	function signalObj:Connect(callback: Callback): SignalConnection
 		table.insert(callbacks, callback)
 		local conn = {} :: SignalConnection
-		function conn:Disconnect()
+		conn.Disconnect = function()
 			local idx = table.find(callbacks, callback)
 			if idx then
 				table.remove(callbacks, idx)
@@ -111,7 +116,11 @@ ResponsiveController.ViewportChanged = CreateSignal()
 ResponsiveController.SafeAreaChanged = CreateSignal()
 ResponsiveController.ProfileChanged = CreateSignal()
 
-local function Classify(viewport: Vector2, displaySize: Enum.ViewportDisplaySize, inputMode: Enum.UserInputType): Category
+local function Classify(
+	viewport: Vector2,
+	displaySize: Enum.ViewportDisplaySize,
+	_inputMode: Enum.UserInputType
+): Category
 	local width = viewport.X
 	local height = viewport.Y
 	local aspect = width / height
@@ -172,10 +181,14 @@ end
 -- Recomputes and updates the profile snapshot. Fires changed signals.
 local function UpdateProfile()
 	local camera = CurrentCamera or Workspace.CurrentCamera
-	if not camera then return end
+	if not camera then
+		return
+	end
 
 	local viewport = camera.ViewportSize
-	if viewport.X <= 1 or viewport.Y <= 1 then return end
+	if viewport.X <= 1 or viewport.Y <= 1 then
+		return
+	end
 
 	local displaySize = Enum.DisplaySize.Large
 	pcall(function()
@@ -218,7 +231,8 @@ local function UpdateProfile()
 	-- Fire signals based on what changed
 	if oldProfile then
 		local viewportChanged = oldProfile.Width ~= newProfile.Width or oldProfile.Height ~= newProfile.Height
-		local safeAreaChanged = oldProfile.SafeArea.Min ~= newProfile.SafeArea.Min or oldProfile.SafeArea.Max ~= newProfile.SafeArea.Max
+		local safeAreaChanged = oldProfile.SafeArea.Min ~= newProfile.SafeArea.Min
+			or oldProfile.SafeArea.Max ~= newProfile.SafeArea.Max
 		local categoryChanged = oldProfile.Category ~= newProfile.Category
 
 		if categoryChanged then
@@ -232,10 +246,14 @@ local function UpdateProfile()
 		end
 
 		-- ProfileChanged fires if ANY profile field changed
-		if categoryChanged or viewportChanged or safeAreaChanged or
-			oldProfile.InputMode ~= newProfile.InputMode or
-			oldProfile.Accessibility.ReducedMotion ~= newProfile.Accessibility.ReducedMotion or
-			oldProfile.Accessibility.PreferredTransparency ~= newProfile.Accessibility.PreferredTransparency then
+		if
+			categoryChanged
+			or viewportChanged
+			or safeAreaChanged
+			or oldProfile.InputMode ~= newProfile.InputMode
+			or oldProfile.Accessibility.ReducedMotion ~= newProfile.Accessibility.ReducedMotion
+			or oldProfile.Accessibility.PreferredTransparency ~= newProfile.Accessibility.PreferredTransparency
+		then
 			ResponsiveController.ProfileChanged:Fire(CachedProfile)
 		end
 	else
@@ -276,12 +294,16 @@ function ResponsiveController.Init()
 	end)
 
 	-- Connect safe area related settings in GuiService
-	local ok1, sig1 = pcall(function() return GuiService:GetPropertyChangedSignal("TopbarInset") end)
+	local ok1, sig1 = pcall(function()
+		return GuiService:GetPropertyChangedSignal("TopbarInset")
+	end)
 	if ok1 and sig1 then
 		table.insert(GuiConnections, sig1:Connect(UpdateProfile))
 	end
 
-	local ok2, sig2 = pcall(function() return GuiService:GetPropertyChangedSignal("ReducedMotionEnabled") end)
+	local ok2, sig2 = pcall(function()
+		return GuiService:GetPropertyChangedSignal("ReducedMotionEnabled")
+	end)
 	if ok2 and sig2 then
 		table.insert(GuiConnections, sig2:Connect(UpdateProfile))
 	end
@@ -329,10 +351,10 @@ end
 
 function ResponsiveController:IsConsole(): boolean
 	local profile = self:GetProfile()
-	return profile.InputMode == Enum.UserInputType.Gamepad1 or
-		profile.InputMode == Enum.UserInputType.Gamepad2 or
-		profile.InputMode == Enum.UserInputType.Gamepad3 or
-		profile.InputMode == Enum.UserInputType.Gamepad4
+	return profile.InputMode == Enum.UserInputType.Gamepad1
+		or profile.InputMode == Enum.UserInputType.Gamepad2
+		or profile.InputMode == Enum.UserInputType.Gamepad3
+		or profile.InputMode == Enum.UserInputType.Gamepad4
 end
 
 function ResponsiveController:GetViewport(): Vector2
@@ -358,9 +380,9 @@ end
 
 function ResponsiveController:IsMouse(): boolean
 	local profile = self:GetProfile()
-	return profile.InputMode == Enum.UserInputType.MouseButton1 or
-		profile.InputMode == Enum.UserInputType.MouseButton2 or
-		profile.InputMode == Enum.UserInputType.MouseMovement
+	return profile.InputMode == Enum.UserInputType.MouseButton1
+		or profile.InputMode == Enum.UserInputType.MouseButton2
+		or profile.InputMode == Enum.UserInputType.MouseMovement
 end
 
 function ResponsiveController:IsGamepad(): boolean

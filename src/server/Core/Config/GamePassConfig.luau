@@ -5,9 +5,9 @@
 export type PassConfig = {
 	AssetId: number?,
 	Price: number,
-	ProfileKey: "HasVip" | "HasPremiumZonePass",
+	ProfileKey: "HasVip" | "HasPremiumZonePass" | "HasAutoWins",
 }
-export type PassKey = "Vip" | "PremiumZone"
+export type PassKey = "Vip" | "PremiumZone" | "AutoWins"
 
 local GamePassConfig: { [PassKey]: PassConfig } = {
 	Vip = table.freeze({
@@ -19,6 +19,11 @@ local GamePassConfig: { [PassKey]: PassConfig } = {
 		AssetId = 0,
 		Price = 99,
 		ProfileKey = "HasPremiumZonePass",
+	}),
+	AutoWins = table.freeze({
+		AssetId = 0,
+		Price = 149,
+		ProfileKey = "HasAutoWins",
 	}),
 }
 

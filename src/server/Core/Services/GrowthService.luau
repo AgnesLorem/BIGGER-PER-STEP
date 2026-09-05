@@ -13,13 +13,29 @@ local GrowthTypes = require(
 		:WaitForChild("Types")
 		:WaitForChild("GrowthTypes")
 )
-local LevelFormula = require(
-	game:GetService("ReplicatedStorage")
-		:WaitForChild("BiggerShared")
-		:WaitForChild("Game")
-		:WaitForChild("Progression")
-		:WaitForChild("LevelFormula")
-)
+local LevelFormula: any = nil
+pcall(function()
+	local BiggerShared = game:GetService("ReplicatedStorage"):WaitForChild("BiggerShared", 1)
+	if BiggerShared then
+		local GameFolder = BiggerShared:FindFirstChild("Game")
+			or (BiggerShared.WaitForChild and BiggerShared:WaitForChild("Game", 1))
+		if GameFolder then
+			local ProgressionFolder = GameFolder:FindFirstChild("Progression")
+				or (GameFolder.WaitForChild and GameFolder:WaitForChild("Progression", 1))
+			if ProgressionFolder then
+				LevelFormula = require(
+					ProgressionFolder:FindFirstChild("LevelFormula")
+						or ProgressionFolder:WaitForChild("LevelFormula", 1)
+				)
+			end
+		end
+	end
+end)
+if not LevelFormula then
+	pcall(function()
+		LevelFormula = require(script.Parent.Parent.Parent.Parent.shared.Game.Progression.LevelFormula)
+	end)
+end
 
 --// Types \\--
 type GrowthContext = GrowthTypes.GrowthContext
@@ -86,8 +102,12 @@ function GrowthService:SetBigger(Player: Player, Value: number): boolean
 
 	Player:SetAttribute("Bigger", NormalizedValue)
 
-	local Level = LevelFormula.GetLevel(Value)
+	local Level = if LevelFormula and LevelFormula.GetLevel
+		then LevelFormula.GetLevel(NormalizedValue)
+		else math.floor((NormalizedValue / 236) ^ 0.25) + 1
 	Player:SetAttribute("Level", Level)
+
+	self:UpdateMultiplierAttribute(Player)
 
 	local Leaderstats = Player:FindFirstChild("leaderstats")
 	local BiggerStat = Leaderstats and Leaderstats:FindFirstChild("Bigger")

@@ -13,7 +13,7 @@
 -- - LevelFormula.GetLevel(Bigger): number
 -- - LevelFormula.GetRequirement(Level): number
 -- - LevelFormula.GetCurrentRange(Level): (number, number)
--- - LevelFormula.GetProgress(Bigger): (number, number, number)
+-- - LevelFormula.GetProgress(Bigger): LevelProgress
 -- - LevelFormula.GetNextRequirement(Level): number
 -- Related:
 -- - ReplicatedStorage.BiggerShared.Game.Progression.BalanceConfig
@@ -21,6 +21,17 @@
 --// Requirings \\--
 
 local BalanceConfig = require(script.Parent.BalanceConfig)
+
+--// Types \\--
+
+export type LevelProgress = {
+	Level: number,
+	CurrentRequirement: number,
+	NextRequirement: number,
+	BiggerIntoLevel: number,
+	BiggerRequiredForNextLevel: number,
+	Progress: number,
+}
 
 --// Service \\--
 
@@ -37,7 +48,9 @@ function LevelFormula.GetRequirement(Level: number): number
 end
 
 function LevelFormula.GetLevel(Bigger: number): number
-	if Bigger < 5 then return 1 end
+	if Bigger < 5 then
+		return 1
+	end
 
 	-- Dynamic doubling to find search upper bound
 	local Low = 2
@@ -65,13 +78,21 @@ function LevelFormula.GetCurrentRange(Level: number): (number, number)
 	return LevelFormula.GetRequirement(Level), LevelFormula.GetRequirement(Level + 1)
 end
 
-function LevelFormula.GetProgress(Bigger: number): (number, number, number)
+function LevelFormula.GetProgress(Bigger: number): LevelProgress
 	local Level = LevelFormula.GetLevel(Bigger)
 	local StartBigger, TargetBigger = LevelFormula.GetCurrentRange(Level)
 	local CurrentProgress = math.max(0, Bigger - StartBigger)
 	local TotalRequired = math.max(1, TargetBigger - StartBigger)
 	local Ratio = math.clamp(CurrentProgress / TotalRequired, 0, 1)
-	return Ratio, CurrentProgress, TotalRequired
+
+	return {
+		Level = Level,
+		CurrentRequirement = StartBigger,
+		NextRequirement = TargetBigger,
+		BiggerIntoLevel = CurrentProgress,
+		BiggerRequiredForNextLevel = TotalRequired,
+		Progress = Ratio,
+	}
 end
 
 function LevelFormula.GetNextRequirement(Level: number): number
