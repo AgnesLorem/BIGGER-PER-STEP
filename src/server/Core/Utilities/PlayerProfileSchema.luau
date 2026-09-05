@@ -14,6 +14,9 @@ export type Profile = {
 	Rebirth: number,
 	UnlockedGrowthUpgrades: StringSet,
 	EquippedGrowthUpgrade: string?,
+	UnlockedAuras: StringSet,
+	EquippedAura: string,
+	AuraVFXEnabled: boolean,
 	CompletedPortals: StringSet,
 	Settings: Settings,
 	HasDoubleMultiplier: boolean,
@@ -134,6 +137,9 @@ function PlayerProfileSchema.Defaults(): Profile
 		Destruction = 0,
 		Rebirth = 0,
 		UnlockedGrowthUpgrades = {},
+		UnlockedAuras = {},
+		EquippedAura = "None",
+		AuraVFXEnabled = true,
 		CompletedPortals = {},
 		Settings = {
 			SoundEnabled = true,
@@ -284,6 +290,22 @@ function PlayerProfileSchema.Normalize(Stored: any): Profile
 			Fail("EquippedTitle", "title is not unlocked")
 		end
 		Profile.EquippedTitle = Stored.EquippedTitle
+	end
+
+	if Stored.UnlockedAuras ~= nil then
+		Profile.UnlockedAuras = CopySet(Stored.UnlockedAuras, 16, PlayerProfileSchema.IsContentId, "UnlockedAuras")
+	end
+	if Stored.EquippedAura ~= nil then
+		if type(Stored.EquippedAura) ~= "string" then
+			Fail("EquippedAura", "expected a string")
+		end
+		if Stored.EquippedAura ~= "None" and not PlayerProfileSchema.IsContentId(Stored.EquippedAura) then
+			Fail("EquippedAura", "expected a content ID or None")
+		end
+		Profile.EquippedAura = Stored.EquippedAura
+	end
+	if Stored.AuraVFXEnabled ~= nil then
+		Profile.AuraVFXEnabled = RequireBoolean(Stored.AuraVFXEnabled, "AuraVFXEnabled")
 	end
 
 	if Stored.LeaseOwner ~= nil then

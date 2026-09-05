@@ -5,22 +5,22 @@
 -- Purpose: Shared progression math for converting Bigger into derived level gates.
 -- Use when:
 -- - Server systems need to validate a level requirement from authoritative session Bigger.
--- - Client presentation needs to display level requirements or progress ratios.
--- - Any system needs to replace inline hardcoded level formulas.
+-- - Client presentation needs to display level requirements.
 -- Avoid when:
 -- - Computing avatar visual scale; use Core.Utilities.ScaleCurve instead.
 -- Public API:
+-- - LevelFormula.GetLevelFromBigger(Bigger): number
+-- - LevelFormula.GetRequirementForLevel(Level): number
+-- - LevelFormula.GetProgress(Bigger): LevelProgress
 -- - LevelFormula.GetLevel(Bigger): number
 -- - LevelFormula.GetRequirement(Level): number
 -- - LevelFormula.GetCurrentRange(Level): (number, number)
--- - LevelFormula.GetProgress(Bigger): LevelProgress
 -- - LevelFormula.GetNextRequirement(Level): number
--- Related:
--- - ReplicatedStorage.BiggerShared.Game.Progression.BalanceConfig
 
---// Requirings \\--
+--// Variables \\--
 
-local BalanceConfig = require(script.Parent.BalanceConfig)
+local BASE_REQUIREMENT = 600 / (19 * 19) -- 1.6620... derived from: Level 20 = 600 Bigger (5 min walking)
+local MAX_SAFE_INTEGER = 9007199254740991
 
 --// Types \\--
 
@@ -33,78 +33,78 @@ export type LevelProgress = {
 	Progress: number,
 }
 
+--// Helpers \\--
+
+local function AssertFiniteNumber(Value: unknown, Name: string): number
+	assert(type(Value) == "number", Name .. " must be a number")
+	assert(Value == Value and Value > -math.huge and Value < math.huge, Name .. " must be finite")
+	return Value
+end
+
+local function CalculateRequirement(Level: number): number
+	return BASE_REQUIREMENT * (Level - 1) ^ 2
+end
+
 --// Service \\--
 
 local LevelFormula = {}
 
-function LevelFormula.GetRequirement(Level: number): number
-	local TargetLevel = math.floor(math.max(1, Level))
-	for _, Stage in BalanceConfig.Stages do
-		if TargetLevel >= Stage.MinLevel and TargetLevel <= Stage.MaxLevel then
-			return math.floor(Stage.CalculateRequirement(TargetLevel, Stage.BaseRequirement))
-		end
+function LevelFormula.GetLevelFromBigger(Bigger: number): number
+	local ValidBigger = AssertFiniteNumber(Bigger, "Bigger")
+	assert(ValidBigger >= 0, "Bigger must be non-negative")
+	assert(ValidBigger <= MAX_SAFE_INTEGER, "Bigger exceeds the supported safe integer range")
+
+	local Level = math.floor((ValidBigger / BASE_REQUIREMENT) ^ 0.5) + 1
+	while Level > 1 and CalculateRequirement(Level) > ValidBigger do
+		Level -= 1
 	end
-	return 0
+	while CalculateRequirement(Level + 1) <= ValidBigger do
+		Level += 1
+	end
+	return Level
 end
 
-function LevelFormula.GetLevel(Bigger: number): number
-	if Bigger < 5 then
-		return 1
-	end
+function LevelFormula.GetRequirementForLevel(Level: number): number
+	local ValidLevel = AssertFiniteNumber(Level, "Level")
+	assert(ValidLevel >= 1 and ValidLevel % 1 == 0, "Level must be a positive integer")
 
-	-- Dynamic doubling to find search upper bound
-	local Low = 2
-	local High = 4
-	while LevelFormula.GetRequirement(High) <= Bigger do
-		Low = High
-		High *= 2
-	end
-
-	-- Binary search
-	local BestLevel = Low
-	while Low <= High do
-		local Mid = math.floor((Low + High) / 2)
-		if LevelFormula.GetRequirement(Mid) <= Bigger then
-			BestLevel = Mid
-			Low = Mid + 1
-		else
-			High = Mid - 1
-		end
-	end
-	return BestLevel
-end
-
-function LevelFormula.GetCurrentRange(Level: number): (number, number)
-	return LevelFormula.GetRequirement(Level), LevelFormula.GetRequirement(Level + 1)
+	local Requirement = CalculateRequirement(ValidLevel)
+	assert(Requirement <= MAX_SAFE_INTEGER, "Level requirement exceeds the supported safe integer range")
+	return Requirement
 end
 
 function LevelFormula.GetProgress(Bigger: number): LevelProgress
-	local Level = LevelFormula.GetLevel(Bigger)
-	local StartBigger, TargetBigger = LevelFormula.GetCurrentRange(Level)
-	local CurrentProgress = math.max(0, Bigger - StartBigger)
-	local TotalRequired = math.max(1, TargetBigger - StartBigger)
-	local Ratio = math.clamp(CurrentProgress / TotalRequired, 0, 1)
+	local Level = LevelFormula.GetLevelFromBigger(Bigger)
+	local CurrentRequirement = LevelFormula.GetRequirementForLevel(Level)
+	local NextRequirement = LevelFormula.GetRequirementForLevel(Level + 1)
+	local BiggerIntoLevel = Bigger - CurrentRequirement
+	local BiggerRequiredForNextLevel = NextRequirement - CurrentRequirement
 
 	return {
 		Level = Level,
-		CurrentRequirement = StartBigger,
-		NextRequirement = TargetBigger,
-		BiggerIntoLevel = CurrentProgress,
-		BiggerRequiredForNextLevel = TotalRequired,
-		Progress = Ratio,
+		CurrentRequirement = CurrentRequirement,
+		NextRequirement = NextRequirement,
+		BiggerIntoLevel = BiggerIntoLevel,
+		BiggerRequiredForNextLevel = BiggerRequiredForNextLevel,
+		Progress = math.clamp(BiggerIntoLevel / BiggerRequiredForNextLevel, 0, 1),
 	}
 end
 
-function LevelFormula.GetNextRequirement(Level: number): number
-	return LevelFormula.GetRequirement(Level + 1)
+-- Backward compatibility aliases
+function LevelFormula.GetLevel(Bigger: number): number
+	return LevelFormula.GetLevelFromBigger(Bigger)
 end
 
--- Backward compatibility aliases
-function LevelFormula.GetLevelFromBigger(Bigger: number): number
-	return LevelFormula.GetLevel(Bigger)
+function LevelFormula.GetRequirement(Level: number): number
+	return LevelFormula.GetRequirementForLevel(Level)
 end
-function LevelFormula.GetRequirementForLevel(Level: number): number
-	return LevelFormula.GetRequirement(Level)
+
+function LevelFormula.GetCurrentRange(Level: number): (number, number)
+	return LevelFormula.GetRequirementForLevel(Level), LevelFormula.GetRequirementForLevel(Level + 1)
+end
+
+function LevelFormula.GetNextRequirement(Level: number): number
+	return LevelFormula.GetRequirementForLevel(Level + 1)
 end
 
 return table.freeze(LevelFormula)

@@ -12,14 +12,25 @@ local ServiceRegistry = require(script.Parent.Parent.Parent.Core.Registry.Servic
 local Logger = require(script.Parent.Parent.Parent.Core.Utilities.Logger)
 local ConfigFolder = script.Parent.Parent.Config
 local MapsConfig = require((ConfigFolder :: any).MapsConfig or (ConfigFolder :: any).World1Config)
-local LevelFormula = require(
-	if ReplicatedStorageFound and ReplicatedStorage
-		then ReplicatedStorage:WaitForChild("BiggerShared")
-			:WaitForChild("Game")
-			:WaitForChild("Progression")
-			:WaitForChild("LevelFormula")
-		else script.Parent.Parent.Parent.Parent.shared.Game.Progression.LevelFormula
-)
+local LevelFormula: any
+if ReplicatedStorageFound and ReplicatedStorage then
+	if (ReplicatedStorage :: any).WaitForChild then
+		LevelFormula = require(
+			(ReplicatedStorage :: any)
+				:WaitForChild("BiggerShared")
+				:WaitForChild("Game")
+				:WaitForChild("Progression")
+				:WaitForChild("LevelFormula")
+		)
+	elseif (ReplicatedStorage :: any).BiggerShared then
+		LevelFormula = require((ReplicatedStorage :: any).BiggerShared.Game.Progression.LevelFormula)
+	end
+end
+if not LevelFormula then
+	pcall(function()
+		LevelFormula = require(script.Parent.Parent.Parent.Parent.shared.Game.Progression.LevelFormula)
+	end)
+end
 
 --// Variables \\--
 
@@ -139,7 +150,8 @@ function PortalService:SelectMap(
 		return false
 	end
 
-	if GetDerivedLevel(Session) < MapDef.RequiredLevel then
+	local LevelRead, Level = pcall(GetDerivedLevel, Session)
+	if not LevelRead or Level < MapDef.RequiredLevel then
 		return false
 	end
 

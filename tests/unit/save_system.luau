@@ -5,6 +5,29 @@ local PlayerProfileSchema = require("../../src/server/Core/Utilities/PlayerProfi
 local SaveConfig = require("../../src/server/Core/Config/SaveConfig")
 local Profiles = require("../../src/server/Core/Registry/RuntimeRegistry/Profiles")
 local Sessions = require("../../src/server/Core/Registry/RuntimeRegistry/Sessions")
+local LevelFormula = require("../../src/shared/Game/Progression/LevelFormula")
+local RebirthFormula
+do
+	local Chunk = luau.load(fs.readFile("src/shared/Game/Progression/RebirthFormula.luau"), "RebirthFormula")
+	setfenv(
+		Chunk,
+		setmetatable({
+			script = {
+				Parent = {
+					Parent = {
+						Config = {
+							RebirthConfig = require("../../src/shared/Game/Config/RebirthConfig"),
+						},
+					},
+				},
+			},
+			require = function(Dep)
+				return Dep
+			end,
+		}, { __index = getfenv() })
+	)
+	RebirthFormula = Chunk()
+end
 
 local TEST_SYNTHETIC_PORTAL_PRODUCT_ID = 987654
 
@@ -506,6 +529,12 @@ local function loadSaveService(StoredProfile, AdvanceClockOnWait)
 			return RunService
 		elseif Name == "HttpService" then
 			return HttpService
+		elseif Name == "ReplicatedStorage" then
+			local Container = {}
+			function Container:WaitForChild()
+				return Container
+			end
+			return Container
 		end
 		error("unexpected service: " .. Name)
 	end
@@ -809,10 +838,38 @@ local function loadSessionService()
 		Utilities = { Logger = Logger },
 	}
 	ServicesFolder.Parent = CoreFolder
+	local function Container(Children)
+		function Children:WaitForChild(Name)
+			return assert(self[Name], "missing child " .. Name)
+		end
+		return Children
+	end
+	local ReplicatedStorage = Container({
+		BiggerShared = Container({
+			Game = Container({
+				Progression = Container({
+					LevelFormula = LevelFormula,
+					RebirthFormula = RebirthFormula,
+					AuraFormula = {
+						GetMultiplier = function()
+							return 1.0
+						end,
+					},
+				}),
+				Config = Container({
+					UpgradesConfig = {},
+					AuraConfig = {},
+				}),
+			}),
+		}),
+	})
 	local Game = {}
 	function Game:GetService(Name)
-		assert(Name == "Players")
-		return Players
+		if Name == "Players" then
+			return Players
+		end
+		assert(Name == "ReplicatedStorage")
+		return ReplicatedStorage
 	end
 	function Game:BindToClose() end
 
@@ -1021,10 +1078,38 @@ local function loadShutdownSessionService(BlockedUserId)
 		Utilities = { Logger = Logger },
 	}
 	ServicesFolder.Parent = CoreFolder
+	local function Container(Children)
+		function Children:WaitForChild(Name)
+			return assert(self[Name], "missing child " .. Name)
+		end
+		return Children
+	end
+	local ReplicatedStorage = Container({
+		BiggerShared = Container({
+			Game = Container({
+				Progression = Container({
+					LevelFormula = LevelFormula,
+					RebirthFormula = RebirthFormula,
+					AuraFormula = {
+						GetMultiplier = function()
+							return 1.0
+						end,
+					},
+				}),
+				Config = Container({
+					UpgradesConfig = {},
+					AuraConfig = {},
+				}),
+			}),
+		}),
+	})
 	local Game = {}
 	function Game:GetService(Name)
-		assert(Name == "Players")
-		return Players
+		if Name == "Players" then
+			return Players
+		end
+		assert(Name == "ReplicatedStorage")
+		return ReplicatedStorage
 	end
 	function Game:BindToClose(Callback)
 		table.insert(ShutdownCallbacks, Callback)

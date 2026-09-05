@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Sessions = require(script.Parent.Parent.Parent.Core.Registry.RuntimeRegistry.Sessions)
 local ServiceRegistry = require(script.Parent.Parent.Parent.Core.Registry.ServiceRegistry)
 local Logger = require(script.Parent.Parent.Parent.Core.Utilities.Logger)
+local EventBus = require(script.Parent.Parent.Parent.Core.Events.EventBus)
 local RebirthTypes = require(
 	ReplicatedStorage:WaitForChild("BiggerShared")
 		:WaitForChild("Core")
@@ -29,6 +30,16 @@ local LevelFormula = require(
 		:WaitForChild("Progression")
 		:WaitForChild("LevelFormula")
 )
+local RebirthFormula: any = nil
+pcall(function()
+	RebirthFormula = require(
+		ReplicatedStorage:WaitForChild("BiggerShared")
+			:WaitForChild("Game")
+			:WaitForChild("Progression")
+			:WaitForChild("RebirthFormula")
+	)
+end)
+
 local RebirthError = require(
 	ReplicatedStorage:WaitForChild("BiggerShared")
 		:WaitForChild("Core")
@@ -223,6 +234,36 @@ local function ApplyRebirth(Player: Player, SkipSizeCheck: boolean): boolean
 		end)
 	end
 
+	-- Authoritative state sync to player attributes
+	Player:SetAttribute("Rebirth", Session.Rebirth)
+	if RebirthFormula and RebirthFormula.GetMultiplier then
+		Player:SetAttribute("RebirthMultiplier", RebirthFormula.GetMultiplier(Session.Rebirth))
+	else
+		Player:SetAttribute("RebirthMultiplier", Session.Rebirth + 1)
+	end
+
+	-- Update leaderstats
+	local Leaderstats = Player:FindFirstChild("leaderstats")
+	if Leaderstats then
+		local RebirthStat = Leaderstats:FindFirstChild("Rebirth")
+		if RebirthStat and RebirthStat:IsA("IntValue") then
+			RebirthStat.Value = Session.Rebirth
+		end
+	end
+
+	-- Publish lifecycle events
+	pcall(function()
+		EventBus.Publish("RebirthCompleted", Player, Session.Rebirth)
+	end)
+
+	-- Queue immediate save
+	pcall(function()
+		local SaveService = ServiceRegistry.Get("SaveService")
+		if SaveService and SaveService.QueueProfileSave then
+			SaveService:QueueProfileSave(Player)
+		end
+	end)
+
 	-- Set cooldown
 	RebirthCooldowns[Player] = os.clock() + RebirthConfig.CooldownSeconds
 	task.delay(RebirthConfig.CooldownSeconds, function()
@@ -307,7 +348,6 @@ end
 
 -- Subscribe to EventBus for session lifecycle signals.
 local function SubscribeEventBus()
-	local EventBus = require(script.Parent.Parent.Parent.Core.Events.EventBus)
 	EventBus.Subscribe("PlayerSessionCreated", function(Player: Player)
 		OnSessionCreated(Player)
 	end)
@@ -364,6 +404,45 @@ function RebirthService:ApplySkipRebirth(Player: Player): boolean
 		return false
 	end
 	return ApplyRebirth(Player, true)
+end
+
+local ResultCodes = table.freeze({
+	Success = "Success",
+	NoSession = "NoSession",
+	Frozen = "Frozen",
+	RequirementsNotMet = "RequirementsNotMet",
+	RateLimited = "RateLimited",
+	PlayerDisconnected = "PlayerDisconnected",
+	MutationFailed = "MutationFailed",
+	InvalidRequest = "InvalidRequest",
+})
+RebirthService.ResultCodes = ResultCodes
+
+function RebirthService:RequestRebirth(Player: Player): (boolean, string, number?)
+	if Player.Parent ~= Players then
+		return false, ResultCodes.PlayerDisconnected, nil
+	end
+	local Session = Sessions.Get(Player)
+	if not Session then
+		return false, ResultCodes.NoSession, nil
+	end
+	if Session.ProfileMutationsFrozen then
+		return false, ResultCodes.Frozen, nil
+	end
+	if RebirthCooldowns[Player] and os.clock() < RebirthCooldowns[Player] then
+		return false, ResultCodes.RateLimited, Session.Rebirth
+	end
+	local RequiredLevel = CalculateRequiredLevel(Session.Rebirth)
+	local CurrentLevel = LevelFormula.GetLevel(Session.Bigger)
+	if CurrentLevel < RequiredLevel then
+		return false, ResultCodes.RequirementsNotMet, Session.Rebirth
+	end
+	local Ok = ApplyRebirth(Player, false)
+	if Ok then
+		return true, ResultCodes.Success, Session.Rebirth
+	else
+		return false, ResultCodes.MutationFailed, Session.Rebirth
+	end
 end
 
 function RebirthService:Destroy()

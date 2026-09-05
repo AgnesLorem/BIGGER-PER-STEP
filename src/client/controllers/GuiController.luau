@@ -57,18 +57,27 @@ local QUARANTINED_BUTTONS: { [string]: boolean } = {
 }
 
 --// Referencing \\--
-local ScreenGui: ScreenGui
-local LevelLabel: TextLabel
-local ProgressFill: ImageLabel
-local ProgressTextLabel: TextLabel
-local ProgressStatsLabel: TextLabel?
+local ScreenGui: ScreenGui? = nil
+local LevelLabel: TextLabel? = nil
+local ProgressFill: ImageLabel? = nil
+local ProgressTextLabel: TextLabel? = nil
+local ProgressStatsLabel: TextLabel? = nil
 
-local LeftSidebar: Frame
-local BottomHUD: Frame
-local ProgressBarFrame: Frame
-local ButtonsContainer: Frame
-local RightSidebar: Frame?
-local SelectionOutline: Frame
+local LeftSidebar: Frame? = nil
+local BottomHUD: Frame? = nil
+local ProgressBarFrame: Frame? = nil
+local ButtonsContainer: Frame? = nil
+local RightSidebar: Frame? = nil
+local SelectionOutline: Frame? = nil
+
+local CurrentPlayerGui: PlayerGui? = nil
+local HUDConnections: { RBXScriptConnection } = {}
+local PlayerGuiConnections: { RBXScriptConnection } = {}
+local ControllerConnections: { RBXScriptConnection } = {}
+local Status: "Ready" | "HUDUnavailable" = "HUDUnavailable"
+local HUDWarningEmitted = false
+local Initialized = false
+local Started = false
 
 --// Helpers \\--
 local function CalculateLevelProgress(bigger: number): (number, number)
@@ -80,33 +89,37 @@ local function CalculateLevelProgress(bigger: number): (number, number)
 end
 
 local function UpdateHUD()
-	local bigger = LocalPlayer:GetAttribute("Bigger") or 1
+	if not LevelLabel or not ProgressFill or not ProgressTextLabel then
+		return
+	end
+	local biggerAttribute = LocalPlayer:GetAttribute("Bigger")
+	local bigger = if type(biggerAttribute) == "number" and biggerAttribute >= 0 then biggerAttribute else 0
+	local levelAttribute = LocalPlayer:GetAttribute("Level")
+	local _level = if type(levelAttribute) == "number" then levelAttribute else 1
 	local multiplier = LocalPlayer:GetAttribute("Multiplier") or 1
 
-	if LevelLabel then
-		LevelLabel.Text = FormatNumber(bigger) .. " BIGGER"
-	end
+	LevelLabel.Text = FormatNumber(bigger) .. " BIGGER"
 
 	local ratio, nextLevelReq = CalculateLevelProgress(bigger)
 	if ProgressStatsLabel then
 		ProgressStatsLabel.Text = FormatNumber(bigger) .. " / " .. FormatNumber(nextLevelReq)
 	end
 
-	if ProgressFill then
-		if bigger <= 1 then
-			ProgressFill.Visible = false
-			ProgressFill.Size = UDim2.fromScale(0, 1)
-		else
-			ProgressFill.Visible = true
-			TweenService:Create(ProgressFill, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Size = UDim2.fromScale(ratio, 1),
-			}):Play()
-		end
+	if bigger <= 1 then
+		ProgressFill.Visible = false
+		ProgressFill.Size = UDim2.fromScale(0, 1)
+	else
+		ProgressFill.Visible = true
+		TweenService:Create(ProgressFill, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = UDim2.fromScale(ratio, 1),
+		}):Play()
 	end
 
-	if ProgressTextLabel then
-		ProgressTextLabel.Text = tostring(multiplier) .. "X Multiplier"
-	end
+	ProgressTextLabel.Text = tostring(multiplier) .. "X Multiplier"
+end
+
+local function TrackHUDConnection(Connection: RBXScriptConnection)
+	table.insert(HUDConnections, Connection)
 end
 
 -- Hook up hover scaling animations to a button
@@ -117,29 +130,202 @@ local function ApplyHoverAnimation(button: ImageButton)
 		uiScale.Parent = button
 	end
 
-	button.MouseEnter:Connect(function()
+	TrackHUDConnection(button.MouseEnter:Connect(function()
 		TweenService:Create(uiScale, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			Scale = 1.1,
 		}):Play()
-	end)
+	end))
 
-	button.MouseLeave:Connect(function()
+	TrackHUDConnection(button.MouseLeave:Connect(function()
 		TweenService:Create(uiScale, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			Scale = 1.0,
 		}):Play()
-	end)
+	end))
 
-	button.MouseButton1Down:Connect(function()
+	TrackHUDConnection(button.MouseButton1Down:Connect(function()
 		TweenService:Create(uiScale, TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			Scale = 0.95,
 		}):Play()
-	end)
+	end))
 
-	button.MouseButton1Up:Connect(function()
-		TweenService:Create(uiScale, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+	TrackHUDConnection(button.MouseButton1Up:Connect(function()
+		TweenService:Create(uiScale, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			Scale = 1.1,
 		}):Play()
-	end)
+	end))
+end
+
+local function DisconnectConnections(Connections: { RBXScriptConnection })
+	for _, Connection in Connections do
+		Connection:Disconnect()
+	end
+	table.clear(Connections)
+end
+
+local function SetHUDUnavailable()
+	Status = "HUDUnavailable"
+	if HUDWarningEmitted then
+		return
+	end
+	HUDWarningEmitted = true
+	warn("[GuiController] PlayerGui.MainHUD is unavailable; HUD presentation is disabled.")
+end
+
+local function ClearHUD()
+	DisconnectConnections(HUDConnections)
+	ScreenGui = nil
+	LevelLabel = nil
+	ProgressFill = nil
+	ProgressTextLabel = nil
+	Status = "HUDUnavailable"
+end
+
+local function BindHUD(Candidate: Instance?): boolean
+	ClearHUD()
+	if not Candidate then
+		SetHUDUnavailable()
+		return false
+	end
+
+	local SafeAreaRoot = Candidate:FindFirstChild("SafeAreaRoot")
+	local PersistentHUD = SafeAreaRoot and SafeAreaRoot:FindFirstChild("PersistentHUD")
+	local FoundLeftSidebar = PersistentHUD and PersistentHUD:FindFirstChild("LeftSidebar") :: Frame?
+	local FoundBottomHUD = PersistentHUD and PersistentHUD:FindFirstChild("BottomHUD") :: Frame?
+	local FoundProgressBarFrame = FoundBottomHUD and FoundBottomHUD:FindFirstChild("ProgressBarFrame") :: Frame?
+	local ProgressBG = FoundProgressBarFrame and FoundProgressBarFrame:FindFirstChild("ProgressBG") :: ImageLabel?
+	local BarContainer = ProgressBG and ProgressBG:FindFirstChild("BarContainer") :: Frame?
+	local FoundButtonsContainer = FoundBottomHUD and FoundBottomHUD:FindFirstChild("ButtonsContainer") :: Frame?
+	local FoundLevelLabel = ProgressBG and ProgressBG:FindFirstChild("LevelLabel") :: TextLabel?
+	local FoundProgressFill = BarContainer and BarContainer:FindFirstChild("ProgressFill") :: ImageLabel?
+	local FoundProgressTextLabel = ProgressBG and ProgressBG:FindFirstChild("ProgressTextLabel") :: TextLabel?
+	if
+		not FoundLeftSidebar
+		or not FoundBottomHUD
+		or not FoundButtonsContainer
+		or not FoundLevelLabel
+		or not FoundProgressFill
+		or not FoundProgressTextLabel
+	then
+		SetHUDUnavailable()
+		return false
+	end
+
+	ScreenGui = Candidate :: ScreenGui
+	LevelLabel = FoundLevelLabel
+	ProgressFill = FoundProgressFill
+	ProgressTextLabel = FoundProgressTextLabel
+	LeftSidebar = FoundLeftSidebar
+	BottomHUD = FoundBottomHUD
+	ProgressBarFrame = FoundProgressBarFrame
+	ButtonsContainer = FoundButtonsContainer
+	ProgressStatsLabel = ProgressBG:FindFirstChild("ProgressStatsLabel") :: TextLabel?
+
+	for _, Child in FoundLeftSidebar:GetChildren() do
+		if Child:IsA("GuiObject") and QUARANTINED_BUTTONS[Child.Name] then
+			Child.Visible = false
+			Child.Active = false
+			continue
+		end
+		if Child:IsA("ImageButton") then
+			ApplyHoverAnimation(Child)
+			TrackHUDConnection(Child.MouseButton1Click:Connect(function()
+				if UIEventBus and UIEventBus.Publish then
+					UIEventBus.Publish("SidebarButtonClicked", Child.Name)
+				end
+				if Child.Name == "Rebirth" then
+					local EventsFolder = ReplicatedStorage:FindFirstChild("BiggerEvents")
+					local RebirthFolder = EventsFolder and EventsFolder:FindFirstChild("Rebirth")
+					local RequestRemote = RebirthFolder and RebirthFolder:FindFirstChild("Request")
+					if RequestRemote and RequestRemote:IsA("RemoteEvent") then
+						RequestRemote:FireServer()
+					end
+				else
+					print(Child.Name .. " button clicked (stub)")
+				end
+			end))
+		end
+	end
+
+	for _, Child in FoundButtonsContainer:GetChildren() do
+		if Child:IsA("ImageButton") then
+			ApplyHoverAnimation(Child)
+			local Config = ShopUIConfig[Child.Name]
+			if Config then
+				TrackHUDConnection(Child.MouseButton1Click:Connect(function()
+					MarketplaceService:PromptProductPurchase(LocalPlayer, Config.ProductId)
+				end))
+			end
+		end
+	end
+
+	local FoundRightSidebar = PersistentHUD and PersistentHUD:FindFirstChild("RightSidebar") :: Frame?
+	RightSidebar = FoundRightSidebar
+	if FoundRightSidebar then
+		for _, Child in FoundRightSidebar:GetChildren() do
+			if Child:IsA("ImageButton") then
+				ApplyHoverAnimation(Child)
+				local Config = ShopUIConfig[Child.Name]
+				if Config then
+					TrackHUDConnection(Child.MouseButton1Click:Connect(function()
+						MarketplaceService:PromptProductPurchase(LocalPlayer, Config.ProductId)
+					end))
+				end
+			end
+		end
+		local VipButton = FoundRightSidebar:FindFirstChild("Vip")
+		if VipButton and VipButton:IsA("ImageButton") then
+			TrackHUDConnection(VipButton.MouseButton1Click:Connect(function()
+				local AssetId = LocalPlayer:GetAttribute("VipGamePassAssetId")
+				if type(AssetId) == "number" and AssetId > 0 and AssetId % 1 == 0 then
+					MarketplaceService:PromptGamePassPurchase(LocalPlayer, AssetId)
+				end
+			end))
+		end
+	end
+
+	Status = "Ready"
+	if Started then
+		UpdateHUD()
+	end
+	return true
+end
+
+local function DetachPlayerGui()
+	DisconnectConnections(PlayerGuiConnections)
+	CurrentPlayerGui = nil
+	ClearHUD()
+end
+
+local function AttachPlayerGui(PlayerGuiInstance: Instance)
+	if CurrentPlayerGui == PlayerGuiInstance then
+		return
+	end
+	DetachPlayerGui()
+	CurrentPlayerGui = PlayerGuiInstance :: PlayerGui
+	table.insert(
+		PlayerGuiConnections,
+		PlayerGuiInstance.ChildAdded:Connect(function(Child)
+			if Child.Name == "MainHUD" then
+				BindHUD(Child)
+			end
+		end)
+	)
+	table.insert(
+		PlayerGuiConnections,
+		PlayerGuiInstance.ChildRemoved:Connect(function(Child)
+			if Child == ScreenGui then
+				ClearHUD()
+			end
+		end)
+	)
+
+	local MainHUD = PlayerGuiInstance:FindFirstChild("MainHUD")
+	if not MainHUD then
+		MainHUD = PlayerGuiInstance:WaitForChild("MainHUD", 5)
+	end
+	if CurrentPlayerGui == PlayerGuiInstance then
+		BindHUD(MainHUD)
+	end
 end
 
 local function getSortedButtons(container: GuiObject): { ImageButton }
@@ -288,155 +474,94 @@ end
 
 --// Initialization \\--
 function GuiController.Init()
-	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-	ScreenGui = playerGui:WaitForChild("MainHUD", 10) :: ScreenGui
-	local safeAreaRoot = ScreenGui:WaitForChild("SafeAreaRoot")
-	local persistentHUD = safeAreaRoot:WaitForChild("PersistentHUD")
-
-	-- Create SelectionOutline highlight
-	SelectionOutline = Instance.new("Frame")
-	SelectionOutline.Name = "SelectionOutline"
-	SelectionOutline.BackgroundTransparency = 1
-	SelectionOutline.Size = UDim2.fromScale(1, 1)
-	SelectionOutline.Position = UDim2.fromScale(0, 0)
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(255, 200, 0)
-	stroke.Thickness = 3
-	stroke.Parent = SelectionOutline
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = SelectionOutline
-	SelectionOutline.Parent = ScreenGui
-
-	LeftSidebar = persistentHUD:WaitForChild("LeftSidebar") :: Frame
-	for _, child in ipairs(LeftSidebar:GetChildren()) do
-		if child:IsA("GuiObject") and QUARANTINED_BUTTONS[child.Name] then
-			child.Visible = false
-			child.Active = false
-			continue
-		end
-		if child:IsA("ImageButton") then
-			ApplyHoverAnimation(child)
-			child.MouseButton1Click:Connect(function()
-				UIEventBus.Publish("SidebarButtonClicked", child.Name)
-			end)
-		end
+	if Initialized then
+		return
 	end
+	Initialized = true
 
-	-- Reference BottomHUD
-	BottomHUD = persistentHUD:WaitForChild("BottomHUD") :: Frame
-	BottomHUD.AnchorPoint = Vector2.new(0.5, 1)
-	BottomHUD.Position = UDim2.new(0.5, 0, 1, -10)
-
-	-- Reference Progress Bar components
-	ProgressBarFrame = BottomHUD:WaitForChild("ProgressBarFrame") :: Frame
-	LevelLabel = ProgressBarFrame:WaitForChild("LevelLabel") :: TextLabel
-	ProgressTextLabel = ProgressBarFrame:WaitForChild("ProgressTextLabel") :: TextLabel
-
-	local progressBG = ProgressBarFrame:WaitForChild("ProgressBG") :: ImageLabel
-	local barContainer = progressBG:WaitForChild("BarContainer") :: Frame
-	ProgressFill = barContainer:WaitForChild("ProgressFill") :: ImageLabel
-	ProgressStatsLabel = progressBG:FindFirstChild("ProgressStatsLabel") :: TextLabel?
-
-	-- Reference Bottom Buttons (Developer Products)
-	ButtonsContainer = BottomHUD:WaitForChild("ButtonsContainer") :: Frame
-	ButtonsContainer.AnchorPoint = Vector2.new(0.5, 0)
-	ButtonsContainer.Position = UDim2.fromScale(0.5, 0.58)
-
-	for _, child in ipairs(ButtonsContainer:GetChildren()) do
-		if child:IsA("ImageButton") then
-			ApplyHoverAnimation(child)
-			local config = ShopUIConfig[child.Name]
-			if config then
-				local textLabel = child:FindFirstChildOfClass("TextLabel")
-				if textLabel then
-					textLabel.Text = config.Display
-				end
-				child.MouseButton1Click:Connect(function()
-					print(
-						"Prompting product purchase for key: "
-							.. child.Name
-							.. " (ProductId: "
-							.. config.ProductId
-							.. ")"
-					)
-					MarketplaceService:PromptProductPurchase(LocalPlayer, config.ProductId)
-				end)
+	table.insert(
+		ControllerConnections,
+		LocalPlayer.ChildAdded:Connect(function(Child)
+			if Child.Name == "PlayerGui" then
+				AttachPlayerGui(Child)
 			end
-		end
+		end)
+	)
+	table.insert(
+		ControllerConnections,
+		LocalPlayer.ChildRemoved:Connect(function(Child)
+			if Child == CurrentPlayerGui then
+				DetachPlayerGui()
+			end
+		end)
+	)
+
+	local PlayerGuiInstance = LocalPlayer:FindFirstChild("PlayerGui")
+	if not PlayerGuiInstance then
+		PlayerGuiInstance = LocalPlayer:WaitForChild("PlayerGui", 5)
 	end
-
-	-- Reference RightSidebar (VIP and Double Multiplier)
-	RightSidebar = persistentHUD:WaitForChild("RightSidebar", 5) :: Frame?
-	if RightSidebar then
-		for _, child in ipairs(RightSidebar:GetChildren()) do
-			if child:IsA("ImageButton") then
-				ApplyHoverAnimation(child)
-				local config = ShopUIConfig[child.Name]
-				if config then
-					local textLabel = child:FindFirstChildOfClass("TextLabel")
-					if textLabel then
-						textLabel.Text = config.Display
-					end
-					child.MouseButton1Click:Connect(function()
-						print(
-							"Prompting product purchase for key: "
-								.. child.Name
-								.. " (ProductId: "
-								.. config.ProductId
-								.. ")"
-						)
-						MarketplaceService:PromptProductPurchase(LocalPlayer, config.ProductId)
-					end)
-				end
-			end
-		end
-		local vipButton = RightSidebar:FindFirstChild("Vip")
-		if vipButton and vipButton:IsA("ImageButton") then
-			vipButton.MouseButton1Click:Connect(function()
-				local assetId = LocalPlayer:GetAttribute("VipGamePassAssetId")
-				if type(assetId) == "number" and assetId > 0 and assetId % 1 == 0 then
-					MarketplaceService:PromptGamePassPurchase(LocalPlayer, assetId)
-				end
-			end)
-		end
+	if PlayerGuiInstance then
+		AttachPlayerGui(PlayerGuiInstance)
+	else
+		SetHUDUnavailable()
 	end
 
 	-- Focus first button on gamepad input
-	UserInputService.LastInputTypeChanged:Connect(function(lastInputType)
-		if lastInputType == Enum.UserInputType.Gamepad1 then
-			local bottomButtons = getSortedButtons(ButtonsContainer)
-			if #bottomButtons > 0 then
-				GuiService.SelectedObject = bottomButtons[1]
-			else
-				local leftButtons = getSortedButtons(LeftSidebar)
-				if #leftButtons > 0 then
-					GuiService.SelectedObject = leftButtons[1]
+	table.insert(
+		ControllerConnections,
+		UserInputService.LastInputTypeChanged:Connect(function(lastInputType)
+			if lastInputType == Enum.UserInputType.Gamepad1 then
+				if ButtonsContainer and LeftSidebar then
+					local bottomButtons = getSortedButtons(ButtonsContainer)
+					if #bottomButtons > 0 then
+						GuiService.SelectedObject = bottomButtons[1]
+					else
+						local leftButtons = getSortedButtons(LeftSidebar)
+						if #leftButtons > 0 then
+							GuiService.SelectedObject = leftButtons[1]
+						end
+					end
 				end
 			end
-		end
-	end)
+		end)
+	)
 
-	-- Immediate initial HUD update on Init
 	UpdateHUD()
 end
 
 function GuiController.Start()
-	-- Connect attribute changed signals for real-time HUD update
-	LocalPlayer:GetAttributeChangedSignal("Bigger"):Connect(UpdateHUD)
-	LocalPlayer:GetAttributeChangedSignal("Level"):Connect(UpdateHUD)
-	LocalPlayer:GetAttributeChangedSignal("Multiplier"):Connect(UpdateHUD)
-
-	-- Initial HUD update
+	if Started then
+		return
+	end
+	Started = true
+	table.insert(ControllerConnections, LocalPlayer:GetAttributeChangedSignal("Bigger"):Connect(UpdateHUD))
+	table.insert(ControllerConnections, LocalPlayer:GetAttributeChangedSignal("Level"):Connect(UpdateHUD))
+	table.insert(ControllerConnections, LocalPlayer:GetAttributeChangedSignal("Multiplier"):Connect(UpdateHUD))
+	table.insert(ControllerConnections, LocalPlayer:GetAttributeChangedSignal("Rebirth"):Connect(UpdateHUD))
+	table.insert(ControllerConnections, LocalPlayer:GetAttributeChangedSignal("RebirthMultiplier"):Connect(UpdateHUD))
 	UpdateHUD()
 
-	-- Connect to profile changes and apply layout
-	ResponsiveController.ProfileChanged:Connect(function(profile)
-		ApplyProfile(profile)
-	end)
+	if ResponsiveController and ResponsiveController.ProfileChanged then
+		table.insert(
+			ControllerConnections,
+			ResponsiveController.ProfileChanged:Connect(function(profile)
+				ApplyProfile(profile)
+			end)
+		)
+		ApplyProfile(ResponsiveController:GetProfile())
+	end
+end
 
-	-- Apply initial profile
-	ApplyProfile(ResponsiveController:GetProfile())
+function GuiController.GetStatus(): "Ready" | "HUDUnavailable"
+	return Status
+end
+
+function GuiController.Destroy()
+	DisconnectConnections(ControllerConnections)
+	DetachPlayerGui()
+	Initialized = false
+	Started = false
+	HUDWarningEmitted = false
 end
 
 return GuiController

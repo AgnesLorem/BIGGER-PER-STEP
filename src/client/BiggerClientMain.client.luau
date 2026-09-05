@@ -14,6 +14,12 @@ local ControllerNames = {
 	"RewardPopupController",
 	"UpgradeShopController",
 	"VIPDoorController",
+	"EquipmentController",
+	"CameraShakeController",
+	"SoundController",
+	"FloatingFeedbackController",
+	"VFXController",
+	"AuraController",
 	-- Quarantined peripheral controllers (matching GameBootstrap quarantine on server):
 	-- "AutoWinsController",
 	-- "DailyRewardController",

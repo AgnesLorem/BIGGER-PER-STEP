@@ -1,6 +1,7 @@
 --// Raw Requirings \\--
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService: any = nil
 pcall(function()
 	RunService = game:GetService("RunService")
@@ -17,7 +18,7 @@ local GrowthService = require(script.Parent.GrowthService)
 
 local LevelFormula: any = nil
 pcall(function()
-	local BiggerShared = game:GetService("ReplicatedStorage"):WaitForChild("BiggerShared", 1)
+	local BiggerShared = ReplicatedStorage:WaitForChild("BiggerShared", 1)
 	if BiggerShared then
 		local GameFolder = BiggerShared:FindFirstChild("Game")
 			or (BiggerShared.WaitForChild and BiggerShared:WaitForChild("Game", 1))
@@ -36,6 +37,53 @@ end)
 if not LevelFormula then
 	pcall(function()
 		LevelFormula = require(script.Parent.Parent.Parent.Parent.shared.Game.Progression.LevelFormula)
+	end)
+end
+
+local RebirthFormula: any = nil
+pcall(function()
+	local BiggerShared = ReplicatedStorage:WaitForChild("BiggerShared", 1)
+	if BiggerShared then
+		local GameFolder = BiggerShared:FindFirstChild("Game")
+			or (BiggerShared.WaitForChild and BiggerShared:WaitForChild("Game", 1))
+		if GameFolder then
+			local ProgressionFolder = GameFolder:FindFirstChild("Progression")
+				or (GameFolder.WaitForChild and GameFolder:WaitForChild("Progression", 1))
+			if ProgressionFolder then
+				RebirthFormula = require(
+					ProgressionFolder:FindFirstChild("RebirthFormula")
+						or ProgressionFolder:WaitForChild("RebirthFormula", 1)
+				)
+			end
+		end
+	end
+end)
+if not RebirthFormula then
+	pcall(function()
+		RebirthFormula = require(script.Parent.Parent.Parent.Parent.shared.Game.Progression.RebirthFormula)
+	end)
+end
+
+local AuraFormula: any = nil
+pcall(function()
+	local BiggerShared = ReplicatedStorage:WaitForChild("BiggerShared", 1)
+	if BiggerShared then
+		local GameFolder = BiggerShared:FindFirstChild("Game")
+			or (BiggerShared.WaitForChild and BiggerShared:WaitForChild("Game", 1))
+		if GameFolder then
+			local ProgressionFolder = GameFolder:FindFirstChild("Progression")
+				or (GameFolder.WaitForChild and GameFolder:WaitForChild("Progression", 1))
+			if ProgressionFolder then
+				AuraFormula = require(
+					ProgressionFolder:FindFirstChild("AuraFormula") or ProgressionFolder:WaitForChild("AuraFormula", 1)
+				)
+			end
+		end
+	end
+end)
+if not AuraFormula then
+	pcall(function()
+		AuraFormula = require(script.Parent.Parent.Parent.Parent.shared.Game.Progression.AuraFormula)
 	end)
 end
 
@@ -66,6 +114,11 @@ local function CreateLeaderstats(Player: Player, Session: Session)
 	DestructionValue.Name = "Destruction"
 	DestructionValue.Value = Session.Destruction
 	DestructionValue.Parent = Leaderstats
+
+	local RebirthValue = Instance.new("IntValue")
+	RebirthValue.Name = "Rebirth"
+	RebirthValue.Value = Session.Rebirth
+	RebirthValue.Parent = Leaderstats
 
 	Leaderstats.Parent = Player
 end
@@ -119,6 +172,9 @@ local function OnPlayerAdded(Player: Player)
 		Rebirth = Profile.Rebirth,
 		UnlockedGrowthUpgrades = Profile.UnlockedGrowthUpgrades,
 		EquippedGrowthUpgrade = Profile.EquippedGrowthUpgrade,
+		UnlockedAuras = Profile.UnlockedAuras,
+		EquippedAura = Profile.EquippedAura,
+		AuraVFXEnabled = Profile.AuraVFXEnabled,
 		CompletedPortals = Profile.CompletedPortals,
 		Settings = Profile.Settings,
 		HasDoubleMultiplier = Profile.HasDoubleMultiplier,
@@ -137,6 +193,8 @@ local function OnPlayerAdded(Player: Player)
 		CurrentAFKZone = nil,
 		PremiumZonePromptedThisEntry = false,
 		GamePassQueryGenerations = { Vip = 0, PremiumZone = 0 },
+		EquipmentRequestInFlight = false,
+		EquipmentLastRequestTimestamp = 0,
 		State = "InLobby",
 		JoinedAt = tick(),
 		PurchaseHistory = Profile.ProcessedPurchaseIds,
@@ -167,8 +225,20 @@ local function OnPlayerAdded(Player: Player)
 	end
 	CreateLeaderstats(Player, Session)
 	Player:SetAttribute("Bigger", Session.Bigger)
-	Player:SetAttribute("Destruction", Session.Destruction)
 	Player:SetAttribute("HasVip", Session.HasVip)
+	Player:SetAttribute("Rebirth", Session.Rebirth)
+	if RebirthFormula and RebirthFormula.GetMultiplier then
+		Player:SetAttribute("RebirthMultiplier", RebirthFormula.GetMultiplier(Session.Rebirth))
+	else
+		Player:SetAttribute("RebirthMultiplier", Session.Rebirth + 1)
+	end
+	Player:SetAttribute("EquippedAura", Session.EquippedAura or "None")
+	Player:SetAttribute("AuraVFXEnabled", if Session.AuraVFXEnabled == nil then true else Session.AuraVFXEnabled)
+	if AuraFormula and AuraFormula.GetMultiplier then
+		Player:SetAttribute("AuraMultiplier", AuraFormula.GetMultiplier(Session.UnlockedAuras or {}))
+	else
+		Player:SetAttribute("AuraMultiplier", 1.0)
+	end
 	ClearObjectiveAttributes(Player)
 	GrowthService:UpdateMultiplierAttribute(Player)
 
