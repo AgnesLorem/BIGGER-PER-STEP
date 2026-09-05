@@ -16,7 +16,7 @@ local Logger = require(script.Parent.Parent.Utilities.Logger)
 
 --// Types \\--
 
-type PassKey = "Vip" | "PremiumZone"
+type PassKey = "Vip" | "PremiumZone" | "AutoWins"
 type PassConfig = {
 	AssetId: number?,
 	Price: number,
@@ -39,17 +39,17 @@ export type ConfigurationStatus = {
 --// Variables \\--
 
 local MaximumSafeInteger = 9007199254740991
-local PassKeys: { PassKey } = table.freeze({ "Vip", "PremiumZone" })
+local PassKeys: { PassKey } = table.freeze({ "Vip", "PremiumZone", "AutoWins" })
 local ConfigurationStatuses: { [PassKey]: ConfigurationStatus } = {}
 local Initialized = false
 
 --// Helpers \\--
 
 local function ConfigFor(PassKey: string): PassConfig?
-	if PassKey ~= "Vip" and PassKey ~= "PremiumZone" then
+	if PassKey ~= "Vip" and PassKey ~= "PremiumZone" and PassKey ~= "AutoWins" then
 		return nil
 	end
-	return GamePassConfig[PassKey]
+	return GamePassConfig[PassKey :: PassKey]
 end
 
 local function IsValidAssetId(AssetId: any): boolean
@@ -66,14 +66,17 @@ local function ValidateConfig()
 	local AssetIds: { [number]: PassKey } = {}
 	for Key, Config in GamePassConfig do
 		Count += 1
-		if Key ~= "Vip" and Key ~= "PremiumZone" then
+		if Key ~= "Vip" and Key ~= "PremiumZone" and Key ~= "AutoWins" then
 			error("GamePassService: unsupported PassKey " .. tostring(Key), 2)
 		end
 		if type(Config) ~= "table" then
 			error("GamePassService: invalid config for " .. Key, 2)
 		end
-		local ExpectedPrice = if Key == "Vip" then 199 else 99
-		local ExpectedProfileKey = if Key == "Vip" then "HasVip" else "HasPremiumZonePass"
+		local ExpectedPrice = if Key == "Vip" then 199 elseif Key == "AutoWins" then 149 else 99
+		local ExpectedProfileKey = if Key == "Vip"
+			then "HasVip"
+			elseif Key == "AutoWins" then "HasAutoWins"
+			else "HasPremiumZonePass"
 		if Config.Price ~= ExpectedPrice or Config.ProfileKey ~= ExpectedProfileKey then
 			error("GamePassService: invalid metadata for " .. Key, 2)
 		end
@@ -92,8 +95,13 @@ local function ValidateConfig()
 		AssetIds[AssetId] = Key
 		ConfigurationStatuses[Key] = table.freeze({ IsConfigured = true })
 	end
-	if Count ~= #PassKeys or not GamePassConfig.Vip or not GamePassConfig.PremiumZone then
-		error("GamePassService: config must contain exactly Vip and PremiumZone", 2)
+	if
+		Count ~= #PassKeys
+		or not GamePassConfig.Vip
+		or not GamePassConfig.PremiumZone
+		or not GamePassConfig.AutoWins
+	then
+		error("GamePassService: config must contain exactly Vip, PremiumZone, and AutoWins", 2)
 	end
 end
 
@@ -103,12 +111,20 @@ local function IsConfigured(PassKey: PassKey): boolean
 end
 
 local function GetOwned(Session: Sessions.Session, PassKey: PassKey): boolean
-	return if PassKey == "Vip" then Session.HasVip else Session.HasPremiumZonePass
+	if PassKey == "Vip" then
+		return Session.HasVip
+	elseif PassKey == "AutoWins" then
+		return Session.HasAutoWins
+	else
+		return Session.HasPremiumZonePass
+	end
 end
 
 local function SetOwned(Session: Sessions.Session, PassKey: PassKey, Owned: boolean)
 	if PassKey == "Vip" then
 		Session.HasVip = Owned
+	elseif PassKey == "AutoWins" then
+		Session.HasAutoWins = Owned
 	else
 		Session.HasPremiumZonePass = Owned
 	end
@@ -117,6 +133,10 @@ end
 local function RefreshPresentation(Player: Player, PassKey: PassKey)
 	if PassKey ~= "Vip" then
 		return
+	end
+	local Session = Sessions.Get(Player)
+	if Session then
+		Player:SetAttribute("HasVip", Session.HasVip)
 	end
 	ServiceRegistry.Get("GrowthService"):UpdateMultiplierAttribute(Player)
 	ServiceRegistry.Get("CharacterScaleService"):UpdateVipTag(Player)

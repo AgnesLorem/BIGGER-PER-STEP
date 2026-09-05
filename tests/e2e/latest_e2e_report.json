@@ -1,0 +1,525 @@
+{
+  "Total": 69,
+  "TierSummary": {
+    "Tier1": {
+      "Total": 50,
+      "Passed": 38,
+      "Failed": 12
+    },
+    "Tier4": {
+      "Total": 3,
+      "Passed": 3,
+      "Failed": 0
+    },
+    "Tier3": {
+      "Total": 6,
+      "Passed": 6,
+      "Failed": 0
+    },
+    "Tier2": {
+      "Total": 10,
+      "Passed": 10,
+      "Failed": 0
+    }
+  },
+  "DurationMs": 0,
+  "Failed": 12,
+  "Passed": 57,
+  "Results": [
+    {
+      "Feature": "FEAT-01",
+      "Name": "T1_FEAT01_01_HeaderAssetAssigned",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": false,
+      "Error": "AssistantCommand:227: Header must exist under RebirthPanel"
+    },
+    {
+      "Feature": "FEAT-01",
+      "Name": "T1_FEAT01_02_HeaderTitleText",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": false,
+      "Error": "AssistantCommand:237: Header must contain TitleText"
+    },
+    {
+      "Feature": "FEAT-01",
+      "Name": "T1_FEAT01_03_HeaderIntegratedIcon",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": false,
+      "Error": "AssistantCommand:244: Header must exist"
+    },
+    {
+      "Feature": "FEAT-01",
+      "Name": "T1_FEAT01_04_HeaderFontAndColor",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": false,
+      "Error": "AssistantCommand:254: TitleText must exist"
+    },
+    {
+      "Feature": "FEAT-01",
+      "Name": "T1_FEAT01_05_HeaderSizingConstraints",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": false,
+      "Error": "AssistantCommand:261: Header must exist"
+    },
+    {
+      "Feature": "FEAT-02",
+      "Name": "T1_FEAT02_01_CloseButtonAssetAssigned",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": false,
+      "Error": "AssistantCommand:272: CloseButton must exist under RebirthPanel"
+    },
+    {
+      "Feature": "FEAT-02",
+      "Name": "T1_FEAT02_02_CloseButtonActive",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": false,
+      "Error": "AssistantCommand:288: CloseButton must exist"
+    },
+    {
+      "Feature": "FEAT-02",
+      "Name": "T1_FEAT02_03_CloseActionClosesPanel",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-02",
+      "Name": "T1_FEAT02_04_CloseActionHidesOverlay",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-02",
+      "Name": "T1_FEAT02_05_ClosePreservesServerState",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-03",
+      "Name": "T1_FEAT03_01_RebirthButtonAssetAssigned",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-03",
+      "Name": "T1_FEAT03_02_RebirthButtonTextLabel",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-03",
+      "Name": "T1_FEAT03_03_RebirthButtonTintDimmed",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-03",
+      "Name": "T1_FEAT03_04_RebirthButtonTintFull",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-03",
+      "Name": "T1_FEAT03_05_RebirthButtonClickDispatchesRemote",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-04",
+      "Name": "T1_FEAT04_01_SkipButtonAssetAssigned",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-04",
+      "Name": "T1_FEAT04_02_SkipButtonTextLabel",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-04",
+      "Name": "T1_FEAT04_03_SkipButtonClickDispatchesRemote",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-04",
+      "Name": "T1_FEAT04_04_SkipButtonPromptPurchase",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-04",
+      "Name": "T1_FEAT04_05_SkipButtonSafeHandling",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-05",
+      "Name": "T1_FEAT05_01_ArrowAssetAssigned",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-05",
+      "Name": "T1_FEAT05_02_ArrowPositionBetweenCards",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": false,
+      "Error": "AssistantCommand:444: NextCard must be positioned at or after Arrows"
+    },
+    {
+      "Feature": "FEAT-05",
+      "Name": "T1_FEAT05_03_ArrowVisible",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-05",
+      "Name": "T1_FEAT05_04_ArrowAspectRatio",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-05",
+      "Name": "T1_FEAT05_05_NoGenericUnicodeFallback",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-06",
+      "Name": "T1_FEAT06_01_RequirementLabelFormat",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": false,
+      "Error": "AssistantCommand:482: RequirementLabel format must include 'Reach Level {N}' (String 'Rebirth resets your LEVEL!' did not match pattern 'Reach Level %d+')"
+    },
+    {
+      "Feature": "FEAT-06",
+      "Name": "T1_FEAT06_02_ProgressLabelFormat",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-06",
+      "Name": "T1_FEAT06_03_BarFillZeroClamping",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-06",
+      "Name": "T1_FEAT06_04_BarFillHalfRatio",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-06",
+      "Name": "T1_FEAT06_05_BarFillFullClamping",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-07",
+      "Name": "T1_FEAT07_01_CurrentCardStatFormat",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-07",
+      "Name": "T1_FEAT07_02_NextCardStatFormat",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-07",
+      "Name": "T1_FEAT07_03_DynamicTextLayering",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-07",
+      "Name": "T1_FEAT07_04_CurrentCardStyling",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": false,
+      "Error": "AssistantCommand:544: CurrentCard must have UICorner"
+    },
+    {
+      "Feature": "FEAT-07",
+      "Name": "T1_FEAT07_05_NextCardStyling",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": false,
+      "Error": "AssistantCommand:551: NextCard must have UICorner"
+    },
+    {
+      "Feature": "FEAT-08",
+      "Name": "T1_FEAT08_01_AspectRatioConstraint",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-08",
+      "Name": "T1_FEAT08_02_AnchorPointCentered",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-08",
+      "Name": "T1_FEAT08_03_PositionCentered",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-08",
+      "Name": "T1_FEAT08_04_DarkBackgroundStyling",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": false,
+      "Error": "AssistantCommand:581: Background must be dark blue/navy (#141826) (Expected: 0.0784314, 0.0941176, 0.14902 [Color3], Actual: 0.639216, 0.635294, 0.647059 [Color3])"
+    },
+    {
+      "Feature": "FEAT-08",
+      "Name": "T1_FEAT08_05_SafeAreaRootParentage",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-09",
+      "Name": "T1_FEAT09_01_RemoteSubscription",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-09",
+      "Name": "T1_FEAT09_02_LiveRenderOnPayload",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-09",
+      "Name": "T1_FEAT09_03_CachedStateRetained",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-09",
+      "Name": "T1_FEAT09_04_SidebarOpenRendersCached",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-09",
+      "Name": "T1_FEAT09_05_RefreshOnOpenDispatched",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-10",
+      "Name": "T1_FEAT10_01_RejectWhenBelowRequiredLevel",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-10",
+      "Name": "T1_FEAT10_02_RejectWhenNotInLobby",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-10",
+      "Name": "T1_FEAT10_03_RejectWhenProfileFrozen",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-10",
+      "Name": "T1_FEAT10_04_RejectWhenOnCooldown",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "FEAT-10",
+      "Name": "T1_FEAT10_05_RejectWhenSessionMissing",
+      "Tier": "Tier1",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "BOUNDARY",
+      "Name": "T2_BOUND_01_Level1_InitialState",
+      "Tier": "Tier2",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "BOUNDARY",
+      "Name": "T2_BOUND_02_ReqMinus1_Level19",
+      "Tier": "Tier2",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "BOUNDARY",
+      "Name": "T2_BOUND_03_ExactReq_Level20",
+      "Tier": "Tier2",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "BOUNDARY",
+      "Name": "T2_BOUND_04_LevelOverflow_Level50_Tier0",
+      "Tier": "Tier2",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "BOUNDARY",
+      "Name": "T2_BOUND_05_TierProgressionFormulas",
+      "Tier": "Tier2",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "BOUNDARY",
+      "Name": "T2_BOUND_06_CooldownEnforcement",
+      "Tier": "Tier2",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "BOUNDARY",
+      "Name": "T2_BOUND_07_ProductIdZeroBoundary",
+      "Tier": "Tier2",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "BOUNDARY",
+      "Name": "T2_BOUND_08_DoubleMultiplierRebirthStack",
+      "Tier": "Tier2",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "BOUNDARY",
+      "Name": "T2_BOUND_09_VipPassRebirthStack",
+      "Tier": "Tier2",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "BOUNDARY",
+      "Name": "T2_BOUND_10_SimultaneousBiggerMutations",
+      "Tier": "Tier2",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "CROSS_FEATURE",
+      "Name": "T3_CROSS_01_LiveLevelUpWhileOpen",
+      "Tier": "Tier3",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "CROSS_FEATURE",
+      "Name": "T3_CROSS_02_RebirthSizeResetMultiplierRefresh",
+      "Tier": "Tier3",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "CROSS_FEATURE",
+      "Name": "T3_CROSS_03_SidebarToggleCloseRebirthLifecycle",
+      "Tier": "Tier3",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "CROSS_FEATURE",
+      "Name": "T3_CROSS_04_CharacterRespawnStatePersistence",
+      "Tier": "Tier3",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "CROSS_FEATURE",
+      "Name": "T3_CROSS_05_MultiModalOverlayHUDCoordination",
+      "Tier": "Tier3",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "CROSS_FEATURE",
+      "Name": "T3_CROSS_06_SkipRebirthDispatcherIntegration",
+      "Tier": "Tier3",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "REAL_WORLD",
+      "Name": "T4_REAL_01_FullPlayerLifecycleJourney",
+      "Tier": "Tier4",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "REAL_WORLD",
+      "Name": "T4_REAL_02_MultiTierMarathon",
+      "Tier": "Tier4",
+      "DurationMs": 0,
+      "Passed": true
+    },
+    {
+      "Feature": "REAL_WORLD",
+      "Name": "T4_REAL_03_SkipRebirthMonetizationJourney",
+      "Tier": "Tier4",
+      "DurationMs": 0,
+      "Passed": true
+    }
+  ]
+}

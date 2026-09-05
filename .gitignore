@@ -11,3 +11,30 @@
 .idea/
 .vscode/
 Thumbs.db
+__pycache__/
+*.pyc
+
+# Blender autosaves and backups
+*.blend1
+*.blend2
+*.blend3
+*.blend@*
+*.blend1@*
+*.blend2@*
+
+# Local binaries
+bin/
+
+# Local tools & agent logs
+scratch/
+.agents/
+.zcode/
+
+# Local reference media (large video files)
+Reference/
+
+# Teamwork temporary logs
+ORIGINAL_REQUEST.md
+PROJECT.md
+TEST_INFRA.md
+TEST_READY.md

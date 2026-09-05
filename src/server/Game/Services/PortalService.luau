@@ -1,23 +1,67 @@
 --!strict
 --// Raw Requirings \\--
 
-local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ReplicatedStorageFound, ReplicatedStorage = pcall(function()
+	return game:GetService("ReplicatedStorage")
+end)
 
 --// Requirings \\--
 
 local Sessions = require(script.Parent.Parent.Parent.Core.Registry.RuntimeRegistry.Sessions)
 local ServiceRegistry = require(script.Parent.Parent.Parent.Core.Registry.ServiceRegistry)
 local Logger = require(script.Parent.Parent.Parent.Core.Utilities.Logger)
-local World1Config = require(script.Parent.Parent.Config.World1Config)
-local LevelFormula = require(ReplicatedStorage.BiggerShared.Game.Progression.LevelFormula)
+local ConfigFolder = script.Parent.Parent.Config
+local MapsConfig = require((ConfigFolder :: any).MapsConfig or (ConfigFolder :: any).World1Config)
+local LevelFormula: any
+if ReplicatedStorageFound and ReplicatedStorage then
+	if (ReplicatedStorage :: any).WaitForChild then
+		LevelFormula = require(
+			(ReplicatedStorage :: any)
+				:WaitForChild("BiggerShared")
+				:WaitForChild("Game")
+				:WaitForChild("Progression")
+				:WaitForChild("LevelFormula")
+		)
+	elseif (ReplicatedStorage :: any).BiggerShared then
+		LevelFormula = require((ReplicatedStorage :: any).BiggerShared.Game.Progression.LevelFormula)
+	end
+end
+if not LevelFormula then
+	pcall(function()
+		LevelFormula = require(script.Parent.Parent.Parent.Parent.shared.Game.Progression.LevelFormula)
+	end)
+end
 
 --// Variables \\--
 
 local PortalDebounces: { [Player]: boolean } = {}
 local Connections: { RBXScriptConnection } = {}
+local RequestSelectMapRemote: RemoteEvent? = nil
 
 --// Helpers \\--
+
+local function EnsureRemote(Name: string): RemoteEvent?
+	if not ReplicatedStorageFound or not ReplicatedStorage then
+		return nil
+	end
+
+	local RemotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
+	if not RemotesFolder then
+		RemotesFolder = Instance.new("Folder")
+		RemotesFolder.Name = "Remotes"
+		RemotesFolder.Parent = ReplicatedStorage
+	end
+
+	local Existing = RemotesFolder:FindFirstChild(Name)
+	if Existing and (not Existing.IsA or Existing:IsA("RemoteEvent")) then
+		return Existing
+	end
+
+	local Remote = Instance.new("RemoteEvent")
+	Remote.Name = Name
+	Remote.Parent = RemotesFolder
+	return Remote
+end
 
 local function GetPlayerFromHit(Hit: BasePart): Player?
 	local Character = Hit:FindFirstAncestorOfClass("Model")
@@ -29,21 +73,6 @@ end
 
 local function GetDerivedLevel(Session: Sessions.Session): number
 	return LevelFormula.GetLevelFromBigger(Session.Bigger)
-end
-
-local function GetPortalParts(): { BasePart }
-	local Portal = Workspace:FindFirstChild(World1Config.PortalName)
-	local Parts: { BasePart } = {}
-	if not Portal then
-		return Parts
-	end
-
-	for _, Descendant in Portal:GetDescendants() do
-		if Descendant:IsA("BasePart") then
-			table.insert(Parts, Descendant)
-		end
-	end
-	return Parts
 end
 
 local function ClearDebounce(Player: Player)
@@ -79,105 +108,154 @@ end
 local PortalService = {}
 
 function PortalService:Init()
-	local ServicesFound, SessionService, WorldInstanceService = pcall(function()
-		return ServiceRegistry.Get("SessionService"), ServiceRegistry.Get("WorldInstanceService")
-	end)
-	if not ServicesFound or not SessionService or not WorldInstanceService then
-		Logger.Warn("Portal", "Entry callbacks not bound because required services are unavailable")
-		return
-	end
-
-	for _, Part in GetPortalParts() do
-		table.insert(
-			Connections,
-			Part.Touched:Connect(function(Hit)
-				self:TryEnterPortal(Hit, SessionService, WorldInstanceService)
-			end)
-		)
+	RequestSelectMapRemote = EnsureRemote("RequestSelectMap")
+	if RequestSelectMapRemote and RequestSelectMapRemote.OnServerEvent then
+		RequestSelectMapRemote.OnServerEvent:Connect(function(Client: Player, MapId: any)
+			self:SelectMap(Client, MapId)
+		end)
 	end
 end
 
 function PortalService:Start() end
 
-function PortalService:TryEnterPortal(Hit: BasePart, SessionService: any, WorldInstanceService: any)
-	local Player = GetPlayerFromHit(Hit)
+function PortalService:SelectMap(
+	Player: Player,
+	MapId: any,
+	OptionalSessionService: any?,
+	OptionalWorldInstanceService: any?
+): boolean
 	if not Player or PortalDebounces[Player] then
-		return
+		return false
 	end
 
 	local Session = Sessions.Get(Player)
-	if not Session or Session.State ~= "InLobby" or Session.ProfileMutationsFrozen then
-		return
-	end
-	local LevelRead, Level = pcall(GetDerivedLevel, Session)
-	if not LevelRead or Level < World1Config.RequiredLevel then
-		return
+	if not Session or Session.ProfileMutationsFrozen or Session.State ~= "InLobby" then
+		return false
 	end
 
+	local TargetMapId = if typeof(MapId) == "string" and MapId ~= "" then MapId else "MAP1"
+	local MapDef = if MapsConfig and MapsConfig.GetMap then MapsConfig.GetMap(TargetMapId) else nil
+	if not MapDef and MapsConfig and MapsConfig.RequiredLevel then
+		local Upper = string.upper(TargetMapId)
+		if Upper == "WORLD1" or Upper == "MAP1" or Upper == "WORLD_1" or Upper == "MAP_1" then
+			MapDef = {
+				MapId = MapsConfig.WorldId or "MAP1",
+				RequiredLevel = MapsConfig.RequiredLevel,
+				IsComingSoon = false,
+			}
+		end
+	end
+
+	if not MapDef or MapDef.IsComingSoon then
+		return false
+	end
+
+	local LevelRead, Level = pcall(GetDerivedLevel, Session)
+	if not LevelRead or Level < MapDef.RequiredLevel then
+		return false
+	end
+
+	TargetMapId = MapDef.MapId
 	PortalDebounces[Player] = true
+
+	local SessionService = OptionalSessionService
+	local WorldInstanceService = OptionalWorldInstanceService
+	if not SessionService or not WorldInstanceService then
+		local ServicesFound, SvcSession, SvcWorld = pcall(function()
+			return ServiceRegistry.Get("SessionService"), ServiceRegistry.Get("WorldInstanceService")
+		end)
+		if not ServicesFound then
+			ClearDebounce(Player)
+			return false
+		end
+		SessionService = SessionService or SvcSession
+		WorldInstanceService = WorldInstanceService or SvcWorld
+	end
+
+	if not SessionService or not WorldInstanceService then
+		ClearDebounce(Player)
+		return false
+	end
+
 	local OwnershipRead, RegisteredWorld = pcall(function()
 		return WorldInstanceService:GetPlayerWorld(Player)
 	end)
 	if not OwnershipRead then
 		RecoverPlayer(WorldInstanceService, Player, "PortalOwnershipQueryFailed")
-		return
+		return false
 	end
 
 	if RegisteredWorld or Session.CurrentWorldInstanceId then
 		local Checked = pcall(function()
-			WorldInstanceService:CreateWorldForPlayer(Player)
+			if WorldInstanceService.CreateWorld then
+				WorldInstanceService:CreateWorld(Player, TargetMapId)
+			else
+				WorldInstanceService:CreateWorldForPlayer(Player)
+			end
 		end)
 		if not Checked then
 			RecoverPlayer(WorldInstanceService, Player, "PortalOwnershipReconciliationFailed")
 		end
 		ClearDebounce(Player)
-		return
+		return false
 	end
 
 	local EnteringCalled, EnteringWorld = pcall(function()
 		return SessionService:TransitionState(Player, "InLobby", "EnteringWorld")
 	end)
-	if not EnteringCalled then
+	if not EnteringCalled or not EnteringWorld then
 		RecoverPlayer(WorldInstanceService, Player, "PortalEnteringTransitionFailed")
-		return
-	end
-	if not EnteringWorld then
-		RecoverPlayer(WorldInstanceService, Player, "PortalEnteringTransitionRejected")
-		return
+		return false
 	end
 
 	local Created, WorldInstance = pcall(function()
-		return WorldInstanceService:CreateWorldForPlayer(Player)
+		if WorldInstanceService.CreateWorld then
+			return WorldInstanceService:CreateWorld(Player, TargetMapId)
+		else
+			return WorldInstanceService:CreateWorldForPlayer(Player)
+		end
 	end)
-	if not Created then
+	if not Created or not WorldInstance then
 		RecoverPlayer(WorldInstanceService, Player, "PortalWorldCreationFailed")
 		Logger.Warn("Portal", "World entry failed for PlayerUserId=%d: %s", Player.UserId, tostring(WorldInstance))
-		return
-	end
-	if not WorldInstance then
-		RecoverPlayer(WorldInstanceService, Player, "PortalWorldCreationReturnedNil")
-		return
+		return false
 	end
 
-	local InWorldCalled, InWorld = pcall(function()
-		return SessionService:TransitionState(Player, "EnteringWorld", "InWorld")
-	end)
-	if not InWorldCalled then
-		RecoverPlayer(WorldInstanceService, Player, "PortalInWorldTransitionFailed")
-		return
+	if WorldInstanceService.EnterWorld then
+		local Entered, EnterSuccess = pcall(function()
+			return WorldInstanceService:EnterWorld(Player, WorldInstance)
+		end)
+		if not Entered or not EnterSuccess then
+			RecoverPlayer(WorldInstanceService, Player, "PortalInWorldTransitionFailed")
+			return false
+		end
+	else
+		local InWorldCalled, InWorld = pcall(function()
+			return SessionService:TransitionState(Player, "EnteringWorld", "InWorld")
+		end)
+		if not InWorldCalled or not InWorld then
+			RecoverPlayer(WorldInstanceService, Player, "PortalInWorldTransitionFailed")
+			return false
+		end
+		local Activated, ActivationSuccess = pcall(function()
+			return WorldInstanceService:ActivateWorld(Player)
+		end)
+		if not Activated or not ActivationSuccess then
+			RecoverPlayer(WorldInstanceService, Player, "PortalObjectiveActivationFailed")
+			return false
+		end
 	end
-	if not InWorld then
-		RecoverPlayer(WorldInstanceService, Player, "PortalInWorldTransitionRejected")
-		return
-	end
-	local Activated, ActivationSuccess = pcall(function()
-		return WorldInstanceService:ActivateWorld(Player)
-	end)
-	if not Activated or not ActivationSuccess then
-		RecoverPlayer(WorldInstanceService, Player, "PortalObjectiveActivationFailed")
-		return
-	end
+
 	ClearDebounce(Player)
+	return true
+end
+
+function PortalService:TryEnterPortal(Hit: BasePart, SessionService: any, WorldInstanceService: any)
+	local Player = GetPlayerFromHit(Hit)
+	if not Player then
+		return
+	end
+	self:SelectMap(Player, "MAP1", SessionService, WorldInstanceService)
 end
 
 function PortalService:ClearDebounce(Player: Player)

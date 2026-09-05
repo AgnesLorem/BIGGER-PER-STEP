@@ -38,6 +38,21 @@ local function ApplyScale(Player: Player, Character: Model, Bigger: number)
 	BodyDepth.Value = VisualScale
 	HeadScale.Value = VisualScale
 
+	-- Dynamic WalkSpeed scaling: heavy sub-linear curve for titan movement feel
+	Humanoid.WalkSpeed = math.clamp(16 * (VisualScale ^ 0.22), 16, 32)
+
+	-- Cache BaseHipHeight attribute (default 2.0) and scale HipHeight
+	local baseHipHeight = Humanoid:GetAttribute("BaseHipHeight")
+	if typeof(baseHipHeight) ~= "number" then
+		baseHipHeight = 2.0
+		Humanoid:SetAttribute("BaseHipHeight", baseHipHeight)
+	end
+	Humanoid.HipHeight = (baseHipHeight :: number) * VisualScale
+
+	-- Expose VisualScale attribute on Player and Character
+	Player:SetAttribute("VisualScale", VisualScale)
+	Character:SetAttribute("VisualScale", VisualScale)
+
 	Logger.Info("Scale", "Applied scale %f (Bigger = %f) to player %s on Server", VisualScale, Bigger, Player.Name)
 end
 
@@ -77,13 +92,13 @@ local function CreateVipTag(Player: Player, Character: Model)
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "VipTag"
-	billboard.Size = UDim2.new(0, 150, 0, 50)
+	billboard.Size = UDim2.fromOffset(150, 50)
 	billboard.StudsOffset = Vector3.new(0, 3.5, 0)
 	billboard.AlwaysOnTop = true
 	billboard.LightInfluence = 0
 
 	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, 0, 1, 0)
+	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
 	label.Font = Enum.Font.FredokaOne
 	label.Text = "★ VIP ★"

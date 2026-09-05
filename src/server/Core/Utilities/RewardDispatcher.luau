@@ -110,6 +110,42 @@ local Handlers = table.freeze({
 		end
 		return Mutated
 	end,
+
+	[RewardType.SkipRebirth] = function(Player: Player, _Reward: Reward): boolean
+		local RebirthService = ServiceRegistry.Get("RebirthService")
+		if not RebirthService then
+			return false
+		end
+		local Ok, Result = pcall(RebirthService.ApplySkipRebirth, RebirthService, Player)
+		return Ok and Result == true
+	end,
+
+	[RewardType.SpinTokens] = function(Player: Player, Reward: Reward): boolean
+		local Mutated = Sessions.Mutate(Player, function(Session)
+			Session.SpinTokens += (Reward.Amount or 1)
+		end)
+		return Mutated
+	end,
+	[RewardType.Trail] = function(Player: Player, Reward: Reward): boolean
+		local TrailId = Reward.Id or Reward.ContentId
+		if not TrailId or type(TrailId) ~= "string" then
+			return false
+		end
+		local Mutated = Sessions.Mutate(Player, function(Session)
+			Session.UnlockedTrails[TrailId] = true
+		end)
+		return Mutated
+	end,
+	[RewardType.Title] = function(Player: Player, Reward: Reward): boolean
+		local TitleId = Reward.Id or Reward.ContentId
+		if not TitleId or type(TitleId) ~= "string" then
+			return false
+		end
+		local Mutated = Sessions.Mutate(Player, function(Session)
+			Session.UnlockedTitles[TitleId] = true
+		end)
+		return Mutated
+	end,
 })
 
 local RewardDispatcher = {}

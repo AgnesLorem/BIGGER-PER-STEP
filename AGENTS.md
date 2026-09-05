@@ -81,6 +81,38 @@ To build a consistent mental model before performing any task, AI agents must re
   ```
 - **Rationale**: Any unmatched trailing bits at the end of the bit string will leak as literal `"0"` characters in the output script, causing syntax errors.
 
+### 3. Reward Apply Contract
+- **Rule**: All reward operations (in `RewardDispatcher`) must follow a strict separation of phases:
+  - **Validators**:
+    - Can fail the transaction.
+    - Must **NOT** mutate any state (RAM, profile, or session).
+    - Must not call `SaveService` or fire event/remote pipelines.
+  - **Appliers**:
+    - Must **NOT** contain validation logic.
+    - Must **NEVER** throw errors at runtime.
+    - Must perform only deterministic in-memory mutations (e.g. modifying `session` or `profile` values in RAM).
+  - **Visual & Async Updates**:
+    - Any operations that may fail or yield (UI refreshes, character visual scaling, remote event fires, HTTP requests, VFX) must be isolated outside the core Apply path and run asynchronously using `task.spawn` or `task.defer`.
+  - **Persistence**:
+    - Handled authoritatively by `SaveService` after the Apply phase.
+- **Rationale**: Prevents partial RAM mutation bugs if a middle reward in a bundle crashes, minimizing runtime failure surface.
+
+### 4. EventBus Contract
+- **Rule**: All event publishing via `EventBus.Publish` must run asynchronously using `task.spawn`.
+- **Constraints**:
+  - Subscriber failures are isolated and logged.
+  - The publisher must **never** rely on subscriber execution order.
+  - Execution order is not guaranteed, and callbacks run asynchronously.
+- **Rationale**: Decouples business logic execution from UI/VFX/analytics side-effects, ensuring subscriber errors do not halt game-critical loops.
+
+### 5. Constraint-Driven Responsive UI
+- **Rule**: All UI development must follow the **Constraint-Driven Responsive Architecture (CDRA)** standard.
+- **Philosophy**: *Responsive by composition, not by scripting.*
+- **Constraints**:
+  - Always prefer Roblox Layouts (`UIListLayout`, `UIGridLayout`), Constraints (`UIAspectRatioConstraint`, `UISizeConstraint`), `AutomaticSize`, and `Scale` for size/position.
+  - Introduce runtime scripts only when the interface requires different platform-specific layouts or interaction models.
+  - All gameplay-critical UI must respect the safe area policy; child widgets must not compensate for safe-area individually.
+
 ---
 
 ## 💡 Lessons Learned (Roblox & Gameplay Invariants)

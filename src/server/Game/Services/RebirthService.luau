@@ -1,27 +1,28 @@
 --!strict
--- src/server/Game/Services/RebirthService.luau
--- Server-authoritative Rebirth service.
--- Validates requirements, executes progression reset, updates multipliers and persistence.
+-- RebirthService.luau
+-- Server-authoritative Rebirth system: validates, mutates Session.Rebirth, resets Size via GrowthService.
 
+--// Raw Requirings \\--
 local Players = game:GetService("Players")
+local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+--// Requirings \\--
 local Sessions = require(script.Parent.Parent.Parent.Core.Registry.RuntimeRegistry.Sessions)
 local ServiceRegistry = require(script.Parent.Parent.Parent.Core.Registry.ServiceRegistry)
 local Logger = require(script.Parent.Parent.Parent.Core.Utilities.Logger)
 local EventBus = require(script.Parent.Parent.Parent.Core.Events.EventBus)
-
+local RebirthTypes = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Types")
+		:WaitForChild("RebirthTypes")
+)
 local RebirthConfig = require(
 	ReplicatedStorage:WaitForChild("BiggerShared")
 		:WaitForChild("Game")
-		:WaitForChild("Config")
-		:WaitForChild("RebirthConfig")
-)
-local RebirthFormula = require(
-	ReplicatedStorage:WaitForChild("BiggerShared")
-		:WaitForChild("Game")
 		:WaitForChild("Progression")
-		:WaitForChild("RebirthFormula")
+		:WaitForChild("RebirthConfig")
 )
 local LevelFormula = require(
 	ReplicatedStorage:WaitForChild("BiggerShared")
@@ -29,6 +30,381 @@ local LevelFormula = require(
 		:WaitForChild("Progression")
 		:WaitForChild("LevelFormula")
 )
+local RebirthFormula: any = nil
+pcall(function()
+	RebirthFormula = require(
+		ReplicatedStorage:WaitForChild("BiggerShared")
+			:WaitForChild("Game")
+			:WaitForChild("Progression")
+			:WaitForChild("RebirthFormula")
+	)
+end)
+
+local RebirthError = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Core")
+		:WaitForChild("Enums")
+		:WaitForChild("RebirthError")
+)
+local GrowthFormula = require(script.Parent.Parent.Formula.GrowthFormula)
+
+--// Types \\--
+type Session = Sessions.Session
+type RebirthTierSnapshot = RebirthTypes.RebirthTierSnapshot
+type RebirthUpdate = RebirthTypes.RebirthUpdate
+
+--// Variables \\--
+local RebirthCooldowns: { [Player]: number } = {}
+local PlayerRegistries: { [Player]: { Connections: { RBXScriptConnection }, Destroyed: boolean } } = {}
+local RequestRebirthRemote: RemoteEvent
+local RequestSkipRebirthRemote: RemoteEvent
+local UpdateRebirthRemote: RemoteEvent
+local UpdateVersion = 0
+
+--// Helpers \\--
+
+-- Ensure a RemoteEvent exists under ReplicatedStorage.Remotes (idempotent).
+local function EnsureRemote(Name: string): RemoteEvent
+	local RemotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
+	if not RemotesFolder then
+		RemotesFolder = Instance.new("Folder")
+		RemotesFolder.Name = "Remotes"
+		RemotesFolder.Parent = ReplicatedStorage
+	end
+
+	local Existing = RemotesFolder:FindFirstChild(Name)
+	if Existing and Existing:IsA("RemoteEvent") then
+		return Existing
+	end
+
+	local Remote = Instance.new("RemoteEvent")
+	Remote.Name = Name
+	Remote.Parent = RemotesFolder
+	return Remote
+end
+
+local function GetGrowthService()
+	return ServiceRegistry.Get("GrowthService")
+end
+
+-- Calculate the RequiredLevel for a given rebirth count (server-only).
+-- Rebirth 0 -> 1: Level 20
+-- Rebirth 1 -> 2: Level 50
+-- Rebirth 2 -> 3: Level 75
+-- Rebirth 3 -> 4: Level 100
+-- Rebirth 4 -> 5: Level 150
+-- Rebirth 5+: 150 + ((CurrentRebirth - 4) * 50)
+local function CalculateRequiredLevel(Rebirths: number): number
+	if Rebirths == 0 then
+		return 20
+	elseif Rebirths == 1 then
+		return 50
+	elseif Rebirths == 2 then
+		return 75
+	elseif Rebirths == 3 then
+		return 100
+	elseif Rebirths == 4 then
+		return 150
+	else
+		return 150 + (Rebirths - 4) * 50
+	end
+end
+
+-- Calculate the RequiredSize for a given RequiredLevel.
+local function CalculateRequiredSize(RequiredLevel: number): number
+	return LevelFormula.GetRequirement(RequiredLevel)
+end
+
+-- Build a preview snapshot for N future tiers after CurrentRebirths.
+local function BuildPreviewTiers(CurrentRebirths: number): { RebirthTierSnapshot }
+	local Tiers: { RebirthTierSnapshot } = {}
+	for i = 0, RebirthConfig.MaxPreviewTiers - 1 do
+		local FutureRebirths = CurrentRebirths + 1 + i
+		local FutureReqLevel = CalculateRequiredLevel(CurrentRebirths + i)
+		table.insert(Tiers, {
+			RequiredSize = CalculateRequiredSize(FutureReqLevel),
+			GrowthMultiplier = math.max(1, FutureRebirths + 1),
+		})
+	end
+	return Tiers
+end
+
+-- Compute the full RebirthUpdate payload for a player.
+local function BuildUpdate(Player: Player, Error: string?): RebirthUpdate
+	UpdateVersion += 1
+	local Session = Sessions.Get(Player)
+	if not Session then
+		return {
+			Version = UpdateVersion,
+			Timestamp = os.time(),
+			CurrentSize = 0,
+			RequiredSize = 0,
+			CurrentLevel = 1,
+			RequiredLevel = 20,
+			GrowthMultiplier = 1,
+			NextGrowthMultiplier = 2,
+			Rebirths = 0,
+			CanRebirth = false,
+			PreviewTiers = {},
+			Error = Error or RebirthError.SessionMissing,
+		}
+	end
+
+	local CurrentSize = Session.Bigger
+	local CurrentLevel = LevelFormula.GetLevel(CurrentSize)
+	local RequiredLevel = CalculateRequiredLevel(Session.Rebirth)
+	local RequiredSize = CalculateRequiredSize(RequiredLevel)
+	local CanRebirth = CurrentLevel >= RequiredLevel
+	local Multiplier = GrowthFormula.GetMultiplier(Session)
+	local BaseMult = (if Session.HasDoubleMultiplier then 2 else 1) * (if Session.HasVip then 2 else 1)
+	local NextMultiplier = BaseMult * (Session.Rebirth + 2)
+
+	return {
+		Version = UpdateVersion,
+		Timestamp = os.time(),
+		CurrentSize = CurrentSize,
+		RequiredSize = RequiredSize,
+		CurrentLevel = CurrentLevel,
+		RequiredLevel = RequiredLevel,
+		GrowthMultiplier = Multiplier,
+		NextGrowthMultiplier = NextMultiplier,
+		Rebirths = Session.Rebirth,
+		CanRebirth = CanRebirth,
+		PreviewTiers = BuildPreviewTiers(Session.Rebirth),
+		Error = Error or RebirthError.None,
+	}
+end
+
+-- Push the authoritative snapshot to the client.
+local function PushUpdate(Player: Player, Error: string?)
+	local Payload = BuildUpdate(Player, Error)
+	local Ok, Err = pcall(function()
+		UpdateRebirthRemote:FireClient(Player, Payload)
+	end)
+	if not Ok then
+		Logger.Warn("Rebirth", "Failed to push UpdateRebirth to %s: %s", Player.Name, tostring(Err))
+	end
+end
+
+-- Core rebirth mutation: increment Rebirth, reset Size via GrowthService.
+-- Returns true on success.
+local function ApplyRebirth(Player: Player, SkipSizeCheck: boolean): boolean
+	local Session = Sessions.Get(Player)
+	if not Session then
+		PushUpdate(Player, RebirthError.SessionMissing)
+		return false
+	end
+	if Session.ProfileMutationsFrozen then
+		PushUpdate(Player, RebirthError.Frozen)
+		return false
+	end
+	if Session.State ~= "InLobby" then
+		PushUpdate(Player, RebirthError.NotInLobby)
+		return false
+	end
+
+	local RequiredLevel = CalculateRequiredLevel(Session.Rebirth)
+	local CurrentLevel = LevelFormula.GetLevel(Session.Bigger)
+	if not SkipSizeCheck and CurrentLevel < RequiredLevel then
+		PushUpdate(Player, RebirthError.SizeRequirementNotMet)
+		return false
+	end
+
+	-- Mutate: increment Rebirth
+	local Mutated = Sessions.Mutate(Player, function(S: Session)
+		S.Rebirth += 1
+	end)
+	if not Mutated then
+		PushUpdate(Player, RebirthError.Frozen)
+		return false
+	end
+
+	-- Reset Size via GrowthService pipeline (attribute + leaderstats + BiggerChanged event + CharacterScaleService)
+	local GrowthService = GetGrowthService()
+	if GrowthService then
+		pcall(function()
+			GrowthService:SetBigger(Player, RebirthConfig.RebirthResetSize)
+		end)
+	end
+
+	-- Refresh Multiplier attribute (reflects new Rebirth factor)
+	if GrowthService then
+		pcall(function()
+			GrowthService:UpdateMultiplierAttribute(Player)
+		end)
+	end
+
+	-- Authoritative state sync to player attributes
+	Player:SetAttribute("Rebirth", Session.Rebirth)
+	if RebirthFormula and RebirthFormula.GetMultiplier then
+		Player:SetAttribute("RebirthMultiplier", RebirthFormula.GetMultiplier(Session.Rebirth))
+	else
+		Player:SetAttribute("RebirthMultiplier", Session.Rebirth + 1)
+	end
+
+	-- Update leaderstats
+	local Leaderstats = Player:FindFirstChild("leaderstats")
+	if Leaderstats then
+		local RebirthStat = Leaderstats:FindFirstChild("Rebirth")
+		if RebirthStat and RebirthStat:IsA("IntValue") then
+			RebirthStat.Value = Session.Rebirth
+		end
+	end
+
+	-- Publish lifecycle events
+	pcall(function()
+		EventBus.Publish("RebirthCompleted", Player, Session.Rebirth)
+	end)
+
+	-- Queue immediate save
+	pcall(function()
+		local SaveService = ServiceRegistry.Get("SaveService")
+		if SaveService and SaveService.QueueProfileSave then
+			SaveService:QueueProfileSave(Player)
+		end
+	end)
+
+	-- Set cooldown
+	RebirthCooldowns[Player] = os.clock() + RebirthConfig.CooldownSeconds
+	task.delay(RebirthConfig.CooldownSeconds, function()
+		RebirthCooldowns[Player] = nil
+	end)
+
+	Logger.Info("Rebirth", "Player %s completed rebirth (Rebirths=%d)", Player.Name, Session.Rebirth)
+	PushUpdate(Player, nil)
+	return true
+end
+
+local function OnRequestRebirth(Player: Player, Action: string?)
+	if Action == "Refresh" then
+		PushUpdate(Player, nil)
+		return
+	end
+	-- Cooldown check (per-player, never blocks other players)
+	if RebirthCooldowns[Player] and os.clock() < RebirthCooldowns[Player] then
+		PushUpdate(Player, RebirthError.OnCooldown)
+		return
+	end
+	ApplyRebirth(Player, false)
+end
+
+local function OnRequestSkipRebirth(Player: Player)
+	-- Cooldown check
+	if RebirthCooldowns[Player] and os.clock() < RebirthCooldowns[Player] then
+		PushUpdate(Player, RebirthError.OnCooldown)
+		return
+	end
+
+	-- Prompt the marketplace purchase. The actual reward grant flows through
+	-- ReceiptProcessingService -> RewardService -> RewardDispatcher [SkipRebirth].
+	pcall(function()
+		MarketplaceService:PromptProductPurchase(Player, RebirthConfig.SkipRebirthProductId)
+	end)
+end
+
+-- Per-player Registry management.
+local function DestroyPlayerRegistry(Player: Player)
+	local Registry = PlayerRegistries[Player]
+	if not Registry then
+		return
+	end
+	if Registry.Destroyed then
+		return
+	end
+	Registry.Destroyed = true
+
+	for _, Connection in Registry.Connections do
+		Connection:Disconnect()
+	end
+	table.clear(Registry.Connections)
+
+	PlayerRegistries[Player] = nil
+end
+
+local function OnPlayerAdded(Player: Player)
+	local Registry = {
+		Connections = {},
+		Destroyed = false,
+	}
+	PlayerRegistries[Player] = Registry
+end
+
+local function OnPlayerRemoving(Player: Player)
+	-- Clear cooldown (RebirthService-owned)
+	RebirthCooldowns[Player] = nil
+	-- Destroy player Registry (RebirthService-owned)
+	DestroyPlayerRegistry(Player)
+	-- Session ownership remains with SessionService — do NOT remove session references.
+end
+
+local function OnSessionCreated(Player: Player)
+	-- Push initial authoritative snapshot after session is ready.
+	-- Delay 1 frame to ensure GrowthService attributes are projected.
+	task.spawn(function()
+		task.wait()
+		PushUpdate(Player, nil)
+	end)
+end
+
+-- Subscribe to EventBus for session lifecycle signals.
+local function SubscribeEventBus()
+	EventBus.Subscribe("PlayerSessionCreated", function(Player: Player)
+		OnSessionCreated(Player)
+	end)
+	EventBus.Subscribe("BiggerChanged", function(Player: Player)
+		PushUpdate(Player, nil)
+	end)
+end
+
+--// Service \\--
+local RebirthService = {}
+
+function RebirthService:Init()
+	-- Ensure remotes (idempotent)
+	RequestRebirthRemote = EnsureRemote("RequestRebirth")
+	RequestSkipRebirthRemote = EnsureRemote("RequestSkipRebirth")
+	UpdateRebirthRemote = EnsureRemote("UpdateRebirth")
+
+	RequestRebirthRemote.OnServerEvent:Connect(function(Client: Player, Action: any)
+		OnRequestRebirth(Client, Action)
+	end)
+
+	RequestSkipRebirthRemote.OnServerEvent:Connect(function(Client: Player)
+		OnRequestSkipRebirth(Client)
+	end)
+
+	Players.PlayerAdded:Connect(OnPlayerAdded)
+	Players.PlayerRemoving:Connect(OnPlayerRemoving)
+
+	SubscribeEventBus()
+
+	-- Wire existing players (e.g. if service inits after some players joined)
+	for _, Player in Players:GetPlayers() do
+		task.spawn(OnPlayerAdded, Player)
+	end
+
+	Logger.Info("Rebirth", "RebirthService initialized")
+end
+
+function RebirthService:Start()
+	-- Push initial updates for already-loaded players
+	for _, Player in Players:GetPlayers() do
+		if Sessions.Get(Player) then
+			task.spawn(PushUpdate, Player, nil)
+		end
+	end
+end
+
+-- Called by RewardDispatcher [SkipRebirth] handler.
+-- Bypasses Size requirement but goes through the same ApplyRebirth path.
+function RebirthService:ApplySkipRebirth(Player: Player): boolean
+	-- Cooldown check
+	if RebirthCooldowns[Player] and os.clock() < RebirthCooldowns[Player] then
+		PushUpdate(Player, RebirthError.OnCooldown)
+		return false
+	end
+	return ApplyRebirth(Player, true)
+end
 
 local ResultCodes = table.freeze({
 	Success = "Success",
@@ -40,102 +416,12 @@ local ResultCodes = table.freeze({
 	MutationFailed = "MutationFailed",
 	InvalidRequest = "InvalidRequest",
 })
-
-local RebirthService = {}
 RebirthService.ResultCodes = ResultCodes
-
-local RebirthFolder: Folder
-local RequestRemote: RemoteEvent
-local ResponseRemote: RemoteEvent
-local Initialized = false
-local Started = false
-local Connections: { RBXScriptConnection } = {}
-local LastRebirthTimestamps: { [Player]: number } = {}
-
-local function QueueImmediateSave(Player: Player, NewRebirthCount: number)
-	local SaveServiceOk, SaveService = pcall(function()
-		return ServiceRegistry.Get("SaveService")
-	end)
-	if SaveServiceOk and SaveService then
-		local SaveQueued = SaveService:QueueProfileSave(Player)
-		if not SaveQueued then
-			Logger.Warn("Rebirth", "Immediate save queue failed for %s after Rebirth %d", Player.Name, NewRebirthCount)
-		end
-	else
-		Logger.Warn(
-			"Rebirth",
-			"SaveService unavailable to queue save for %s after Rebirth %d",
-			Player.Name,
-			NewRebirthCount
-		)
-	end
-end
-
-local function GetOrCreate(Parent: Instance, Name: string, ClassName: string): Instance
-	local Existing = Parent:FindFirstChild(Name)
-	if Existing then
-		assert(Existing:IsA(ClassName), string.format("%s.%s must be a %s", Parent.Name, Name, ClassName))
-		return Existing
-	end
-	local Created = Instance.new(ClassName)
-	Created.Name = Name
-	Created.Parent = Parent
-	return Created
-end
-
-local function HandleRequest(Player: Player, _Value: unknown)
-	if Player.Parent ~= Players then
-		return
-	end
-
-	local Success, Code, NewCount = RebirthService:RequestRebirth(Player)
-	if ResponseRemote then
-		ResponseRemote:FireClient(Player, {
-			Success = Success,
-			ErrorCode = Code,
-			RebirthCount = NewCount,
-		})
-	end
-end
-
-function RebirthService:Init()
-	if Initialized then
-		return
-	end
-
-	local EventsFolder = ReplicatedStorage:FindFirstChild("BiggerEvents") :: Folder?
-	if not EventsFolder then
-		EventsFolder = GetOrCreate(ReplicatedStorage, "BiggerEvents", "Folder") :: Folder
-	elseif not EventsFolder:IsA("Folder") then
-		error("BiggerEvents must be a Folder")
-	end
-
-	RebirthFolder = GetOrCreate(EventsFolder, "Rebirth", "Folder") :: Folder
-	RequestRemote = GetOrCreate(RebirthFolder, "Request", "RemoteEvent") :: RemoteEvent
-	ResponseRemote = GetOrCreate(RebirthFolder, "Response", "RemoteEvent") :: RemoteEvent
-	table.insert(Connections, RequestRemote.OnServerEvent:Connect(HandleRequest))
-	Initialized = true
-end
-
-function RebirthService:Start()
-	if Started then
-		return
-	end
-	Started = true
-
-	table.insert(
-		Connections,
-		Players.PlayerRemoving:Connect(function(Player: Player)
-			LastRebirthTimestamps[Player] = nil
-		end)
-	)
-end
 
 function RebirthService:RequestRebirth(Player: Player): (boolean, string, number?)
 	if Player.Parent ~= Players then
 		return false, ResultCodes.PlayerDisconnected, nil
 	end
-
 	local Session = Sessions.Get(Player)
 	if not Session then
 		return false, ResultCodes.NoSession, nil
@@ -143,76 +429,28 @@ function RebirthService:RequestRebirth(Player: Player): (boolean, string, number
 	if Session.ProfileMutationsFrozen then
 		return false, ResultCodes.Frozen, nil
 	end
-
-	local Now = os.clock()
-	local LastRebirth = LastRebirthTimestamps[Player] or 0
-	if Now - LastRebirth < RebirthConfig.MinimumRebirthCooldownSeconds then
+	if RebirthCooldowns[Player] and os.clock() < RebirthCooldowns[Player] then
 		return false, ResultCodes.RateLimited, Session.Rebirth
 	end
-
-	local CurrentLevel = LevelFormula.GetLevelFromBigger(Session.Bigger)
-	if not RebirthFormula.CanRebirth(CurrentLevel, Session.Rebirth) then
+	local RequiredLevel = CalculateRequiredLevel(Session.Rebirth)
+	local CurrentLevel = LevelFormula.GetLevel(Session.Bigger)
+	if CurrentLevel < RequiredLevel then
 		return false, ResultCodes.RequirementsNotMet, Session.Rebirth
 	end
-
-	local NewRebirthCount = Session.Rebirth + 1
-	local Mutated = Sessions.Mutate(Player, function(S)
-		S.Bigger = 0
-		S.GrowthRemainder = 0
-		S.Rebirth = NewRebirthCount
-	end)
-
-	if not Mutated then
+	local Ok = ApplyRebirth(Player, false)
+	if Ok then
+		return true, ResultCodes.Success, Session.Rebirth
+	else
 		return false, ResultCodes.MutationFailed, Session.Rebirth
 	end
-
-	LastRebirthTimestamps[Player] = Now
-
-	-- Authoritative state sync to player attributes
-	Player:SetAttribute("Bigger", 0)
-	Player:SetAttribute("Level", 1)
-	Player:SetAttribute("Rebirth", NewRebirthCount)
-	Player:SetAttribute("RebirthMultiplier", RebirthFormula.GetMultiplier(NewRebirthCount))
-
-	-- Update leaderstats
-	local Leaderstats = Player:FindFirstChild("leaderstats")
-	if Leaderstats then
-		local BiggerStat = Leaderstats:FindFirstChild("Bigger")
-		if BiggerStat and BiggerStat:IsA("IntValue") then
-			BiggerStat.Value = 0
-		end
-		local RebirthStat = Leaderstats:FindFirstChild("Rebirth")
-		if RebirthStat and RebirthStat:IsA("IntValue") then
-			RebirthStat.Value = NewRebirthCount
-		end
-	end
-
-	-- Update multiplier attribute on player
-	local GrowthServiceOk, GrowthService = pcall(function()
-		return ServiceRegistry.Get("GrowthService")
-	end)
-	if GrowthServiceOk and GrowthService then
-		GrowthService:UpdateMultiplierAttribute(Player)
-	end
-
-	-- Publish lifecycle events
-	EventBus.Publish("RebirthCompleted", Player, NewRebirthCount)
-	EventBus.Publish("BiggerChanged", Player, 0)
-
-	QueueImmediateSave(Player, NewRebirthCount)
-	Logger.Info("Rebirth", "Player %s completed Rebirth %d", Player.Name, NewRebirthCount)
-
-	return true, ResultCodes.Success, NewRebirthCount
 end
 
 function RebirthService:Destroy()
-	for _, Connection in Connections do
-		Connection:Disconnect()
+	for Player in PlayerRegistries do
+		DestroyPlayerRegistry(Player)
 	end
-	table.clear(Connections)
-	table.clear(LastRebirthTimestamps)
-	Initialized = false
-	Started = false
+	table.clear(RebirthCooldowns)
+	table.clear(PlayerRegistries)
 end
 
 return RebirthService

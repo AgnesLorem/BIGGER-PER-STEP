@@ -3,3 +3,10 @@
 *.toml text eol=lf
 *.json text eol=lf
 *.md text eol=lf
+
+# 3D Assets & Blender
+*.blend binary
+*.fbx binary
+*.obj text
+*.gltf text
+*.glb binary

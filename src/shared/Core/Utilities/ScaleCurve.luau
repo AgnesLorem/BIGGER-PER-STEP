@@ -12,9 +12,11 @@
 -- Public API:
 -- - ScaleCurve.GetVisualScale(Bigger, Formula?, CurveParameter?, Exponent?): number
 
---// Variables \\--
+--// Requirings \\--
 
 local LevelFormula = require(script.Parent.Parent.Parent.Game.Progression.LevelFormula)
+
+--// Variables \\--
 
 local DEFAULT_FORMULA = "sqrt"
 local DEFAULT_CURVE_PARAMETER = 0.5
@@ -39,11 +41,11 @@ local Formulas: { [string]: FormulaFunction } = table.freeze({
 		return Bigger * CurveParameter
 	end,
 	level = function(Bigger: number, CurveParameter: number, _Exponent: number?): number
-		local Level = LevelFormula.GetLevelFromBigger(Bigger)
+		local Level = LevelFormula.GetLevel(Bigger)
 		return 1 + (Level - 1) * CurveParameter
 	end,
 	power = function(Bigger: number, Coefficient: number, Exponent: number?): number
-		local Level = LevelFormula.GetLevelFromBigger(Bigger)
+		local Level = LevelFormula.GetLevel(Bigger)
 		local Exp = Exponent or DEFAULT_EXPONENT
 		return 1 + Coefficient * math.max(0, Level - 1) ^ Exp
 	end,

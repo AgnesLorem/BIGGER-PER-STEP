@@ -22,6 +22,14 @@ export type Profile = {
 	HasDoubleMultiplier: boolean,
 	HasVip: boolean,
 	HasPremiumZonePass: boolean,
+	HasAutoWins: boolean,
+	DailyRewardDay: number,
+	LastDailyClaimTimestamp: number,
+	SpinTokens: number,
+	UnlockedTrails: StringSet,
+	EquippedTrail: string?,
+	UnlockedTitles: StringSet,
+	EquippedTitle: string?,
 	ProcessedPurchaseIds: StringSet,
 	LastActiveTimestamp: number,
 	LastLogoutTimestamp: number,
@@ -32,10 +40,12 @@ export type Profile = {
 
 local PlayerProfileSchema = {}
 
-PlayerProfileSchema.SchemaVersion = 1
+PlayerProfileSchema.SchemaVersion = 2
 PlayerProfileSchema.MaximumSafeInteger = 9007199254740991
 PlayerProfileSchema.MaximumUnlockedGrowthUpgrades = 64
 PlayerProfileSchema.MaximumCompletedPortals = 256
+PlayerProfileSchema.MaximumUnlockedTrails = 64
+PlayerProfileSchema.MaximumUnlockedTitles = 64
 PlayerProfileSchema.MaximumProcessedPurchaseIds = 5000
 PlayerProfileSchema.MaximumContentIdLength = 64
 PlayerProfileSchema.MaximumPurchaseIdLength = 128
@@ -138,6 +148,14 @@ function PlayerProfileSchema.Defaults(): Profile
 		HasDoubleMultiplier = false,
 		HasVip = false,
 		HasPremiumZonePass = false,
+		HasAutoWins = false,
+		DailyRewardDay = 1,
+		LastDailyClaimTimestamp = 0,
+		SpinTokens = 0,
+		UnlockedTrails = {},
+		EquippedTrail = nil,
+		UnlockedTitles = {},
+		EquippedTitle = nil,
 		ProcessedPurchaseIds = {},
 		LastActiveTimestamp = 0,
 		LastLogoutTimestamp = 0,
@@ -154,7 +172,7 @@ function PlayerProfileSchema.Normalize(Stored: any): Profile
 	end
 	if Stored.SchemaVersion ~= nil then
 		local Version = RequireSafeInteger(Stored.SchemaVersion, 1, "SchemaVersion")
-		if Version ~= PlayerProfileSchema.SchemaVersion then
+		if Version > PlayerProfileSchema.SchemaVersion then
 			Fail("SchemaVersion", "future or unsupported schema")
 		end
 	end
@@ -197,6 +215,35 @@ function PlayerProfileSchema.Normalize(Stored: any): Profile
 	if Stored.HasPremiumZonePass ~= nil then
 		Profile.HasPremiumZonePass = RequireBoolean(Stored.HasPremiumZonePass, "HasPremiumZonePass")
 	end
+	if Stored.HasAutoWins ~= nil then
+		Profile.HasAutoWins = RequireBoolean(Stored.HasAutoWins, "HasAutoWins")
+	end
+	if Stored.DailyRewardDay ~= nil then
+		Profile.DailyRewardDay = RequireSafeInteger(Stored.DailyRewardDay, 1, "DailyRewardDay")
+	end
+	if Stored.LastDailyClaimTimestamp ~= nil then
+		Profile.LastDailyClaimTimestamp =
+			RequireSafeInteger(Stored.LastDailyClaimTimestamp, 0, "LastDailyClaimTimestamp")
+	end
+	if Stored.SpinTokens ~= nil then
+		Profile.SpinTokens = RequireSafeInteger(Stored.SpinTokens, 0, "SpinTokens")
+	end
+	if Stored.UnlockedTrails ~= nil then
+		Profile.UnlockedTrails = CopySet(
+			Stored.UnlockedTrails,
+			PlayerProfileSchema.MaximumUnlockedTrails,
+			PlayerProfileSchema.IsContentId,
+			"UnlockedTrails"
+		)
+	end
+	if Stored.UnlockedTitles ~= nil then
+		Profile.UnlockedTitles = CopySet(
+			Stored.UnlockedTitles,
+			PlayerProfileSchema.MaximumUnlockedTitles,
+			PlayerProfileSchema.IsContentId,
+			"UnlockedTitles"
+		)
+	end
 	if Stored.ProcessedPurchaseIds ~= nil then
 		Profile.ProcessedPurchaseIds = CopySet(
 			Stored.ProcessedPurchaseIds,
@@ -223,6 +270,26 @@ function PlayerProfileSchema.Normalize(Stored: any): Profile
 			Fail("EquippedGrowthUpgrade", "upgrade is not unlocked")
 		end
 		Profile.EquippedGrowthUpgrade = Stored.EquippedGrowthUpgrade
+	end
+
+	if Stored.EquippedTrail ~= nil then
+		if not PlayerProfileSchema.IsContentId(Stored.EquippedTrail) then
+			Fail("EquippedTrail", "expected a content ID")
+		end
+		if Profile.UnlockedTrails[Stored.EquippedTrail] ~= true then
+			Fail("EquippedTrail", "trail is not unlocked")
+		end
+		Profile.EquippedTrail = Stored.EquippedTrail
+	end
+
+	if Stored.EquippedTitle ~= nil then
+		if not PlayerProfileSchema.IsContentId(Stored.EquippedTitle) then
+			Fail("EquippedTitle", "expected a content ID")
+		end
+		if Profile.UnlockedTitles[Stored.EquippedTitle] ~= true then
+			Fail("EquippedTitle", "title is not unlocked")
+		end
+		Profile.EquippedTitle = Stored.EquippedTitle
 	end
 
 	if Stored.UnlockedAuras ~= nil then

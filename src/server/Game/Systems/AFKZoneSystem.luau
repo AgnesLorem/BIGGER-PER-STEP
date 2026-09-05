@@ -18,11 +18,24 @@ local ServiceRegistry = require(script.Parent.Parent.Parent.Core.Registry.Servic
 local Logger = require(script.Parent.Parent.Parent.Core.Utilities.Logger)
 
 --// Types \\--
-type ZoneConfig = {
-	TickRate: number,
-	BaseGain: number,
-	ZoneMultiplier: number,
-	PassKey: string?,
+type ZoneConfig = AFKZones.ZoneConfig
+
+--// Constants \\--
+local CANDIDATE_ZONES = {
+	"VipTable2",
+	"VipTable1",
+	"Table5",
+	"Table4",
+	"Table3",
+	"Table2",
+	"Table1",
+	"AFKZone7",
+	"AFKZone6",
+	"AFKZone5",
+	"AFKZone4",
+	"AFKZone3",
+	"AFKZone2",
+	"AFKZone1",
 }
 
 --// Helpers \\--
@@ -42,7 +55,7 @@ local function ProcessZones()
 		return
 	end
 
-	local AFKZoneFolder = Workspace:FindFirstChild("AFKZones")
+	local AFKZoneFolder = Workspace:FindFirstChild("CheeseDiningTables") or Workspace:FindFirstChild("AFKZones")
 	if not AFKZoneFolder then
 		return
 	end
@@ -62,9 +75,8 @@ local function ProcessZones()
 
 		local ZoneName: string? = nil
 		local ZoneConfig: ZoneConfig? = nil
-		for ZoneIndex = 7, 1, -1 do
-			local CandidateName = "AFKZone" .. ZoneIndex
-			local CandidateConfig = AFKZones[CandidateName]
+		for _, CandidateName in CANDIDATE_ZONES do
+			local CandidateConfig = (AFKZones :: any)[CandidateName]
 			local ZonePart = AFKZoneFolder:FindFirstChild(CandidateName)
 			if CandidateConfig and ZonePart and ZonePart:IsA("BasePart") and IsInsideZone(RootPart, ZonePart) then
 				ZoneName = CandidateName
@@ -76,6 +88,10 @@ local function ProcessZones()
 		Session.CurrentAFKZone = ZoneName
 		if not ZoneName or not ZoneConfig then
 			Session.PremiumZonePromptedThisEntry = false
+			continue
+		end
+
+		if ZoneConfig.MinRebirth and Session.Rebirth < ZoneConfig.MinRebirth then
 			continue
 		end
 

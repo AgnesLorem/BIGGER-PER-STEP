@@ -34,7 +34,7 @@ Every gameplay system must support and reinforce the core gameplay loop:
 - **Destruction**
   - A permanent progression milestone resource earned by completing Portal objectives.
   - Aligned with "Wins" in other incremental games. Not Coins, Cash, or Gold.
-  - Cannot be spent in the MVP.
+  - Cannot be spent or deducted in the game; serves strictly as a lifetime progression milestone.
 - **Growth Upgrade**
   - Permanent unlocks that boost the player's GrowthMultiplier.
   - Only one Growth Upgrade can be active/equipped at any given time.
@@ -56,6 +56,7 @@ Every gameplay system must support and reinforce the core gameplay loop:
 ## Growth Upgrade Philosophy
 
 - Growth Upgrades are progression milestones, not consumable items.
+- Upgrades unlock automatically based on lifetime Destruction milestones without spending or deducting Destruction.
 - Upgrades follow a strictly linear progression pathway.
 - Upgrades do not have levels, enhancements, or duplicates.
 - Upgrades have three states: Locked, Unlocked, Equipped.

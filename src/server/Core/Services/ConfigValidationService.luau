@@ -15,6 +15,18 @@ local DeveloperProductConfig = require(script.Parent.Parent.Config.DeveloperProd
 local RewardType = require(
 	ReplicatedStorage:WaitForChild("BiggerShared"):WaitForChild("Core"):WaitForChild("Enums"):WaitForChild("RewardType")
 )
+local BalanceConfig = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("BalanceConfig")
+)
+local LevelFormula = require(
+	ReplicatedStorage:WaitForChild("BiggerShared")
+		:WaitForChild("Game")
+		:WaitForChild("Progression")
+		:WaitForChild("LevelFormula")
+)
 
 local ConfigValidationService = {}
 local MaximumSafeInteger = 9007199254740991
@@ -29,6 +41,8 @@ local SupportedDeveloperProductRewards = table.freeze({
 	[RewardType.Destruction] = true,
 	[RewardType.DoubleMultiplier] = true,
 	[RewardType.Vip] = true,
+	[RewardType.SkipRebirth] = true,
+	[RewardType.SpinTokens] = true,
 })
 
 function ConfigValidationService:Init()
@@ -243,8 +257,48 @@ function ConfigValidationService:Init()
 		end
 	end
 
+	Logger.Info("ConfigValidation", "Shop/Product configuration checks passed.")
+
+	-- 4. Validate BalanceConfig progression stages
+	local stages = BalanceConfig.Stages
+	if not stages or #stages == 0 then
+		error("ConfigValidation: BalanceConfig.Stages is empty or missing")
+	end
+
+	for i = 1, #stages do
+		local stage = stages[i]
+		if stage.MinLevel > stage.MaxLevel then
+			error("ConfigValidation: Stage '" .. stage.Name .. "' has MinLevel > MaxLevel")
+		end
+		if i > 1 then
+			local prevStage = stages[i - 1]
+			if stage.MinLevel ~= prevStage.MaxLevel + 1 then
+				error(
+					"ConfigValidation: Level gap between stages '" .. prevStage.Name .. "' and '" .. stage.Name .. "'"
+				)
+			end
+		end
+	end
+
+	-- Verify requirements are monotonically increasing for first 50 levels
+	local prevReq = -1
+	for level = 1, 50 do
+		local req = LevelFormula.GetRequirement(level)
+		if req < prevReq then
+			error("ConfigValidation: Non-monotonic requirement at Level " .. level .. ": " .. req .. " < " .. prevReq)
+		end
+		prevReq = req
+	end
+
+	-- Verify LevelFormula round-trip sanity
+	local testLevel = LevelFormula.GetLevel(0)
+	if testLevel ~= 1 then
+		error("ConfigValidation: LevelFormula.GetLevel(0) should be 1, got " .. testLevel)
+	end
+
+	Logger.Info("ConfigValidation", "BalanceConfig and LevelFormula validation passed.")
 	Initialized = true
-	Logger.Info("ConfigValidation", "All fatal configuration checks completed successfully.")
+	Logger.Info("ConfigValidation", "All fatal configuration checks completed successfully. Config is consistent!")
 end
 
 function ConfigValidationService:Start() end

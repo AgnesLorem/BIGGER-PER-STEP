@@ -2,6 +2,10 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService: any = nil
+pcall(function()
+	RunService = game:GetService("RunService")
+end)
 
 --// Requirings \\--
 local SaveConfig = require(script.Parent.Parent.Config.SaveConfig)
@@ -11,24 +15,77 @@ local Logger = require(script.Parent.Parent.Utilities.Logger)
 local EventBus = require(script.Parent.Parent.Events.EventBus)
 local SaveService = require(script.Parent.SaveService)
 local GrowthService = require(script.Parent.GrowthService)
-local LevelFormula = require(
-	ReplicatedStorage:WaitForChild("BiggerShared")
-		:WaitForChild("Game")
-		:WaitForChild("Progression")
-		:WaitForChild("LevelFormula")
-)
-local RebirthFormula = require(
-	ReplicatedStorage:WaitForChild("BiggerShared")
-		:WaitForChild("Game")
-		:WaitForChild("Progression")
-		:WaitForChild("RebirthFormula")
-)
-local AuraFormula = require(
-	ReplicatedStorage:WaitForChild("BiggerShared")
-		:WaitForChild("Game")
-		:WaitForChild("Progression")
-		:WaitForChild("AuraFormula")
-)
+
+local LevelFormula: any = nil
+pcall(function()
+	local BiggerShared = ReplicatedStorage:WaitForChild("BiggerShared", 1)
+	if BiggerShared then
+		local GameFolder = BiggerShared:FindFirstChild("Game")
+			or (BiggerShared.WaitForChild and BiggerShared:WaitForChild("Game", 1))
+		if GameFolder then
+			local ProgressionFolder = GameFolder:FindFirstChild("Progression")
+				or (GameFolder.WaitForChild and GameFolder:WaitForChild("Progression", 1))
+			if ProgressionFolder then
+				LevelFormula = require(
+					ProgressionFolder:FindFirstChild("LevelFormula")
+						or ProgressionFolder:WaitForChild("LevelFormula", 1)
+				)
+			end
+		end
+	end
+end)
+if not LevelFormula then
+	pcall(function()
+		LevelFormula = require(script.Parent.Parent.Parent.Parent.shared.Game.Progression.LevelFormula)
+	end)
+end
+
+local RebirthFormula: any = nil
+pcall(function()
+	local BiggerShared = ReplicatedStorage:WaitForChild("BiggerShared", 1)
+	if BiggerShared then
+		local GameFolder = BiggerShared:FindFirstChild("Game")
+			or (BiggerShared.WaitForChild and BiggerShared:WaitForChild("Game", 1))
+		if GameFolder then
+			local ProgressionFolder = GameFolder:FindFirstChild("Progression")
+				or (GameFolder.WaitForChild and GameFolder:WaitForChild("Progression", 1))
+			if ProgressionFolder then
+				RebirthFormula = require(
+					ProgressionFolder:FindFirstChild("RebirthFormula")
+						or ProgressionFolder:WaitForChild("RebirthFormula", 1)
+				)
+			end
+		end
+	end
+end)
+if not RebirthFormula then
+	pcall(function()
+		RebirthFormula = require(script.Parent.Parent.Parent.Parent.shared.Game.Progression.RebirthFormula)
+	end)
+end
+
+local AuraFormula: any = nil
+pcall(function()
+	local BiggerShared = ReplicatedStorage:WaitForChild("BiggerShared", 1)
+	if BiggerShared then
+		local GameFolder = BiggerShared:FindFirstChild("Game")
+			or (BiggerShared.WaitForChild and BiggerShared:WaitForChild("Game", 1))
+		if GameFolder then
+			local ProgressionFolder = GameFolder:FindFirstChild("Progression")
+				or (GameFolder.WaitForChild and GameFolder:WaitForChild("Progression", 1))
+			if ProgressionFolder then
+				AuraFormula = require(
+					ProgressionFolder:FindFirstChild("AuraFormula") or ProgressionFolder:WaitForChild("AuraFormula", 1)
+				)
+			end
+		end
+	end
+end)
+if not AuraFormula then
+	pcall(function()
+		AuraFormula = require(script.Parent.Parent.Parent.Parent.shared.Game.Progression.AuraFormula)
+	end)
+end
 
 --// Types \\--
 type Session = Sessions.Session
@@ -88,7 +145,15 @@ local function OnPlayerAdded(Player: Player)
 	if not Loaded then
 		LoadingPlayers[Player] = nil
 		Logger.Warn("Session", "Profile load failed for %s: %s", Player.Name, tostring(Profile))
-		if Sessions.Get(Player) or Profiles.Get(Player.UserId) then
+		if RunService and RunService.IsStudio and RunService:IsStudio() then
+			Logger.Warn(
+				"Session",
+				"STUDIO WARNING: Character will not spawn for %s due to failed profile load: %s",
+				Player.Name,
+				tostring(Profile)
+			)
+		end
+		if Sessions.Get(Player) then
 			return
 		end
 		Player:Kick("Your data could not be loaded safely. Please rejoin.")
@@ -115,6 +180,15 @@ local function OnPlayerAdded(Player: Player)
 		HasDoubleMultiplier = Profile.HasDoubleMultiplier,
 		HasVip = Profile.HasVip,
 		HasPremiumZonePass = Profile.HasPremiumZonePass,
+		HasAutoWins = Profile.HasAutoWins,
+		DailyRewardDay = Profile.DailyRewardDay,
+		LastDailyClaimTimestamp = Profile.LastDailyClaimTimestamp,
+		SpinTokens = Profile.SpinTokens,
+		UnlockedTrails = Profile.UnlockedTrails,
+		EquippedTrail = Profile.EquippedTrail,
+		UnlockedTitles = Profile.UnlockedTitles,
+		EquippedTitle = Profile.EquippedTitle,
+		AutoWinsEnabled = false,
 		GrowthRemainder = 0,
 		CurrentAFKZone = nil,
 		PremiumZonePromptedThisEntry = false,
@@ -151,16 +225,26 @@ local function OnPlayerAdded(Player: Player)
 	end
 	CreateLeaderstats(Player, Session)
 	Player:SetAttribute("Bigger", Session.Bigger)
-	Player:SetAttribute("Destruction", Session.Destruction)
+	Player:SetAttribute("HasVip", Session.HasVip)
 	Player:SetAttribute("Rebirth", Session.Rebirth)
-	Player:SetAttribute("RebirthMultiplier", RebirthFormula.GetMultiplier(Session.Rebirth))
+	if RebirthFormula and RebirthFormula.GetMultiplier then
+		Player:SetAttribute("RebirthMultiplier", RebirthFormula.GetMultiplier(Session.Rebirth))
+	else
+		Player:SetAttribute("RebirthMultiplier", Session.Rebirth + 1)
+	end
 	Player:SetAttribute("EquippedAura", Session.EquippedAura or "None")
 	Player:SetAttribute("AuraVFXEnabled", if Session.AuraVFXEnabled == nil then true else Session.AuraVFXEnabled)
-	Player:SetAttribute("AuraMultiplier", AuraFormula.GetMultiplier(Session.UnlockedAuras or {}))
+	if AuraFormula and AuraFormula.GetMultiplier then
+		Player:SetAttribute("AuraMultiplier", AuraFormula.GetMultiplier(Session.UnlockedAuras or {}))
+	else
+		Player:SetAttribute("AuraMultiplier", 1.0)
+	end
 	ClearObjectiveAttributes(Player)
 	GrowthService:UpdateMultiplierAttribute(Player)
 
-	local Level = LevelFormula.GetLevelFromBigger(Session.Bigger)
+	local Level = if LevelFormula and LevelFormula.GetLevel
+		then LevelFormula.GetLevel(Session.Bigger)
+		else math.floor((Session.Bigger / 236) ^ 0.25) + 1
 	Player:SetAttribute("Level", Level)
 	EventBus.Publish("PlayerSessionCreated", Player, Session)
 	Logger.Info("Session", "Session created for %s", Player.Name)

@@ -12,6 +12,10 @@
 -- - LevelFormula.GetLevelFromBigger(Bigger): number
 -- - LevelFormula.GetRequirementForLevel(Level): number
 -- - LevelFormula.GetProgress(Bigger): LevelProgress
+-- - LevelFormula.GetLevel(Bigger): number
+-- - LevelFormula.GetRequirement(Level): number
+-- - LevelFormula.GetCurrentRange(Level): (number, number)
+-- - LevelFormula.GetNextRequirement(Level): number
 
 --// Variables \\--
 
@@ -84,6 +88,23 @@ function LevelFormula.GetProgress(Bigger: number): LevelProgress
 		BiggerRequiredForNextLevel = BiggerRequiredForNextLevel,
 		Progress = math.clamp(BiggerIntoLevel / BiggerRequiredForNextLevel, 0, 1),
 	}
+end
+
+-- Backward compatibility aliases
+function LevelFormula.GetLevel(Bigger: number): number
+	return LevelFormula.GetLevelFromBigger(Bigger)
+end
+
+function LevelFormula.GetRequirement(Level: number): number
+	return LevelFormula.GetRequirementForLevel(Level)
+end
+
+function LevelFormula.GetCurrentRange(Level: number): (number, number)
+	return LevelFormula.GetRequirementForLevel(Level), LevelFormula.GetRequirementForLevel(Level + 1)
+end
+
+function LevelFormula.GetNextRequirement(Level: number): number
+	return LevelFormula.GetRequirementForLevel(Level + 1)
 end
 
 return table.freeze(LevelFormula)
